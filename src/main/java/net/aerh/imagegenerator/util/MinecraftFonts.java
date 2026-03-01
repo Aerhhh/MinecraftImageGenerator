@@ -70,7 +70,7 @@ public class MinecraftFonts {
     private static Font loadFont(String path, float size) {
         try (InputStream stream = MinecraftFonts.class.getResourceAsStream(path)) {
             if (stream == null) {
-                log.error("Font resource not found: {}", path);
+                log.warn("Font resource not found: {}", path);
                 return null;
             }
 
@@ -89,7 +89,7 @@ public class MinecraftFonts {
     private static void registerFont(Font font) {
         try {
             GraphicsEnvironment.getLocalGraphicsEnvironment().registerFont(font);
-            log.info("Loaded font: " + font.getFontName());
+            log.info("Loaded font: {}", font.getFontName());
         } catch (Exception e) {
             log.warn("Failed to register font '{}': {}", font.getName(), e.getMessage());
         }

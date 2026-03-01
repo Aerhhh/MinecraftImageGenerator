@@ -23,7 +23,7 @@ public class ParseType {
     static {
         try {
             PARSE_TYPES.addAll(JsonLoader.loadFromJson(ParseType[].class, Objects.requireNonNull(ParseType.class.getClassLoader().getResource("data/parse_types.json"))));
-            log.info("Loaded " + PARSE_TYPES.size() + " parse types!");
+            log.info("Loaded {} parse types!", PARSE_TYPES.size());
         } catch (Exception e) {
             log.error("Failed to load parse type data", e);
         }
