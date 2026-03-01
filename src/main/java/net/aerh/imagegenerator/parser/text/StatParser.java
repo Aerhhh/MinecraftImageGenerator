@@ -44,28 +44,28 @@ public class StatParser implements StringParser {
             String extraData = matcher.group(2); // Group 2: Optional extra data (e.g., 100) - can be null
             Stat stat = Stat.byName(statName);
 
-            log.debug("Found stat: '" + statName + "' with extra data: '" + extraData + "'");
+            log.debug("Found stat: '{}' with extra data: '{}'", statName, extraData);
 
             if (stat == null) {
-                log.warn("Could not find stat by name: '" + statName + "' in input: '" + input + "'");
+                log.warn("Could not find stat by name: '{}' in input: '{}'", statName, input);
                 matcher.appendReplacement(result, Matcher.quoteReplacement(matcher.group(0)));
                 continue;
             }
 
             ParseType parseType = ParseType.byName(stat.getParseType());
             if (parseType == null) {
-                log.warn("Could not find parse type by name: '" + stat.getParseType() + "' for stat: '" + stat.getName() + "'");
+                log.warn("Could not find parse type by name: '{}' for stat: '{}'", stat.getParseType(), stat.getName());
                 matcher.appendReplacement(result, Matcher.quoteReplacement(matcher.group(0)));
                 continue;
             }
 
-            log.debug("Using parse type: '" + parseType.getName() + "' for stat: '" + stat.getName() + "' with extra data: '" + extraData + "'");
+            log.debug("Using parse type: '{}' for stat: '{}' with extra data: '{}'", parseType.getName(), stat.getName(), extraData);
 
             String formattedStat = formatStat(stat, parseType, extraData);
             String replacement = formattedStat;
 
-            log.debug("Replacement before formatting: " + replacement + " for stat: " + stat.getName() + " with extra data: " + extraData + " and parse type: " + parseType.getName());
-            log.debug("Formatted stat: " + formattedStat);
+            log.debug("Replacement before formatting: {} for stat: {} with extra data: {} and parse type: {}", replacement, stat.getName(), extraData, parseType.getName());
+            log.debug("Formatted stat: {}", formattedStat);
 
             if (!formattedStat.startsWith("[")) {
                 replacement += String.valueOf(ChatFormat.SECTION_SYMBOL) + ChatFormat.RESET.getCode();
@@ -92,11 +92,11 @@ public class StatParser implements StringParser {
         String format = hasExtraDetails ? parseType.getFormatWithDetails() : parseType.getFormatWithoutDetails();
 
         if (format == null) {
-            log.warn("Format string is null for parse type: " + parseType.getName());
+            log.warn("Format string is null for parse type: {}", parseType.getName());
             return "[INVALID FORMAT]";
         }
 
-        log.debug("Using format: '" + format + "' for stat: '" + stat.getName() + "' with extra details: '" + extraDetails + "'");
+        log.debug("Using format: '{}' for stat: '{}' with extra details: '{}'", format, stat.getName(), extraDetails);
 
         Map<String, String> placeholders = new HashMap<>(BASE_PLACEHOLDERS);
         placeholders.put("color", String.valueOf(stat.getColor().getCode()));
@@ -109,13 +109,13 @@ public class StatParser implements StringParser {
         // Handle specific parsing logic for ITEM_STAT and ABILITY
         if (parseType.getName().equalsIgnoreCase("ITEM_STAT")) {
             if (!hasExtraDetails) {
-                log.warn("Missing extra details for ITEM_STAT: " + stat.getName());
+                log.warn("Missing extra details for ITEM_STAT: {}", stat.getName());
                 return "[ITEM_STAT_MISSING_DETAILS]";
             }
 
             int separator = extraDetails.indexOf(":");
             if (separator == -1) {
-                log.warn("Missing separator ':' in extra details for ITEM_STAT: " + extraDetails);
+                log.warn("Missing separator ':' in extra details for ITEM_STAT: {}", extraDetails);
                 return "[ITEM_STAT_MISSING_SEPARATOR]";
             }
 
@@ -123,13 +123,13 @@ public class StatParser implements StringParser {
             placeholders.put("amount", extraDetails.substring(separator + 1));
         } else if (parseType.getName().equalsIgnoreCase("ABILITY")) {
             if (!hasExtraDetails) {
-                log.warn("Missing extra details for ABILITY: " + stat.getName());
+                log.warn("Missing extra details for ABILITY: {}", stat.getName());
                 return "[ABILITY_MISSING_DETAILS]";
             }
 
             int separator = extraDetails.indexOf(":");
             if (separator == -1) {
-                log.warn("Missing separator ':' in extra details for ABILITY: " + extraDetails);
+                log.warn("Missing separator ':' in extra details for ABILITY: {}", extraDetails);
                 return "[ABILITY_MISSING_SEPARATOR]";
             }
 
@@ -140,10 +140,10 @@ public class StatParser implements StringParser {
         String result = format;
         for (Map.Entry<String, String> entry : placeholders.entrySet()) {
             result = result.replaceAll("\\{" + Pattern.quote(entry.getKey()) + "\\}", Matcher.quoteReplacement(entry.getValue()));
-            log.debug("Replacing " + entry.getKey() + " with " + entry.getValue());
+            log.debug("Replacing {} with {}", entry.getKey(), entry.getValue());
         }
 
-        log.debug("Final formatted result: " + result);
+        log.debug("Final formatted result: {}", result);
         return result;
     }
 }

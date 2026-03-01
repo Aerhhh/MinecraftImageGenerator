@@ -173,7 +173,7 @@ public class TextWrapper {
                 } else {
                     String finishedLine = currentLineBuilder.toString();
                     lines.add(currentFormatState.prefix() + finishedLine);
-                    log.debug("Adding line due to length: '{}' (" + "currentVisibleLength: {}, wordVisibleLength: {})",
+                    log.debug("Adding line due to length: '{}' (currentVisibleLength: {}, wordVisibleLength: {})",
                         lines.getLast(), currentVisibleLength, wordVisibleLength
                     );
 

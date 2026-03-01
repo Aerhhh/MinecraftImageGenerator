@@ -35,7 +35,7 @@ public class Spritesheet {
             // Load the texture atlas image
             log.info("Loading texture atlas image");
             textureAtlas = ImageIO.read(atlasStream);
-            log.info("Loaded texture atlas image (size: " + textureAtlas.getWidth() + "x" + textureAtlas.getHeight() + ")");
+            log.info("Loaded texture atlas image (size: {}x{})", textureAtlas.getWidth(), textureAtlas.getHeight());
         } catch (IOException exception) {
             log.error("Failed to load texture atlas image", exception);
         }
@@ -57,11 +57,11 @@ public class Spritesheet {
                 int size = itemData.get("size").getAsInt();
                 BufferedImage image = textureAtlas.getSubimage(x, y, size, size);
 
-                log.debug("Loaded texture: " + name + " at (" + x + ", " + y + ") with size " + size + "x" + size);
+                log.debug("Loaded texture: {} at ({}, {}) with size {}x{}", name, x, y, size, size);
                 IMAGE_MAP.put(name, image);
             }
 
-            log.info("Finished loading texture atlas coordinates from JSON file (" + IMAGE_MAP.size() + " textures loaded)");
+            log.info("Finished loading texture atlas coordinates from JSON file ({} textures loaded)", IMAGE_MAP.size());
         } catch (IOException exception) {
             log.error("Failed to load texture atlas coordinates", exception);
         }
