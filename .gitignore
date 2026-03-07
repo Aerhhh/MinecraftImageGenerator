@@ -151,3 +151,6 @@ buildNumber.properties
 
 # Config with secrets
 config.json
+
+# Tooling build artifacts
+tooling/build/
