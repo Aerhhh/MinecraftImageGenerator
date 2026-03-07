@@ -20,7 +20,9 @@ import net.aerh.imagegenerator.impl.nbt.SnbtParser;
 import net.aerh.imagegenerator.impl.tooltip.MinecraftTooltipGenerator;
 import net.aerh.imagegenerator.parser.text.PlaceholderReverseMapper;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 
@@ -89,7 +91,8 @@ public class MinecraftNbtParser {
         if (isPlayerHead) {
             base64Texture = formatMetadata.get(NbtFormatMetadata.KEY_PLAYER_HEAD_TEXTURE, String.class);
             if (base64Texture != null) {
-                log.debug("Resolved player head texture via '{}' (length={})", handlerName(formatHandler), base64Texture.length());
+                base64Texture = resolveTextureHash(base64Texture);
+                log.debug("Resolved player head texture via '{}': '{}'", handlerName(formatHandler), base64Texture);
             } else {
                 log.debug("Handler '{}' did not provide a player head texture; falling back to static item render", handlerName(formatHandler));
             }
@@ -220,6 +223,38 @@ public class MinecraftNbtParser {
         }
 
         return maxLineLength;
+    }
+
+    private static String resolveTextureHash(String texture) {
+        // Try to decode as base64 skin data and extract the texture hash from the URL
+        try {
+            byte[] decoded = Base64.getDecoder().decode(texture);
+            String json = new String(decoded, StandardCharsets.UTF_8);
+            JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+            if (root != null && root.has("textures")) {
+                JsonObject textures = root.getAsJsonObject("textures");
+                if (textures.has("SKIN")) {
+                    String url = textures.getAsJsonObject("SKIN").get("url").getAsString();
+                    int lastSlash = url.lastIndexOf('/');
+                    if (lastSlash >= 0) {
+                        return url.substring(lastSlash + 1);
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            // Not valid base64 skin data, try other formats
+        }
+
+        // Try to extract hash from a full texture URL
+        if (texture.contains("textures.minecraft.net/texture/")) {
+            int lastSlash = texture.lastIndexOf('/');
+            if (lastSlash >= 0) {
+                return texture.substring(lastSlash + 1);
+            }
+        }
+
+        // Already a hash or other format, return as-is
+        return texture;
     }
 
     private static String handlerName(NbtFormatHandler handler) {
