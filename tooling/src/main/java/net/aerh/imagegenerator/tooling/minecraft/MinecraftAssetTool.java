@@ -52,6 +52,7 @@ public class MinecraftAssetTool {
     private boolean keepJar = true;
     private boolean forceReclone = false;
     private boolean forceRebuild = false;
+    private boolean cleanBuildDir = true;
 
     public static void main(String[] args) {
         MinecraftAssetTool tool = new MinecraftAssetTool();
@@ -76,6 +77,7 @@ public class MinecraftAssetTool {
                 }
                 case "--force-clone" -> tool.forceReclone = true;
                 case "--force-build" -> tool.forceRebuild = true;
+                case "--no-clean" -> tool.cleanBuildDir = false;
                 case "--help" -> {
                     printHelp();
                     return;
@@ -129,6 +131,7 @@ public class MinecraftAssetTool {
         System.out.println("  --skip-render        Skip render step (use existing renders)");
         System.out.println("  --force-clone        Force re-clone MinecraftRenderer repository");
         System.out.println("  --force-build        Force rebuild MinecraftRenderer");
+        System.out.println("  --no-clean           Keep build directory after completion");
         System.out.println("  --debug              Enable debug output");
         System.out.println("  --help               Show this help message");
         System.out.println();
@@ -146,7 +149,7 @@ public class MinecraftAssetTool {
         System.out.println("  mvn compile -P generate-spritesheet -pl tooling");
         System.out.println();
         System.out.println("Prerequisites:");
-        System.out.println("  - .NET SDK 9.0+ for rendering (https://dotnet.microsoft.com/download)");
+        System.out.println("  - .NET SDK 10.0+ for rendering (https://dotnet.microsoft.com/download)");
         System.out.println("  - Git for cloning MinecraftRenderer");
     }
 
@@ -175,6 +178,10 @@ public class MinecraftAssetTool {
 
         if (runOverlays) {
             runOverlaysStep();
+        }
+
+        if (cleanBuildDir) {
+            cleanBuildDirectory();
         }
 
         System.out.println("\n" + "=".repeat(60));
@@ -225,7 +232,7 @@ public class MinecraftAssetTool {
 
         if (!isDotNetAvailable()) {
             System.out.println("WARNING: .NET SDK not found. Skipping render step.");
-            System.out.println("Install .NET SDK 9.0+ from https://dotnet.microsoft.com/download");
+            System.out.println("Install .NET SDK 10.0+ from https://dotnet.microsoft.com/download");
             return;
         }
 
@@ -261,6 +268,16 @@ public class MinecraftAssetTool {
 
         new OverlayGenerator().generate();
         new OverlayColorConfigGenerator(minecraftVersion).generate();
+    }
+
+    private void cleanBuildDirectory() {
+        System.out.println("\n[Cleanup] Removing build directory...");
+        try {
+            ToolingConstants.deleteDirectory(ToolingConstants.BUILD_DIR);
+            System.out.println("[Cleanup] Build directory removed.");
+        } catch (IOException e) {
+            System.err.println("[Cleanup] Failed to remove build directory: " + e.getMessage());
+        }
     }
 
     private boolean isDotNetAvailable() {

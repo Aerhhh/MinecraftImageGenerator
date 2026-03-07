@@ -59,7 +59,7 @@ jobs:
         if: inputs.pipeline == 'full' || inputs.pipeline == 'render-only'
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: '10.0.x'
 
       - name: Build Tooling Module
         run: mvn -pl tooling -am compile -DskipTests -q
@@ -101,29 +101,102 @@ jobs:
             echo "has_changes=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Compute Asset Diff
+        if: steps.changes.outputs.has_changes == 'true'
+        id: diff
+        run: |
+          ATLAS_JSON="generator/src/main/resources/minecraft/assets/json/atlas_coordinates.json"
+          OVERLAY_JSON="generator/src/main/resources/minecraft/assets/json/overlay_coordinates.json"
+
+          # Extract old and new asset names from atlas
+          git show HEAD:"$ATLAS_JSON" 2>/dev/null | jq -r '.[].name' | sort > /tmp/old_atlas.txt || touch /tmp/old_atlas.txt
+          jq -r '.[].name' "$ATLAS_JSON" 2>/dev/null | sort > /tmp/new_atlas.txt || touch /tmp/new_atlas.txt
+
+          # Extract old and new overlay names
+          git show HEAD:"$OVERLAY_JSON" 2>/dev/null | jq -r '.[].name' | sort > /tmp/old_overlay.txt || touch /tmp/old_overlay.txt
+          jq -r '.[].name' "$OVERLAY_JSON" 2>/dev/null | sort > /tmp/new_overlay.txt || touch /tmp/new_overlay.txt
+
+          # Compute diffs
+          ADDED_ATLAS=$(comm -13 /tmp/old_atlas.txt /tmp/new_atlas.txt)
+          REMOVED_ATLAS=$(comm -23 /tmp/old_atlas.txt /tmp/new_atlas.txt)
+          ADDED_OVERLAY=$(comm -13 /tmp/old_overlay.txt /tmp/new_overlay.txt)
+          REMOVED_OVERLAY=$(comm -23 /tmp/old_overlay.txt /tmp/new_overlay.txt)
+
+          OLD_ATLAS_COUNT=$(wc -l < /tmp/old_atlas.txt | tr -d ' ')
+          NEW_ATLAS_COUNT=$(wc -l < /tmp/new_atlas.txt | tr -d ' ')
+          OLD_OVERLAY_COUNT=$(wc -l < /tmp/old_overlay.txt | tr -d ' ')
+          NEW_OVERLAY_COUNT=$(wc -l < /tmp/new_overlay.txt | tr -d ' ')
+
+          # Build markdown tables with Added/Removed columns
+          TABLE=""
+
+          build_table() {
+            local title="$1" old_count="$2" new_count="$3" added="$4" removed="$5"
+            local -a added_arr=() removed_arr=()
+            while IFS= read -r name; do [[ -n "$name" ]] && added_arr+=("$name"); done <<< "$added"
+            while IFS= read -r name; do [[ -n "$name" ]] && removed_arr+=("$name"); done <<< "$removed"
+            local max=${#added_arr[@]}
+            (( ${#removed_arr[@]} > max )) && max=${#removed_arr[@]}
+            [[ $max -eq 0 ]] && return
+
+            TABLE+="### $title ($old_count → $new_count)"$'\n\n'
+            TABLE+="| Added | Removed |"$'\n'
+            TABLE+="|-------|---------|"$'\n'
+            for (( i=0; i<max; i++ )); do
+              local a="" r=""
+              [[ $i -lt ${#added_arr[@]} ]] && a="\`${added_arr[$i]}\`"
+              [[ $i -lt ${#removed_arr[@]} ]] && r="\`${removed_arr[$i]}\`"
+              TABLE+="| $a | $r |"$'\n'
+            done
+            TABLE+=$'\n'
+          }
+
+          build_table "Spritesheet Atlas" "$OLD_ATLAS_COUNT" "$NEW_ATLAS_COUNT" "$ADDED_ATLAS" "$REMOVED_ATLAS"
+          build_table "Overlays" "$OLD_OVERLAY_COUNT" "$NEW_OVERLAY_COUNT" "$ADDED_OVERLAY" "$REMOVED_OVERLAY"
+
+          if [[ -z "$TABLE" ]]; then
+            TABLE="No asset additions or removals (coordinates/sizes may have changed)."
+          fi
+
+          # Write to file to avoid escaping issues
+          echo "$TABLE" > /tmp/asset_diff.md
+
       - name: Create Pull Request
         if: steps.changes.outputs.has_changes == 'true' && inputs.create_pr == true
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: 'Update spritesheet assets'
-          title: 'Update spritesheet assets'
-          body: |
-            Automated spritesheet generation
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b automated/spritesheet-update
+          git add generator/src/main/resources/minecraft/assets/
+          git commit -m "Update spritesheet assets"
+          git push -f origin automated/spritesheet-update
 
-            **Configuration:**
-            - Minecraft version: `${{ inputs.minecraft_version || 'latest' }}`
-            - Render size: `${{ inputs.render_size }}px`
-            - Pipeline: `${{ inputs.pipeline }}`
-          branch: automated/spritesheet-update
-          delete-branch: true
+          DIFF_TABLE=$(cat /tmp/asset_diff.md)
+
+          gh pr create \
+            --title "Update spritesheet assets" \
+            --body "## Automated spritesheet generation
+
+          **Configuration:**
+          - Minecraft version: \`${{ inputs.minecraft_version || 'latest' }}\`
+          - Render size: \`${{ inputs.render_size }}px\`
+          - Pipeline: \`${{ inputs.pipeline }}\`
+
+          ## Asset Changes
+
+          $DIFF_TABLE" \
+            --base master || echo "PR already exists"
 
       - name: Commit Directly
         if: steps.changes.outputs.has_changes == 'true' && inputs.create_pr == false
-        uses: stefanzweifel/git-auto-commit-action@v7
-        with:
-          commit_message: 'Update spritesheet assets'
-          file_pattern: 'generator/src/main/resources/minecraft/assets/**'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add generator/src/main/resources/minecraft/assets/
+          git commit -m "Update spritesheet assets"
+          git push origin master
 
       - name: Upload Artifacts
         if: steps.changes.outputs.has_changes == 'true'
