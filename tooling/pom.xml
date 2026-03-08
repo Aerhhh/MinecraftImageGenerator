@@ -33,7 +33,7 @@
         <dependency>
             <groupId>net.fabricmc</groupId>
             <artifactId>mapping-io</artifactId>
-            <version>0.7.1</version>
+            <version>0.8.0</version>
         </dependency>
     </dependencies>
 
