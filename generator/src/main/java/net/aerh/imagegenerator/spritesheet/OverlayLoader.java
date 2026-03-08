@@ -30,19 +30,13 @@ import java.util.stream.Collectors;
 public class OverlayLoader {
 
     private static final int DEFAULT_IMAGE_SIZE = 128;
-    private static final OverlayLoader INSTANCE;
-
-    static {
-        log.debug("Initializing OverlayLoader");
-        INSTANCE = new OverlayLoader();
-        INSTANCE.loadOverlays();
-    }
+    private static volatile OverlayLoader instance;
 
     private final Map<String, ItemOverlay> itemOverlays = new ConcurrentHashMap<>();
     private final Map<String, OverlayColorOptions> colorOptionsMap = new ConcurrentHashMap<>();
     private final Gson gson;
     private final String resourceBasePath;
-    private boolean loaded = false;
+    private volatile boolean loaded = false;
 
     public OverlayLoader() {
         this("/minecraft/assets", new Gson());
@@ -60,12 +54,19 @@ public class OverlayLoader {
     }
 
     /**
-     * Get the instance of OverlayLoader.
+     * Get the default OverlayLoader instance (lazy-initialized).
      *
-     * @return The OverlayLoader instance
+     * @return The default OverlayLoader instance
      */
     public static OverlayLoader getInstance() {
-        return INSTANCE;
+        if (instance == null) {
+            synchronized (OverlayLoader.class) {
+                if (instance == null) {
+                    instance = new OverlayLoader();
+                }
+            }
+        }
+        return instance;
     }
 
     /**

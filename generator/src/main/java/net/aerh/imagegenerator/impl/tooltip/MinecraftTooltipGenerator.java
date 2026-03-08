@@ -239,11 +239,17 @@ public class MinecraftTooltipGenerator implements Generator {
         }
 
         private void parseComponents(JsonObject components) {
-            // Parse minecraft:custom_name component
+            // Parse minecraft:custom_name component (player-set name, italic by default)
             if (components.has("minecraft:custom_name")) {
                 JsonElement customNameElement = components.get("minecraft:custom_name");
                 if (customNameElement != null && customNameElement.isJsonObject()) {
                     this.itemName = NbtTextComponentUtil.toFormattedString(customNameElement.getAsJsonObject());
+                }
+            } else if (components.has("minecraft:item_name")) {
+                // Fallback to minecraft:item_name (vanilla renamed items, not italic)
+                JsonElement itemNameElement = components.get("minecraft:item_name");
+                if (itemNameElement != null && itemNameElement.isJsonObject()) {
+                    this.itemName = NbtTextComponentUtil.toFormattedString(itemNameElement.getAsJsonObject());
                 }
             }
 
@@ -377,8 +383,10 @@ public class MinecraftTooltipGenerator implements Generator {
          * Builds a slash command from the current state of the builder.
          *
          * @return A properly formatted slash command string.
+         * @deprecated This is presentation-layer logic that belongs in the consumer (e.g. DiscordBot).
+         *             Will be removed in a future version.
          */
-        // TODO support player head textures
+        @Deprecated
         public String buildSlashCommand() {
             String baseCommand = System.getProperty("generator.base.command", "gen");
             StringBuilder commandBuilder = new StringBuilder("/" + baseCommand + " item ");

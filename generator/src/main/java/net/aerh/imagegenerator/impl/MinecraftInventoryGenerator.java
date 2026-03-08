@@ -47,7 +47,7 @@ public class MinecraftInventoryGenerator implements Generator {
 
     static {
         // Detect item texture size automatically
-        BufferedImage sampleItem = Spritesheet.getTexture("stone");
+        BufferedImage sampleItem = Spritesheet.getDefault().getTextureById("stone");
         if (sampleItem != null) {
             itemSize = sampleItem.getWidth() / 2;
             scaleFactor = itemSize / 16;
@@ -81,13 +81,6 @@ public class MinecraftInventoryGenerator implements Generator {
     private final String inventoryString;
     private final boolean animateGlint;
 
-    private BufferedImage inventoryImage;
-    private Graphics2D g2d;
-    private int borderSize;
-    private int titleHeight;
-    private List<ImageCoordinates> slotCoordinates;
-    private GeneratedObject generatedObject;
-
     public MinecraftInventoryGenerator(int rows, int slotsPerRow, String containerTitle, String inventoryString, boolean drawBorder, boolean drawBackground, boolean animateGlint) {
         this.rows = rows;
         this.slotsPerRow = slotsPerRow;
@@ -98,34 +91,50 @@ public class MinecraftInventoryGenerator implements Generator {
         this.drawBackground = drawBackground;
         this.totalSlots = rows * slotsPerRow;
         this.animateGlint = animateGlint;
-
-        initializeImage();
     }
 
-    private void initializeImage() {
-        this.borderSize = drawBorder ? 7 * scaleFactor : 0;
-        this.titleHeight = borderSize + (drawTitle ? 13 * scaleFactor : 0) - (drawBorder && drawTitle ? 3 * scaleFactor : 0);
+    @Override
+    public @NotNull GeneratedObject render(@Nullable GenerationContext generationContext) {
+        log.debug("Rendering inventory ({})", this);
+
+        int borderSize = drawBorder ? 7 * scaleFactor : 0;
+        int titleHeight = borderSize + (drawTitle ? 13 * scaleFactor : 0) - (drawBorder && drawTitle ? 3 * scaleFactor : 0);
 
         int imageWidth = (slotsPerRow * slotSize) + (borderSize * 2);
         int imageHeight = (rows * slotSize) + titleHeight + borderSize;
 
-        this.inventoryImage = new BufferedImage(imageWidth, imageHeight, BufferedImage.TYPE_INT_ARGB);
-        this.g2d = inventoryImage.createGraphics();
-        this.g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
-        this.g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-        this.g2d.setFont(MinecraftFonts.getFont(MinecraftFonts.REGULAR).deriveFont((float) scaleFactor * 8));
+        BufferedImage inventoryImage = new BufferedImage(imageWidth, imageHeight, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2d = inventoryImage.createGraphics();
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
+        g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+        g2d.setFont(MinecraftFonts.getFont(MinecraftFonts.REGULAR).deriveFont((float) scaleFactor * 8));
+
+        if (drawBorder) {
+            drawMinecraftBorder(g2d, imageWidth, imageHeight);
+        }
+
+        List<ImageCoordinates> slotCoordinates = drawSlots(g2d, borderSize, titleHeight);
+
+        if (drawTitle && !slotCoordinates.isEmpty()) {
+            int titleX = 8 * scaleFactor;
+            int titleY = slotCoordinates.getFirst().getY() - scaleFactor * 4;
+            g2d.setColor(DROP_SHADOW_COLOR);
+            g2d.drawString(containerTitle, titleX, titleY);
+        }
+
+        // Process and draw items
+        GeneratedObject result = drawItems(g2d, inventoryImage, slotCoordinates, generationContext);
+        g2d.dispose();
+
+        if (result != null) {
+            return result;
+        }
+
+        log.debug("Rendered inventory image (dimensions {}x{})", inventoryImage.getWidth(), inventoryImage.getHeight());
+        return new GeneratedObject(inventoryImage);
     }
 
-    private void drawInventoryBackground() {
-        if (!drawBorder) return;
-
-        drawMinecraftBorder();
-    }
-
-    private void drawMinecraftBorder() {
-        int imageWidth = inventoryImage.getWidth();
-        int imageHeight = inventoryImage.getHeight();
-
+    private void drawMinecraftBorder(Graphics2D g2d, int imageWidth, int imageHeight) {
         // Drawing the background
         g2d.setColor(BORDER_COLOR);
         g2d.fillRect(scaleFactor * 3, scaleFactor * 3, imageWidth - scaleFactor * 6, imageHeight - scaleFactor * 6);
@@ -160,9 +169,8 @@ public class MinecraftInventoryGenerator implements Generator {
         g2d.fillRect(scaleFactor * 2, imageHeight - scaleFactor * 2, scaleFactor, scaleFactor); // bottom left - lower
     }
 
-    private void drawSlots() {
-        slotCoordinates = new ArrayList<>();
-
+    private List<ImageCoordinates> drawSlots(Graphics2D g2d, int borderSize, int titleHeight) {
+        List<ImageCoordinates> slotCoordinates = new ArrayList<>();
         int startY = titleHeight;
 
         for (int row = 0; row < rows; row++) {
@@ -173,27 +181,26 @@ public class MinecraftInventoryGenerator implements Generator {
                 slotCoordinates.add(new ImageCoordinates(x, y));
 
                 if (drawBackground) {
-                    drawSlot(x, y);
+                    drawSlot(g2d, x, y);
                 }
             }
         }
+
+        return slotCoordinates;
     }
 
-    private void drawSlot(int x, int y) {
+    private void drawSlot(Graphics2D g2d, int x, int y) {
         if (slotTexture != null) {
             g2d.drawImage(slotTexture, x, y, null);
         } else {
-            // Background
             g2d.setColor(INVENTORY_BACKGROUND);
             g2d.fillRect(x + scaleFactor, y + scaleFactor, slotSize - 2 * scaleFactor, slotSize - 2 * scaleFactor);
 
-            // Slot border
             g2d.setColor(DARK_BORDER_COLOR);
             g2d.drawRect(x, y, slotSize - SLOT_BORDER_THICKNESS, slotSize - SLOT_BORDER_THICKNESS);
             g2d.drawRect(x + SLOT_INNER_BORDER_OFFSET, y + SLOT_INNER_BORDER_OFFSET,
                 slotSize - SLOT_INNER_BORDER_REDUCTION, slotSize - SLOT_INNER_BORDER_REDUCTION);
 
-            // Highlight
             g2d.setColor(Color.WHITE);
             g2d.drawLine(x + slotSize - SLOT_BORDER_THICKNESS, y,
                 x + slotSize - SLOT_BORDER_THICKNESS, y + slotSize - SLOT_BORDER_THICKNESS);
@@ -202,21 +209,12 @@ public class MinecraftInventoryGenerator implements Generator {
         }
     }
 
-    private void drawTitle() {
-        if (!drawTitle || slotCoordinates == null || slotCoordinates.isEmpty()) {
-            return;
-        }
-
-        int titleX = 8 * scaleFactor;
-        int titleY = slotCoordinates.getFirst().getY() - scaleFactor * 4;
-
-        g2d.setColor(DROP_SHADOW_COLOR);
-        g2d.drawString(containerTitle, titleX, titleY);
-    }
-
-    private void drawItems(@Nullable GenerationContext generationContext) {
+    @Nullable
+    private GeneratedObject drawItems(Graphics2D g2d, BufferedImage inventoryImage,
+                                      List<ImageCoordinates> slotCoordinates,
+                                      @Nullable GenerationContext generationContext) {
         if (inventoryString == null || inventoryString.isBlank()) {
-            return;
+            return null;
         }
 
         InventoryStringParser parser = new InventoryStringParser(totalSlots);
@@ -231,41 +229,26 @@ public class MinecraftInventoryGenerator implements Generator {
         }
 
         if (animateGlint && hasAnimation) {
-            List<BufferedImage> frames = buildAnimationFrames(items);
+            List<BufferedImage> frames = buildAnimationFrames(items, inventoryImage, slotCoordinates);
             if (!frames.isEmpty()) {
                 int frameDelay = determineFrameDelay(items);
 
                 try {
                     byte[] gifData = ImageUtil.toGifBytes(frames, frameDelay, true);
-                    this.inventoryImage = frames.getFirst();
-
-                    if (this.g2d != null) {
-                        this.g2d.dispose();
-                    }
-
-                    this.g2d = inventoryImage.createGraphics();
-                    this.g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
-                    this.g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-                    this.g2d.setFont(MinecraftFonts.getFont(MinecraftFonts.REGULAR).deriveFont((float) scaleFactor * 8));
-
-                    this.generatedObject = new GeneratedObject(gifData, frames, frameDelay);
-
-                    return;
+                    return new GeneratedObject(gifData, frames, frameDelay);
                 } catch (IOException e) {
                     log.error("Failed to encode animated inventory, falling back to static frame", e);
-                    this.inventoryImage = frames.getFirst();
                 }
             }
         }
 
         for (InventoryItem item : items) {
-            drawItem(g2d, item);
+            drawItem(g2d, item, slotCoordinates);
         }
+
+        return null;
     }
 
-    /**
-     * Ensures each slot is filled by the last item referencing it within the inventory string.
-     */
     private List<InventoryItem> resolveSlotConflicts(List<InventoryItem> parsedItems) {
         if (parsedItems == null || parsedItems.isEmpty()) {
             return Collections.emptyList();
@@ -341,7 +324,7 @@ public class MinecraftInventoryGenerator implements Generator {
                 .isEnchanted(contentLower != null && contentLower.contains("enchant"))
                 .withHoverEffect(contentLower != null && contentLower.contains("hover"))
                 .withData(item.getExtraContent());
-            
+
             if (item.getDurabilityPercent() != null) {
                 itemBuilder.withDurability(item.getDurabilityPercent());
             }
@@ -353,7 +336,7 @@ public class MinecraftInventoryGenerator implements Generator {
         }
     }
 
-    private void drawItem(Graphics2D target, InventoryItem item) {
+    private void drawItem(Graphics2D target, InventoryItem item, List<ImageCoordinates> slotCoordinates) {
         BufferedImage itemImage = item.getItemImage();
         int[] slots = item.getSlot();
         int[] amounts = item.getAmount();
@@ -372,22 +355,18 @@ public class MinecraftInventoryGenerator implements Generator {
             int slotY = slotCoord.getY();
 
             if (itemImage == null) {
-                // Draw placeholder for null items
                 target.setColor(INVENTORY_BACKGROUND);
                 target.fillRect(slotX + scaleFactor, slotY + scaleFactor,
                     slotSize - 2 * scaleFactor, slotSize - 2 * scaleFactor);
                 continue;
             }
 
-            // Calculate item position
             int itemPadding = (slotSize - itemSize) / 2;
             int itemX = slotX + itemPadding;
             int itemY = slotY + itemPadding;
 
-            // Draw item image
             target.drawImage(itemImage, itemX, itemY, itemSize, itemSize, null);
 
-            // Draw stack count if > 1
             if (amounts[index] > 1) {
                 drawStackCount(target, amounts[index], slotX, slotY);
             }
@@ -401,23 +380,23 @@ public class MinecraftInventoryGenerator implements Generator {
         Font stackFont = MinecraftFonts.getFont(MinecraftFonts.REGULAR).deriveFont((float) scaleFactor * 8);
         target.setFont(stackFont);
 
-        // Calculate text position (bottom-right of slot)
         int textWidth = target.getFontMetrics().stringWidth(amountText);
         int textX = slotX + slotSize - textWidth + 1;
         int textY = slotY + slotSize - scaleFactor + 1;
 
-        // Draw text with drop shadow
         int shadowOffset = scaleFactor;
         target.setColor(DROP_SHADOW_COLOR);
         target.drawString(amountText, textX + shadowOffset - 1, textY + shadowOffset - 1);
 
         target.setColor(NORMAL_TEXT_COLOR);
         target.drawString(amountText, textX - 1, textY - 1);
-        
+
         target.setFont(originalFont);
     }
 
-    private List<BufferedImage> buildAnimationFrames(List<InventoryItem> items) {
+    private List<BufferedImage> buildAnimationFrames(List<InventoryItem> items,
+                                                     BufferedImage staticBackground,
+                                                     List<ImageCoordinates> slotCoordinates) {
         List<BufferedImage> frames = new ArrayList<>();
         int maxFrames = items.stream()
             .mapToInt(item -> item.getAnimationFrames() != null ? item.getAnimationFrames().size() : 1)
@@ -429,12 +408,12 @@ public class MinecraftInventoryGenerator implements Generator {
         }
 
         for (int frameIndex = 0; frameIndex < maxFrames; frameIndex++) {
-            BufferedImage frame = new BufferedImage(inventoryImage.getWidth(), inventoryImage.getHeight(), BufferedImage.TYPE_INT_ARGB);
+            BufferedImage frame = new BufferedImage(staticBackground.getWidth(), staticBackground.getHeight(), BufferedImage.TYPE_INT_ARGB);
             Graphics2D frameGraphics = frame.createGraphics();
             frameGraphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
             frameGraphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
             frameGraphics.setFont(MinecraftFonts.getFont(MinecraftFonts.REGULAR).deriveFont((float) scaleFactor * 8));
-            frameGraphics.drawImage(inventoryImage, 0, 0, null);
+            frameGraphics.drawImage(staticBackground, 0, 0, null);
 
             for (InventoryItem item : items) {
                 BufferedImage original = item.getItemImage();
@@ -443,7 +422,7 @@ public class MinecraftInventoryGenerator implements Generator {
                     item.setItemImage(animatedFrame);
                 }
 
-                drawItem(frameGraphics, item);
+                drawItem(frameGraphics, item, slotCoordinates);
                 item.setItemImage(original);
             }
 
@@ -460,25 +439,6 @@ public class MinecraftInventoryGenerator implements Generator {
             .filter(delay -> delay != null && delay > 0)
             .findFirst()
             .orElse(33);
-    }
-
-    @Override
-    public @NotNull GeneratedObject render(@Nullable GenerationContext generationContext) {
-        log.debug("Rendering inventory ({})", this);
-
-        drawInventoryBackground();
-        drawSlots();
-        drawTitle();
-        drawItems(generationContext);
-
-        g2d.dispose();
-        log.debug("Rendered inventory image (dimensions {}x{})", inventoryImage.getWidth(), inventoryImage.getHeight());
-
-        if (generatedObject != null) {
-            return generatedObject;
-        }
-
-        return new GeneratedObject(inventoryImage);
     }
 
     public static class Builder implements ClassBuilder<MinecraftInventoryGenerator> {

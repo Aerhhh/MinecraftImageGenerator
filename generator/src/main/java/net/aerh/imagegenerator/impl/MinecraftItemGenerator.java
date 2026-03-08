@@ -39,7 +39,9 @@ public class MinecraftItemGenerator implements Generator {
     private final boolean hoverEffect;
     private final boolean bigImage;
     private final Integer durabilityPercent;
+    @ToString.Exclude
     private final OverlayLoader overlayLoader;
+    @ToString.Exclude
     private final EffectPipeline effectPipeline;
 
     @Override

@@ -1,8 +1,7 @@
 package net.aerh.imagegenerator;
 
-import net.aerh.imagegenerator.cache.GeneratorCache;
+import net.aerh.imagegenerator.cache.Cacheable;
 import net.aerh.imagegenerator.context.GenerationContext;
-import net.aerh.imagegenerator.cache.GeneratorCacheKey;
 import net.aerh.imagegenerator.item.GeneratedObject;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -10,7 +9,7 @@ import org.jetbrains.annotations.Nullable;
 /**
  * Base interface for all generators
  */
-public interface Generator {
+public interface Generator extends Cacheable {
 
     /**
      * Entry point for generating an object with caching automatically applied
@@ -29,15 +28,7 @@ public interface Generator {
      * @return the generated object (possibly retrieved from cache)
      */
     default GeneratedObject generate(@Nullable GenerationContext generationContext) {
-        String cacheKey = GeneratorCacheKey.fromGenerator(this);
-        GeneratedObject cachedObject = GeneratorCache.getGeneratedObject(cacheKey);
-        if (cachedObject != null) {
-            return cachedObject;
-        }
-
-        GeneratedObject generatedObject = render(generationContext);
-        GeneratorCache.putGeneratedObject(cacheKey, generatedObject);
-        return generatedObject;
+        return cachedOrCompute(() -> render(generationContext));
     }
 
     /**

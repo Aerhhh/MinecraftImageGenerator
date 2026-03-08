@@ -37,6 +37,7 @@ import java.util.Locale;
 public class MinecraftNbtParser {
 
     private static final NbtFormatHandler DEFAULT_FORMAT_HANDLER = new DefaultNbtFormatHandler();
+    private static final PlaceholderReverseMapper REVERSE_MAPPER = new PlaceholderReverseMapper();
 
     private static final List<NbtFormatHandler> FORMAT_HANDLERS = List.of(
         new ComponentsNbtFormatHandler(),       // 1.20.5+ (components key)
@@ -142,9 +143,8 @@ public class MinecraftNbtParser {
 
         generators.add(tooltipGenerator);
 
-        PlaceholderReverseMapper reverseMapper = new PlaceholderReverseMapper();
-        String mappedLore = reverseMapper.mapPlaceholders(tooltipGenerator.getItemLore());
-        String mappedName = reverseMapper.mapPlaceholders(tooltipGenerator.getItemName());
+        String mappedLore = REVERSE_MAPPER.mapPlaceholders(tooltipGenerator.getItemLore());
+        String mappedName = REVERSE_MAPPER.mapPlaceholders(tooltipGenerator.getItemName());
 
         tooltipGenerator
             .withItemLore(mappedLore)
