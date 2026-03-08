@@ -41,11 +41,14 @@ public class ComponentsNbtFormatHandler implements NbtFormatHandler {
         Integer maxLineLength = resolveMaxLineLength(components);
         boolean enchanted = detectEnchanted(components);
 
-        return NbtFormatMetadata.builder()
+        NbtFormatMetadata.Builder builder = NbtFormatMetadata.builder()
             .withValue(NbtFormatMetadata.KEY_PLAYER_HEAD_TEXTURE, skinValue)
             .withValue(NbtFormatMetadata.KEY_MAX_LINE_LENGTH, maxLineLength)
-            .withValue(NbtFormatMetadata.KEY_ENCHANTED, enchanted ? Boolean.TRUE : null)
-            .build();
+            .withValue(NbtFormatMetadata.KEY_ENCHANTED, enchanted ? Boolean.TRUE : null);
+
+        extractDurability(components, builder);
+
+        return builder.build();
     }
 
     private String resolveSkinValue(JsonObject components) {
@@ -89,6 +92,22 @@ public class ComponentsNbtFormatHandler implements NbtFormatHandler {
         }
 
         return maxLength == 0 ? null : maxLength;
+    }
+
+    private void extractDurability(JsonObject components, NbtFormatMetadata.Builder builder) {
+        if (components.has("minecraft:damage")) {
+            JsonElement damage = components.get("minecraft:damage");
+            if (damage.isJsonPrimitive()) {
+                builder.withValue(NbtFormatMetadata.KEY_DAMAGE, damage.getAsInt());
+            }
+        }
+
+        if (components.has("minecraft:max_damage")) {
+            JsonElement maxDamage = components.get("minecraft:max_damage");
+            if (maxDamage.isJsonPrimitive()) {
+                builder.withValue(NbtFormatMetadata.KEY_MAX_DAMAGE, maxDamage.getAsInt());
+            }
+        }
     }
 
     private boolean detectEnchanted(JsonObject components) {

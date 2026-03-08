@@ -149,12 +149,14 @@ public final class NbtTextComponentUtil {
      */
     public static String toFormattedString(JsonObject textComponent) {
         StringBuilder result = new StringBuilder();
-        String lastColorCode = null;
+        toFormattedString(textComponent, result, null);
+        return result.toString();
+    }
 
+    private static String toFormattedString(JsonObject textComponent, StringBuilder result, String lastColorCode) {
         if (textComponent.has("color")) {
             String colorName = textComponent.get("color").getAsString();
-            ChatFormat colorFormat = ChatFormat.of(colorName);
-            lastColorCode = appendColorIfNeeded(result, colorFormat, lastColorCode);
+            lastColorCode = appendColorCode(result, colorName, lastColorCode);
         }
 
         appendFormattingCodes(result, textComponent);
@@ -169,27 +171,15 @@ public final class NbtTextComponentUtil {
         if (textComponent.has("extra")) {
             JsonArray extraArray = textComponent.getAsJsonArray("extra");
             for (JsonElement extraElement : extraArray) {
-                if (!extraElement.isJsonObject()) {
-                    continue;
-                }
-
-                JsonObject extraComponent = extraElement.getAsJsonObject();
-
-                if (extraComponent.has("color")) {
-                    String colorName = extraComponent.get("color").getAsString();
-                    ChatFormat colorFormat = ChatFormat.of(colorName);
-                    lastColorCode = appendColorIfNeeded(result, colorFormat, lastColorCode);
-                }
-
-                appendFormattingCodes(result, extraComponent);
-
-                if (extraComponent.has("text")) {
-                    result.append(extraComponent.get("text").getAsString());
+                if (extraElement.isJsonObject()) {
+                    lastColorCode = toFormattedString(extraElement.getAsJsonObject(), result, lastColorCode);
+                } else if (extraElement.isJsonPrimitive()) {
+                    result.append(extraElement.getAsString());
                 }
             }
         }
 
-        return result.toString();
+        return lastColorCode;
     }
 
     /**
@@ -228,17 +218,37 @@ public final class NbtTextComponentUtil {
         }
     }
 
-    private static String appendColorIfNeeded(StringBuilder builder, ChatFormat colorFormat, String lastColorCode) {
-        if (colorFormat == null || !colorFormat.isColor()) {
+    /**
+     * Appends a color code to the result builder, handling both named Minecraft colors
+     * and hex color strings. Named colors emit standard codes (e.g., "&6"), while hex
+     * colors emit the &#RRGGBB format for downstream parsing.
+     */
+    private static String appendColorCode(StringBuilder builder, String colorName, String lastColorCode) {
+        if (colorName == null || colorName.isEmpty()) {
             return lastColorCode;
         }
 
-        String code = "&" + colorFormat.getCode();
-        if (code.equalsIgnoreCase(lastColorCode)) {
-            return lastColorCode;
+        // Try named color first
+        ChatFormat named = ChatFormat.of(colorName);
+        if (named != null && named.isColor()) {
+            String code = "&" + named.getCode();
+            if (code.equalsIgnoreCase(lastColorCode)) {
+                return lastColorCode;
+            }
+            builder.append(code);
+            return code;
         }
 
-        builder.append(code);
-        return code;
+        // Hex color (#RRGGBB) - emit as &#RRGGBB for the legacy parser to pick up
+        if (colorName.startsWith("#") && colorName.length() == 7) {
+            String code = "&" + colorName;
+            if (code.equalsIgnoreCase(lastColorCode)) {
+                return lastColorCode;
+            }
+            builder.append(code);
+            return code;
+        }
+
+        return lastColorCode;
     }
 }

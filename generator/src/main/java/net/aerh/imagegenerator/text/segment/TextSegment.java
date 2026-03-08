@@ -12,6 +12,7 @@ import net.aerh.imagegenerator.text.event.HoverEvent;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.awt.Color;
 import java.util.Optional;
 
 @Setter
@@ -35,8 +36,20 @@ public final class TextSegment extends ColorSegment {
                 textSegment.setClickEvent(ClickEvent.fromJson(jsonObject.get("clickEvent").getAsJsonObject()));
             if (jsonObject.has("hoverEvent"))
                 textSegment.setHoverEvent(HoverEvent.fromJson(jsonObject.get("hoverEvent").getAsJsonObject()));
-            if (jsonObject.has("color"))
-                textSegment.setColor(ChatFormat.valueOf(jsonObject.get("color").getAsString().toUpperCase()));
+            if (jsonObject.has("color")) {
+                String colorStr = jsonObject.get("color").getAsString();
+                if (colorStr.startsWith("#")) {
+                    Color hexColor = ColorSegment.parseHexColor(colorStr);
+                    if (hexColor != null) {
+                        textSegment.setColor(hexColor);
+                    }
+                } else {
+                    ChatFormat format = ChatFormat.of(colorStr);
+                    if (format != null && format.isColor()) {
+                        textSegment.setColor(format);
+                    }
+                }
+            }
             if (jsonObject.has("obfuscated"))
                 textSegment.setObfuscated(NbtTextComponentUtil.parseBooleanStrict(jsonObject.get("obfuscated")));
             if (jsonObject.has("italic"))
@@ -95,7 +108,7 @@ public final class TextSegment extends ColorSegment {
             "clickEvent=" + clickEvent +
             ", hoverEvent=" + hoverEvent +
             ", text='" + text + '\'' +
-            ", color=" + color +
+            ", foregroundColor=" + foregroundColor +
             ", italic=" + italic +
             ", bold=" + bold +
             ", underlined=" + underlined +
@@ -107,7 +120,8 @@ public final class TextSegment extends ColorSegment {
     public static class Builder implements ClassBuilder<TextSegment> {
 
         protected String text = "";
-        protected ChatFormat color;
+        protected Color foregroundColor;
+        protected Color shadowColor;
         protected boolean italic, bold, underlined, obfuscated, strikethrough;
         private ClickEvent clickEvent;
         private HoverEvent hoverEvent;
@@ -158,7 +172,16 @@ public final class TextSegment extends ColorSegment {
         }
 
         public Builder withColor(@NotNull ChatFormat color) {
-            this.color = color;
+            if (color.isColor()) {
+                this.foregroundColor = color.getColor();
+                this.shadowColor = color.getBackgroundColor();
+            }
+            return this;
+        }
+
+        public Builder withColor(@NotNull Color color) {
+            this.foregroundColor = color;
+            this.shadowColor = ChatFormat.computeShadowColor(color);
             return this;
         }
 
@@ -182,7 +205,10 @@ public final class TextSegment extends ColorSegment {
             TextSegment textSegment = new TextSegment(this.text);
             textSegment.setClickEvent(this.clickEvent);
             textSegment.setHoverEvent(hoverEvent);
-            textSegment.setColor(this.color);
+            if (this.foregroundColor != null) {
+                textSegment.foregroundColor = this.foregroundColor;
+                textSegment.shadowColor = this.shadowColor != null ? this.shadowColor : ChatFormat.computeShadowColor(this.foregroundColor);
+            }
             textSegment.setObfuscated(this.obfuscated);
             textSegment.setItalic(this.italic);
             textSegment.setBold(this.bold);

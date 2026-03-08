@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.aerh.imagegenerator.builder.ClassBuilder;
 import net.aerh.imagegenerator.text.ChatFormat;
 import net.aerh.imagegenerator.text.segment.ColorSegment;
+
 import net.aerh.imagegenerator.text.segment.LineSegment;
 import net.aerh.imagegenerator.util.MinecraftFonts;
 import net.hypixel.nerdbot.marmalade.Range;
@@ -97,7 +98,8 @@ public class MinecraftTooltip {
     @Getter
     private int animationFrameCount;
 
-    private transient ChatFormat currentColor;
+    private transient Color currentForeground;
+    private transient Color currentShadow;
     private transient Font currentFont;
     private transient int locationX;
     private transient int locationY;
@@ -118,9 +120,10 @@ public class MinecraftTooltip {
      * @param animationFrameCount The number of frames to generate for the animation.
      * @param scaleFactor         The scale factor to apply to all pixel sizes.
      */
-    private MinecraftTooltip(List<LineSegment> lines, ChatFormat defaultColor, int alpha, int padding, boolean firstLinePadding, boolean renderBorder, boolean centeredText, int frameDelayMs, int animationFrameCount, int scaleFactor) {
+    private MinecraftTooltip(List<LineSegment> lines, Color defaultForeground, Color defaultShadow, int alpha, int padding, boolean firstLinePadding, boolean renderBorder, boolean centeredText, int frameDelayMs, int animationFrameCount, int scaleFactor) {
         this.lines = lines;
-        this.currentColor = defaultColor;
+        this.currentForeground = defaultForeground;
+        this.currentShadow = defaultShadow;
         this.alpha = alpha;
         this.padding = padding;
         this.firstLinePadding = firstLinePadding;
@@ -398,7 +401,8 @@ public class MinecraftTooltip {
     private void drawString(Graphics2D graphics, @NotNull ColorSegment colorSegment) {
         Font baseFont = MinecraftFonts.getFont(colorSegment.isBold(), colorSegment.isItalic());
         this.currentFont = scaleFactor > 1 ? baseFont.deriveFont(baseFont.getSize2D() * scaleFactor) : baseFont;
-        this.currentColor = colorSegment.getColor().orElse(ChatFormat.GRAY);
+        this.currentForeground = colorSegment.getForegroundColor();
+        this.currentShadow = colorSegment.getShadowColor();
         graphics.setFont(this.currentFont);
         FontMetrics metrics = graphics.getFontMetrics(this.currentFont);
 
@@ -565,11 +569,11 @@ public class MinecraftTooltip {
         }
 
         // Draw Drop Shadow Text
-        frameGraphics.setColor(this.currentColor.getBackgroundColor());
+        frameGraphics.setColor(this.currentShadow);
         frameGraphics.drawString(textToDraw, this.locationX + pixelSize, this.locationY + pixelSize);
 
         // Draw Text
-        frameGraphics.setColor(this.currentColor.getColor());
+        frameGraphics.setColor(this.currentForeground);
         frameGraphics.drawString(textToDraw, this.locationX, this.locationY);
 
         // Draw Strikethrough
@@ -597,7 +601,7 @@ public class MinecraftTooltip {
             yPosition += pixelSize;
         }
 
-        frameGraphics.setColor(dropShadow ? this.currentColor.getBackgroundColor() : this.currentColor.getColor());
+        frameGraphics.setColor(dropShadow ? this.currentShadow : this.currentForeground);
         frameGraphics.drawLine(xPosition1, yPosition, xPosition2, yPosition);
         frameGraphics.drawLine(xPosition1, yPosition + 1, xPosition2, yPosition + 1);
     }
@@ -668,7 +672,8 @@ public class MinecraftTooltip {
     public static class Builder implements ClassBuilder<MinecraftTooltip> {
         @Getter
         private final List<LineSegment> lines = new ArrayList<>();
-        private ChatFormat defaultColor = ChatFormat.GRAY;
+        private Color defaultForeground = ChatFormat.GRAY.getColor();
+        private Color defaultShadow = ChatFormat.GRAY.getBackgroundColor();
         private int alpha = DEFAULT_ALPHA;
         private int padding = 0;
         private boolean firstLinePadding = true;
@@ -709,7 +714,14 @@ public class MinecraftTooltip {
         }
 
         public Builder withDefaultColor(@NotNull ChatFormat chatColor) {
-            this.defaultColor = chatColor;
+            this.defaultForeground = chatColor.getColor();
+            this.defaultShadow = chatColor.getBackgroundColor();
+            return this;
+        }
+
+        public Builder withDefaultColor(@NotNull Color color) {
+            this.defaultForeground = color;
+            this.defaultShadow = ChatFormat.computeShadowColor(color);
             return this;
         }
 
@@ -755,7 +767,8 @@ public class MinecraftTooltip {
         public @NotNull MinecraftTooltip build() {
             return new MinecraftTooltip(
                 this.lines,
-                this.defaultColor,
+                this.defaultForeground,
+                this.defaultShadow,
                 this.alpha,
                 this.padding,
                 this.firstLinePadding,

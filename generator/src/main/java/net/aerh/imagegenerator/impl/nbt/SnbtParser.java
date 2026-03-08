@@ -22,7 +22,7 @@ import java.util.regex.Pattern;
  *   <li>Typed arrays: {@code [B; 1b, 2b]}, {@code [I; 1, 2]}, {@code [L; 1L, 2L]}</li>
  *   <li>String tags: {@code "quoted"} with backslash escapes</li>
  *   <li>Numeric tags: {@code 1b}, {@code 1s}, {@code 1}, {@code 1L}, {@code 1.0f}, {@code 1.0d}</li>
- *   <li>Boolean-like bytes: {@code true}/{@code false} mapped to {@code 1b}/{@code 0b}</li>
+ *   <li>Boolean literals: {@code true}/{@code false} stored as JSON booleans</li>
  * </ul>
  */
 public final class SnbtParser {
@@ -268,8 +268,7 @@ public final class SnbtParser {
     }
 
     private JsonElement parseNumericOrUnquotedString() {
-        int start = pos;
-        String raw = consumeWhile(ch -> !isStructuralChar(ch));
+        String raw = consumeUnquotedValue();
 
         if (raw.isEmpty()) {
             throw error("Expected value");
@@ -286,7 +285,7 @@ public final class SnbtParser {
     }
 
     private JsonElement parseUnquotedValue() {
-        String raw = consumeWhile(ch -> !isStructuralChar(ch));
+        String raw = consumeUnquotedValue();
 
         if (raw.isEmpty()) {
             throw error("Expected value at position " + pos);
@@ -308,6 +307,37 @@ public final class SnbtParser {
 
         // Unquoted string
         return new JsonPrimitive(raw);
+    }
+
+    /**
+     * Consumes an unquoted value, handling namespaced identifiers like {@code minecraft:stone}.
+     * A colon is treated as part of the value if followed by a letter or underscore (namespace separator),
+     * and as a structural separator otherwise.
+     */
+    private String consumeUnquotedValue() {
+        int start = pos;
+        while (!isFinished()) {
+            char c = input.charAt(pos);
+
+            if (c == ':') {
+                // Lookahead: colon is part of a namespace if followed by a letter or underscore
+                if (pos + 1 < input.length()) {
+                    char next = input.charAt(pos + 1);
+                    if (Character.isLetter(next) || next == '_') {
+                        pos++;
+                        continue;
+                    }
+                }
+                break; // structural separator
+            }
+
+            if (c == ',' || c == '}' || c == ']' || Character.isWhitespace(c)) {
+                break;
+            }
+
+            pos++;
+        }
+        return input.substring(start, pos);
     }
 
     private JsonElement tryParseNumeric(String raw) {

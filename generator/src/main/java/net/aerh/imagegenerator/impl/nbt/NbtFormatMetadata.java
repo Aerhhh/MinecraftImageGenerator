@@ -24,6 +24,12 @@ public final class NbtFormatMetadata {
     /** Whether the item has enchantments or an enchantment glint override. */
     public static final String KEY_ENCHANTED = "enchanted";
 
+    /** Current damage value of the item (0 = undamaged). */
+    public static final String KEY_DAMAGE = "damage";
+
+    /** Maximum damage the item can take before breaking. */
+    public static final String KEY_MAX_DAMAGE = "max_damage";
+
     /** Shared empty instance returned when a handler extracts no metadata. */
     public static final NbtFormatMetadata EMPTY = new NbtFormatMetadata(Collections.emptyMap());
 

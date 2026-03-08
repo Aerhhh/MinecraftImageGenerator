@@ -32,11 +32,14 @@ abstract class AbstractTagNbtFormatHandler implements NbtFormatHandler {
         Integer maxLineLength = resolveMaxLineLength(tag);
         boolean enchanted = detectEnchanted(tag);
 
-        return NbtFormatMetadata.builder()
+        NbtFormatMetadata.Builder builder = NbtFormatMetadata.builder()
             .withValue(NbtFormatMetadata.KEY_PLAYER_HEAD_TEXTURE, skinValue)
             .withValue(NbtFormatMetadata.KEY_MAX_LINE_LENGTH, maxLineLength)
-            .withValue(NbtFormatMetadata.KEY_ENCHANTED, enchanted ? Boolean.TRUE : null)
-            .build();
+            .withValue(NbtFormatMetadata.KEY_ENCHANTED, enchanted ? Boolean.TRUE : null);
+
+        extractDurability(tag, builder);
+
+        return builder.build();
     }
 
     /**
@@ -89,6 +92,20 @@ abstract class AbstractTagNbtFormatHandler implements NbtFormatHandler {
         }
 
         return null;
+    }
+
+    /**
+     * Extracts durability data from the legacy {@code tag.Damage} field.
+     * In legacy NBT, only the current damage is stored; max damage is item-type-specific
+     * and not present in the NBT itself.
+     */
+    protected void extractDurability(JsonObject tag, NbtFormatMetadata.Builder builder) {
+        if (tag.has("Damage")) {
+            JsonElement damage = tag.get("Damage");
+            if (damage.isJsonPrimitive()) {
+                builder.withValue(NbtFormatMetadata.KEY_DAMAGE, damage.getAsInt());
+            }
+        }
     }
 
     /**

@@ -92,6 +92,47 @@ public enum ChatFormat {
             .orElse(null);
     }
 
+    /**
+     * Resolves a named Minecraft color string (e.g., "gold", "dark_red") to a {@link java.awt.Color}.
+     * Returns null if the name doesn't match any known color.
+     */
+    public static @Nullable Color resolveNamedColor(@NotNull String name) {
+        ChatFormat format = of(name);
+        if (format != null && format.isColor()) {
+            return format.getColor();
+        }
+        return null;
+    }
+
+    /**
+     * Computes the Minecraft drop shadow color for a given foreground color.
+     * Minecraft's formula: divide each RGB channel by 4.
+     */
+    public static @NotNull Color computeShadowColor(@NotNull Color foreground) {
+        return new Color(
+            foreground.getRed() / 4,
+            foreground.getGreen() / 4,
+            foreground.getBlue() / 4
+        );
+    }
+
+    /**
+     * Finds the ChatFormat whose color matches the given Color exactly, or null if no match.
+     */
+    public static @Nullable ChatFormat fromColor(@Nullable Color color) {
+        if (color == null) {
+            return null;
+        }
+
+        int rgb = color.getRGB() & 0xFFFFFF;
+        for (ChatFormat format : VALUES) {
+            if (format.isColor() && (format.getColor().getRGB() & 0xFFFFFF) == rgb) {
+                return format;
+            }
+        }
+        return null;
+    }
+
     public static boolean isValid(char code) {
         return of(code) != null;
     }

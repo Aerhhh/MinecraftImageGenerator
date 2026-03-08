@@ -9,8 +9,8 @@ import net.aerh.imagegenerator.text.ChatFormat;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.awt.Color;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.function.Supplier;
 
 @Getter
@@ -18,8 +18,12 @@ import java.util.function.Supplier;
 @ToString
 public class ColorSegment {
 
+    private static final Color DEFAULT_FOREGROUND = ChatFormat.GRAY.getColor();
+    private static final Color DEFAULT_SHADOW = ChatFormat.GRAY.getBackgroundColor();
+
     protected @NotNull String text;
-    protected ChatFormat color = ChatFormat.GRAY;
+    protected @NotNull Color foregroundColor = DEFAULT_FOREGROUND;
+    protected @NotNull Color shadowColor = DEFAULT_SHADOW;
     protected boolean italic, bold, underlined, obfuscated, strikethrough;
 
     public ColorSegment(@NotNull String text) {
@@ -66,6 +70,41 @@ public class ColorSegment {
 
                 // peek at the next character.
                 char peek = legacyText.charAt(i + 1);
+
+                // Check for hex color: &#RRGGBB (7 chars after &)
+                if (peek == '#' && i + 7 < legacyText.length()) {
+                    String hexStr = legacyText.substring(i + 1, i + 8); // #RRGGBB
+                    Color hexColor = parseHexColor(hexStr);
+                    if (hexColor != null) {
+                        if (!text.isEmpty()) {
+                            currentObject.setText(text.toString());
+                            builder.withSegments(currentObject);
+                            currentObject = segmentSupplier.get();
+                            text.setLength(0);
+                        }
+                        currentObject = segmentSupplier.get();
+                        currentObject.setColor(hexColor);
+                        i += 7; // skip &#RRGGBB
+                        continue;
+                    }
+                }
+
+                // Check for BungeeCord hex: &x&R&R&G&G&B&B (13 chars total from &x)
+                if ((peek == 'x' || peek == 'X') && i + 13 <= legacyText.length()) {
+                    Color bungeeColor = parseBungeeHexColor(legacyText, i, symbolSubstitute);
+                    if (bungeeColor != null) {
+                        if (!text.isEmpty()) {
+                            currentObject.setText(text.toString());
+                            builder.withSegments(currentObject);
+                            currentObject = segmentSupplier.get();
+                            text.setLength(0);
+                        }
+                        currentObject = segmentSupplier.get();
+                        currentObject.setColor(bungeeColor);
+                        i += 13; // skip &x&R&R&G&G&B&B
+                        continue;
+                    }
+                }
 
                 if (ChatFormat.isValid(peek)) {
                     i += 1; // if valid
@@ -124,25 +163,42 @@ public class ColorSegment {
         return builder.build();
     }
 
-    public Optional<ChatFormat> getColor() {
-        return Optional.ofNullable(this.color);
+    /**
+     * Sets the color from a {@link ChatFormat} enum value, using its predefined foreground and shadow colors.
+     */
+    public void setColor(@NotNull ChatFormat format) {
+        if (format.isColor()) {
+            this.foregroundColor = format.getColor();
+            this.shadowColor = format.getBackgroundColor();
+        }
     }
 
-    public void setColor(@NotNull ChatFormat color) {
-        this.color = color;
+    /**
+     * Sets the color from an arbitrary {@link Color}, computing the shadow automatically
+     * using Minecraft's formula (each RGB channel divided by 4).
+     */
+    public void setColor(@NotNull Color color) {
+        this.foregroundColor = color;
+        this.shadowColor = ChatFormat.computeShadowColor(color);
     }
 
     public void setText(@NotNull String value) {
         // Handle Unescaped Windows Apostrophe
         this.text = value
-            .replaceAll("(?<!\\\\)'", "’") // Handle Unescaped Windows Apostrophe
-            .replaceAll("\\\\'", "'"); // Remove Escaped Backslash
+            .replaceAll("(?<!\\\\)'", "\u2019") // Handle Unescaped Windows Apostrophe
+            .replaceAll("\\\\'", "\u2019"); // Remove Escaped Backslash
     }
 
     public @NotNull JsonObject toJson() {
         JsonObject object = new JsonObject();
         object.addProperty("text", this.getText());
-        this.getColor().ifPresent(color -> object.addProperty("color", color.toJsonString()));
+
+        ChatFormat named = ChatFormat.fromColor(this.foregroundColor);
+        if (named != null) {
+            object.addProperty("color", named.toJsonString());
+        } else {
+            object.addProperty("color", toHexString(this.foregroundColor));
+        }
 
         if (this.isItalic()) object.addProperty("italic", true);
         if (this.isBold()) object.addProperty("bold", true);
@@ -174,17 +230,24 @@ public class ColorSegment {
 
     protected @NotNull StringBuilder toLegacyBuilder(char symbol) {
         StringBuilder builder = new StringBuilder();
-        this.getColor().ifPresent(color -> builder.append(symbol).append(color.getCode()));
+
+        ChatFormat named = ChatFormat.fromColor(this.foregroundColor);
+        if (named != null) {
+            builder.append(symbol).append(named.getCode());
+        } else {
+            // Emit BungeeCord hex format: &x&R&R&G&G&B&B
+            String hex = toHexString(this.foregroundColor).substring(1); // remove #
+            builder.append(symbol).append('x');
+            for (char c : hex.toCharArray()) {
+                builder.append(symbol).append(c);
+            }
+        }
+
         if (this.isObfuscated()) builder.append(symbol).append(ChatFormat.OBFUSCATED.getCode());
         if (this.isBold()) builder.append(symbol).append(ChatFormat.BOLD.getCode());
         if (this.isStrikethrough()) builder.append(symbol).append(ChatFormat.STRIKETHROUGH.getCode());
         if (this.isUnderlined()) builder.append(symbol).append(ChatFormat.UNDERLINE.getCode());
         if (this.isItalic()) builder.append(symbol).append(ChatFormat.ITALIC.getCode());
-
-        this.getColor().ifPresent(color -> {
-            builder.setLength(0);
-            builder.append(symbol).append(ChatFormat.RESET.getCode());
-        });
 
         if (!this.getText().isEmpty()) {
             builder.append(this.getText());
@@ -197,9 +260,65 @@ public class ColorSegment {
         return TextSegment.fromJson(this.toJson());
     }
 
+    /**
+     * Parses a hex color string like "#FF5555" into a Color, or null if invalid.
+     */
+    static @Nullable Color parseHexColor(@NotNull String hex) {
+        if (!hex.startsWith("#") || hex.length() != 7) {
+            return null;
+        }
+        try {
+            return Color.decode(hex);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Parses a BungeeCord hex color format: &x&R&R&G&G&B&B starting at position i.
+     * Returns null if the format doesn't match.
+     */
+    private static @Nullable Color parseBungeeHexColor(String text, int startPos, char symbol) {
+        // Expected: &x&R&R&G&G&B&B (14 chars total)
+        if (startPos + 13 > text.length()) {
+            return null;
+        }
+
+        char s1 = text.charAt(startPos); // &
+        char x = text.charAt(startPos + 1); // x
+        if ((s1 != '&' && s1 != ChatFormat.SECTION_SYMBOL && s1 != symbol) || (x != 'x' && x != 'X')) {
+            return null;
+        }
+
+        StringBuilder hexBuilder = new StringBuilder("#");
+        for (int j = 0; j < 6; j++) {
+            int pairStart = startPos + 2 + (j * 2);
+            char sym = text.charAt(pairStart);
+            if (sym != '&' && sym != ChatFormat.SECTION_SYMBOL && sym != symbol) {
+                return null;
+            }
+            char hexChar = text.charAt(pairStart + 1);
+            if (!isHexDigit(hexChar)) {
+                return null;
+            }
+            hexBuilder.append(hexChar);
+        }
+
+        return parseHexColor(hexBuilder.toString());
+    }
+
+    private static boolean isHexDigit(char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+    }
+
+    static @NotNull String toHexString(@NotNull Color color) {
+        return String.format("#%06X", color.getRGB() & 0xFFFFFF);
+    }
+
     public static class Builder implements ClassBuilder<ColorSegment> {
         protected String text = "";
-        protected ChatFormat color = ChatFormat.GRAY;
+        protected Color foregroundColor = DEFAULT_FOREGROUND;
+        protected Color shadowColor = DEFAULT_SHADOW;
         protected boolean italic, bold, underlined, obfuscated, strikethrough;
 
         public Builder isBold() {
@@ -248,7 +367,16 @@ public class ColorSegment {
         }
 
         public Builder withColor(@NotNull ChatFormat color) {
-            this.color = color;
+            if (color.isColor()) {
+                this.foregroundColor = color.getColor();
+                this.shadowColor = color.getBackgroundColor();
+            }
+            return this;
+        }
+
+        public Builder withColor(@NotNull Color color) {
+            this.foregroundColor = color;
+            this.shadowColor = ChatFormat.computeShadowColor(color);
             return this;
         }
 
@@ -260,7 +388,8 @@ public class ColorSegment {
         @Override
         public @NotNull ColorSegment build() {
             ColorSegment colorSegment = new ColorSegment(this.text);
-            colorSegment.setColor(this.color);
+            colorSegment.foregroundColor = this.foregroundColor;
+            colorSegment.shadowColor = this.shadowColor;
             colorSegment.setObfuscated(this.obfuscated);
             colorSegment.setItalic(this.italic);
             colorSegment.setBold(this.bold);
