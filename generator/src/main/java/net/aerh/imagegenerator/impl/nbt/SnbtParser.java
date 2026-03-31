@@ -286,11 +286,9 @@ public final class SnbtParser {
     }
 
     private JsonElement parseUnquotedValue() {
-        String raw = consumeWhile(ch -> !isStructuralChar(ch));
-
-        if (raw.isEmpty()) {
-            throw error("Expected value at position " + pos);
-        }
+        // Reuse parseIdentifier's namespace-aware consumption so that unquoted values
+        // like "minecraft:jukebox_playable" in arrays are consumed past the colon.
+        String raw = parseIdentifier();
 
         // Handle boolean literals
         if (raw.equalsIgnoreCase("true")) {

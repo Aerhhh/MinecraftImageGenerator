@@ -6,6 +6,8 @@ import net.aerh.imagegenerator.text.MinecraftFont;
 import org.jetbrains.annotations.NotNull;
 
 import java.awt.*;
+import java.awt.font.FontRenderContext;
+import java.awt.geom.AffineTransform;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -18,6 +20,7 @@ public class MinecraftFonts {
     public static final int REGULAR = 0;
 
     private static final float DEFAULT_SIZE = 15.5f;
+    private static final FontRenderContext FONT_RENDER_CONTEXT = new FontRenderContext(new AffineTransform(), true, true);
     private static final Font UNIFONT;
     private static final Font UNIFONT_UPPER;
     private static final Font GALACTIC;
@@ -191,14 +194,26 @@ public class MinecraftFonts {
     }
 
     /**
-     * Checks if a font can render a specific character.
+     * Checks if a Minecraft font should render a specific character, or whether it should
+     * fall back to Unifont. The Minecraft font files contain oversized glyphs for many symbols
+     * (2x normal width). This detects those by comparing the character's advance width against
+     * a normal character ('A') and falling back to Unifont if it's too wide.
      *
-     * @param font      The font to check
-     * @param character The character to check
+     * @param font    The font to check
+     * @param charStr The character as a string (handles surrogate pairs)
      *
-     * @return True if the font can render the character
+     * @return True if the Minecraft font should render this character
      */
-    public static boolean canRender(Font font, char character) {
-        return font.canDisplayUpTo(String.valueOf(character)) == -1;
+    public static boolean shouldRender(Font font, String charStr) {
+        if (font.canDisplayUpTo(charStr) != -1) {
+            return false;
+        }
+
+        // Compare the glyph width to a reference character - if it's significantly wider,
+        // the font has an oversized glyph that should be handled by Unifont instead
+        double charWidth = font.getStringBounds(charStr, FONT_RENDER_CONTEXT).getWidth();
+        double refWidth = font.getStringBounds("A", FONT_RENDER_CONTEXT).getWidth();
+
+        return charWidth <= refWidth * 1.5;
     }
 }
