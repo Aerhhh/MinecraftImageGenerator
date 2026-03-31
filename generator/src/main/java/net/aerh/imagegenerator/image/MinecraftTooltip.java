@@ -314,7 +314,7 @@ public class MinecraftTooltip {
 
                 String charStr = new String(Character.toChars(codePoint));
 
-                if (MinecraftFonts.shouldRender(font, charStr)) {
+                if (font.canDisplayUpTo(charStr) == -1) {
                     lineWidth += metrics.stringWidth(charStr);
                 } else {
                     Font fallbackFont = MinecraftFonts.getFallbackFont(codePoint, font.getSize2D());
@@ -437,7 +437,7 @@ public class MinecraftTooltip {
                 continue;
             }
 
-            if (!MinecraftFonts.shouldRender(this.currentFont, charStr)) {
+            if (this.currentFont.canDisplayUpTo(charStr) != -1) {
                 // Draw previous subWord, if any
                 if (!subWord.isEmpty()) {
                     drawSubWord(graphics, subWord.toString(), colorSegment, metrics);
