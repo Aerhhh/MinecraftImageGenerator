@@ -38,7 +38,7 @@ public class MinecraftTooltip {
     public static final Range<Integer> LINE_LENGTH = Range.between(1, 128);
 
     private static final int DEFAULT_PIXEL_SIZE = 2;
-    private static final double APRIL_FOOLS_SWAP_CHANCE = 0.05;
+    private static final double APRIL_FOOLS_SWAP_CHANCE = 0.33;
     private static final int STRIKETHROUGH_OFFSET = -8;
     private static final int UNDERLINE_OFFSET = 2;
 
