@@ -49,9 +49,9 @@ public class MinecraftFonts {
 
         Object[][] fontConfigs = {
             {"Regular", "/minecraft/assets/fonts/Minecraft-Regular.otf", 15.5f},
-            {"Bold", "/minecraft/assets/fonts/Minecraft-Bold.otf", 20.0f},
-            {"Italic", "/minecraft/assets/fonts/Minecraft-Italic.otf", 20.5f},
-            {"BoldItalic", "/minecraft/assets/fonts/Minecraft-BoldItalic.otf", 20.5f}
+            {"Bold", "/minecraft/assets/fonts/Minecraft-Bold.otf", 15.5f},
+            {"Italic", "/minecraft/assets/fonts/Minecraft-Italic.otf", 15.5f},
+            {"BoldItalic", "/minecraft/assets/fonts/Minecraft-BoldItalic.otf", 15.5f}
         };
 
         for (Object[] config : fontConfigs) {
