@@ -155,6 +155,7 @@ public class MinecraftTooltip {
 
         BufferedImage tempImg = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
         Graphics2D tempG2d = tempImg.createGraphics();
+        tempG2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
         FontMetrics[] metrics = new FontMetrics[fonts.size()];
 
         for (int i = 0; i < fonts.size(); i++) {
@@ -641,6 +642,7 @@ public class MinecraftTooltip {
         // Determine the largest width using the measureLines method
         BufferedImage dummyImage = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
         Graphics2D measureGraphics = dummyImage.createGraphics();
+        measureGraphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
         measureLines(measureGraphics);
         int measuredHeight = this.locationY;
         measureGraphics.dispose();
@@ -662,6 +664,7 @@ public class MinecraftTooltip {
             int frameHeight = Math.max(1, finalHeight);
             BufferedImage frameImage = new BufferedImage(frameWidth, frameHeight, BufferedImage.TYPE_INT_ARGB);
             Graphics2D graphics = frameImage.createGraphics();
+            graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
 
             // Draw background first
             graphics.setColor(new Color(18, 3, 18, this.isAnimated ? 255 : this.getAlpha()));
