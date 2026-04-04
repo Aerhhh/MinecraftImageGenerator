@@ -113,7 +113,7 @@ public class AssetDownloader {
         }
 
         System.out.println("Fetching version manifest...");
-        JsonObject manifest = HttpClient.getJson(VERSION_MANIFEST_URL);
+        JsonObject manifest = HttpClient.getJson(VERSION_MANIFEST_URL).orElseThrow();
         JsonObject latest = manifest.getAsJsonObject("latest");
         String latestRelease = latest.get("release").getAsString();
         System.out.println("Latest release: " + latestRelease);
@@ -125,7 +125,7 @@ public class AssetDownloader {
      * Fetches the client JAR download URL for the specified version from Mojang's API.
      */
     private String getClientJarUrl(String targetVersion) throws IOException, InterruptedException {
-        JsonObject manifest = HttpClient.getJson(VERSION_MANIFEST_URL);
+        JsonObject manifest = HttpClient.getJson(VERSION_MANIFEST_URL).orElseThrow();
         JsonArray versions = manifest.getAsJsonArray("versions");
 
         for (int i = 0; i < versions.size(); i++) {
@@ -136,7 +136,7 @@ public class AssetDownloader {
                 String versionUrl = versionEntry.get("url").getAsString();
                 ToolingConstants.printDebug("Version manifest URL: " + versionUrl);
 
-                JsonObject versionMeta = HttpClient.getJson(versionUrl);
+                JsonObject versionMeta = HttpClient.getJson(versionUrl).orElseThrow();
                 JsonObject client = versionMeta.getAsJsonObject("downloads").getAsJsonObject("client");
 
                 return client.get("url").getAsString();
@@ -151,7 +151,7 @@ public class AssetDownloader {
      * Returns null if mappings are not available for the version (e.g. older versions).
      */
     private String getMappingsUrl(String targetVersion) throws IOException, InterruptedException {
-        JsonObject manifest = HttpClient.getJson(VERSION_MANIFEST_URL);
+        JsonObject manifest = HttpClient.getJson(VERSION_MANIFEST_URL).orElseThrow();
         JsonArray versions = manifest.getAsJsonArray("versions");
 
         for (int i = 0; i < versions.size(); i++) {
@@ -160,7 +160,7 @@ public class AssetDownloader {
 
             if (versionId.equals(targetVersion)) {
                 String versionUrl = versionEntry.get("url").getAsString();
-                JsonObject versionMeta = HttpClient.getJson(versionUrl);
+                JsonObject versionMeta = HttpClient.getJson(versionUrl).orElseThrow();
                 JsonObject downloads = versionMeta.getAsJsonObject("downloads");
                 if (downloads.has("client_mappings")) {
                     JsonObject clientMappings = downloads.getAsJsonObject("client_mappings");
