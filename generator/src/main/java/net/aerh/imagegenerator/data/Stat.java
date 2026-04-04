@@ -18,7 +18,7 @@ import java.util.Objects;
 @Setter
 @AllArgsConstructor
 @ToString
-public class Stat {
+public class Stat implements FormattableEntry {
 
     private static final List<Stat> STATS = new ArrayList<>();
 
@@ -28,6 +28,7 @@ public class Stat {
         } catch (Exception e) {
             log.error("Failed to load stat data", e);
         }
+        ExternalDataLoader.mergeExternal(STATS, Stat[].class, "stats.json", Stat::getName);
     }
 
     private String icon;

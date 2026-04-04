@@ -9,6 +9,7 @@ import net.aerh.imagegenerator.text.ChatFormat;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Locale;
+import java.util.Objects;
 
 /**
  * Shared utilities for working with Minecraft JSON text components and NBT boolean values.
@@ -137,11 +138,43 @@ public final class NbtTextComponentUtil {
     }
 
     /**
+     * Tracks the resolved formatting state of a text component for correct
+     * ampersand-code emission. In Minecraft's text component model, each
+     * element in an {@code extra} array inherits formatting from its
+     * <em>parent</em>, not from preceding siblings. This record lets us
+     * detect when formatting must be reset between siblings.
+     */
+    private record FormattingState(String colorCode, boolean bold, boolean italic,
+                                   boolean underlined, boolean strikethrough, boolean obfuscated) {
+
+        static final FormattingState EMPTY = new FormattingState(null, false, false, false, false, false);
+
+        /**
+         * Returns {@code true} when transitioning from {@code this} state to
+         * {@code target} requires clearing at least one active formatting flag
+         * (which in Minecraft's system means re-emitting a color code or
+         * {@code &r}).
+         */
+        boolean needsFormattingReset(FormattingState target) {
+            return (bold && !target.bold)
+                || (italic && !target.italic)
+                || (underlined && !target.underlined)
+                || (strikethrough && !target.strikethrough)
+                || (obfuscated && !target.obfuscated);
+        }
+    }
+
+    /**
      * Converts a JSON text component object into an ampersand-formatted string
      * (e.g., {@code &6&lCool Sword}).
      * <p>
-     * Handles the {@code color}, {@code text}, {@code extra} array, and formatting flags
-     * ({@code bold}, {@code italic}, {@code underlined}, {@code strikethrough}, {@code obfuscated}).
+     * Correctly models Minecraft's text component inheritance: each element in
+     * an {@code extra} array inherits formatting from its parent, not from
+     * preceding siblings. Formatting codes that need to be <em>removed</em>
+     * between siblings are handled by re-emitting a color code (which resets
+     * all formatting in Minecraft) or {@code &r} when no color is present.
+     * <p>
+     * Handles nested {@code extra} arrays and primitive string entries.
      *
      * @param textComponent the JSON text component object
      *
@@ -149,47 +182,104 @@ public final class NbtTextComponentUtil {
      */
     public static String toFormattedString(JsonObject textComponent) {
         StringBuilder result = new StringBuilder();
-        String lastColorCode = null;
+        FormattingState[] activeState = {FormattingState.EMPTY};
+        appendComponent(result, textComponent, FormattingState.EMPTY, activeState);
+        return result.toString();
+    }
 
-        if (textComponent.has("color")) {
-            String colorName = textComponent.get("color").getAsString();
-            ChatFormat colorFormat = ChatFormat.of(colorName);
-            lastColorCode = appendColorIfNeeded(result, colorFormat, lastColorCode);
-        }
+    /**
+     * Recursively appends a text component and its {@code extra} children,
+     * emitting formatting transitions as needed.
+     *
+     * @param result      the output buffer
+     * @param component   the current text component
+     * @param inherited   formatting inherited from the parent component
+     * @param activeState single-element array holding the last-emitted state
+     *                    (mutable across the entire tree traversal)
+     */
+    private static void appendComponent(StringBuilder result, JsonObject component,
+                                        FormattingState inherited, FormattingState[] activeState) {
+        FormattingState resolved = resolveFormatting(component, inherited);
 
-        appendFormattingCodes(result, textComponent);
+        emitFormattingTransition(result, activeState[0], resolved);
+        activeState[0] = resolved;
 
-        if (textComponent.has("text")) {
-            String text = textComponent.get("text").getAsString();
+        if (component.has("text")) {
+            String text = component.get("text").getAsString();
             if (!text.isEmpty()) {
                 result.append(text);
             }
         }
 
-        if (textComponent.has("extra")) {
-            JsonArray extraArray = textComponent.getAsJsonArray("extra");
+        if (component.has("extra")) {
+            JsonArray extraArray = component.getAsJsonArray("extra");
             for (JsonElement extraElement : extraArray) {
-                if (!extraElement.isJsonObject()) {
-                    continue;
-                }
-
-                JsonObject extraComponent = extraElement.getAsJsonObject();
-
-                if (extraComponent.has("color")) {
-                    String colorName = extraComponent.get("color").getAsString();
-                    ChatFormat colorFormat = ChatFormat.of(colorName);
-                    lastColorCode = appendColorIfNeeded(result, colorFormat, lastColorCode);
-                }
-
-                appendFormattingCodes(result, extraComponent);
-
-                if (extraComponent.has("text")) {
-                    result.append(extraComponent.get("text").getAsString());
+                if (extraElement.isJsonObject()) {
+                    appendComponent(result, extraElement.getAsJsonObject(), resolved, activeState);
+                } else if (extraElement.isJsonPrimitive()) {
+                    result.append(extraElement.getAsString());
                 }
             }
         }
+    }
 
-        return result.toString();
+    /**
+     * Determines the resolved formatting for a component by combining its own
+     * properties with those inherited from its parent.
+     */
+    private static FormattingState resolveFormatting(JsonObject component, FormattingState inherited) {
+        String color = inherited.colorCode();
+        if (component.has("color")) {
+            ChatFormat colorFormat = ChatFormat.of(component.get("color").getAsString());
+            if (colorFormat != null && colorFormat.isColor()) {
+                color = "&" + colorFormat.getCode();
+            }
+        }
+
+        return new FormattingState(
+            color,
+            resolveFormattingFlag(component, "bold", inherited.bold()),
+            resolveFormattingFlag(component, "italic", inherited.italic()),
+            resolveFormattingFlag(component, "underlined", inherited.underlined()),
+            resolveFormattingFlag(component, "strikethrough", inherited.strikethrough()),
+            resolveFormattingFlag(component, "obfuscated", inherited.obfuscated())
+        );
+    }
+
+    /**
+     * Resolves a single formatting flag: uses the component's own value if
+     * present, otherwise falls back to the inherited value.
+     */
+    private static boolean resolveFormattingFlag(JsonObject component, String key, boolean inherited) {
+        if (component.has(key)) {
+            return parseBooleanStrict(component.get(key));
+        }
+        return inherited;
+    }
+
+    /**
+     * Emits the full formatting state whenever anything has changed from
+     * {@code from} to {@code to}. Each component's output is self-describing
+     * (color + all flags), so downstream processing (text wrapping, reverse
+     * mapping, rarity extraction) cannot lose formatting context.
+     */
+    private static void emitFormattingTransition(StringBuilder result,
+                                                 FormattingState from, FormattingState to) {
+        if (from.equals(to)) {
+            return;
+        }
+
+        if (to.colorCode() != null) {
+            result.append(to.colorCode());
+        } else if (from.needsFormattingReset(to)) {
+            result.append("&").append(ChatFormat.RESET.getCode());
+        }
+
+        if (to.bold()) result.append("&").append(ChatFormat.BOLD.getCode());
+        if (to.italic()) result.append("&").append(ChatFormat.ITALIC.getCode());
+        if (to.underlined()) result.append("&").append(ChatFormat.UNDERLINE.getCode());
+        if (to.strikethrough()) result.append("&").append(ChatFormat.STRIKETHROUGH.getCode());
+        if (to.obfuscated()) result.append("&").append(ChatFormat.OBFUSCATED.getCode());
     }
 
     /**
@@ -214,31 +304,4 @@ public final class NbtTextComponentUtil {
         return rawValue.replace(ChatFormat.SECTION_SYMBOL, ChatFormat.AMPERSAND_SYMBOL);
     }
 
-    private static void appendFormattingCodes(StringBuilder result, JsonObject component) {
-        appendFormattingCode(result, component, "bold", ChatFormat.BOLD);
-        appendFormattingCode(result, component, "italic", ChatFormat.ITALIC);
-        appendFormattingCode(result, component, "underlined", ChatFormat.UNDERLINE);
-        appendFormattingCode(result, component, "strikethrough", ChatFormat.STRIKETHROUGH);
-        appendFormattingCode(result, component, "obfuscated", ChatFormat.OBFUSCATED);
-    }
-
-    private static void appendFormattingCode(StringBuilder result, JsonObject component, String key, ChatFormat format) {
-        if (component.has(key) && parseBooleanStrict(component.get(key))) {
-            result.append("&").append(format.getCode());
-        }
-    }
-
-    private static String appendColorIfNeeded(StringBuilder builder, ChatFormat colorFormat, String lastColorCode) {
-        if (colorFormat == null || !colorFormat.isColor()) {
-            return lastColorCode;
-        }
-
-        String code = "&" + colorFormat.getCode();
-        if (code.equalsIgnoreCase(lastColorCode)) {
-            return lastColorCode;
-        }
-
-        builder.append(code);
-        return code;
-    }
 }

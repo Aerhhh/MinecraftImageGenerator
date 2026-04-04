@@ -66,7 +66,8 @@ public class MinecraftTooltipGenerator implements Generator {
             maxLineLength,
             renderBorder,
             centeredText,
-            scaleFactor
+            scaleFactor,
+            generationContext != null && generationContext.aprilFools()
         );
 
         MinecraftTooltip tooltip = parseLore(itemLore, settings).render();
@@ -103,7 +104,8 @@ public class MinecraftTooltipGenerator implements Generator {
             .setRenderBorder(settings.isRenderBorder())
             .isTextCentered(settings.isCenteredText())
             .withAlpha(Range.between(0, 255).fit(settings.getAlpha()))
-            .withScaleFactor(settings.getScaleFactor());
+            .withScaleFactor(settings.getScaleFactor())
+            .withAprilFools(settings.isAprilFools());
 
         if (settings.getName() != null && !settings.getName().isEmpty()) {
             String name = settings.getName();

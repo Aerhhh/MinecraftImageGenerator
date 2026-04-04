@@ -7,6 +7,7 @@ import lombok.Setter;
 import net.aerh.imagegenerator.builder.ClassBuilder;
 import net.aerh.imagegenerator.impl.nbt.NbtTextComponentUtil;
 import net.aerh.imagegenerator.text.ChatFormat;
+import net.aerh.imagegenerator.text.MinecraftFont;
 import net.aerh.imagegenerator.text.event.ClickEvent;
 import net.aerh.imagegenerator.text.event.HoverEvent;
 import org.jetbrains.annotations.NotNull;
@@ -37,6 +38,8 @@ public final class TextSegment extends ColorSegment {
                 textSegment.setHoverEvent(HoverEvent.fromJson(jsonObject.get("hoverEvent").getAsJsonObject()));
             if (jsonObject.has("color"))
                 textSegment.setColor(ChatFormat.valueOf(jsonObject.get("color").getAsString().toUpperCase()));
+            if (jsonObject.has("font"))
+                textSegment.setFont(MinecraftFont.fromResourceLocation(jsonObject.get("font").getAsString()));
             if (jsonObject.has("obfuscated"))
                 textSegment.setObfuscated(NbtTextComponentUtil.parseBooleanStrict(jsonObject.get("obfuscated")));
             if (jsonObject.has("italic"))

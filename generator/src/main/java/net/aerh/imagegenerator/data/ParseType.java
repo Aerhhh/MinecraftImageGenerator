@@ -27,6 +27,7 @@ public class ParseType {
         } catch (Exception e) {
             log.error("Failed to load parse type data", e);
         }
+        ExternalDataLoader.mergeExternal(PARSE_TYPES, ParseType[].class, "parse_types.json", ParseType::getName);
     }
 
     private String name;

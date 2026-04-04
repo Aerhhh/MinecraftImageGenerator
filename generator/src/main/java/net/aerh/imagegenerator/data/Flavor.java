@@ -18,7 +18,7 @@ import java.util.Objects;
 @Setter
 @AllArgsConstructor
 @ToString
-public class Flavor {
+public class Flavor implements FormattableEntry {
 
     private static final List<Flavor> FLAVORS = new ArrayList<>();
 
@@ -28,6 +28,7 @@ public class Flavor {
         } catch (Exception e) {
             log.error("Failed to load flavor text data", e);
         }
+        ExternalDataLoader.mergeExternal(FLAVORS, Flavor[].class, "flavor.json", Flavor::getName);
     }
 
     private String icon;

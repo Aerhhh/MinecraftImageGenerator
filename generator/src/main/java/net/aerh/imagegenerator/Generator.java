@@ -29,15 +29,21 @@ public interface Generator {
      * @return the generated object (possibly retrieved from cache)
      */
     default GeneratedObject generate(@Nullable GenerationContext generationContext) {
-        String cacheKey = GeneratorCacheKey.fromGenerator(this);
-        GeneratedObject cachedObject = GeneratorCache.getGeneratedObject(cacheKey);
-        if (cachedObject != null) {
-            return cachedObject;
+        boolean skipCache = generationContext != null && generationContext.aprilFools();
+
+        if (!skipCache) {
+            String cacheKey = GeneratorCacheKey.fromGenerator(this);
+            GeneratedObject cachedObject = GeneratorCache.getGeneratedObject(cacheKey);
+            if (cachedObject != null) {
+                return cachedObject;
+            }
+
+            GeneratedObject generatedObject = render(generationContext);
+            GeneratorCache.putGeneratedObject(cacheKey, generatedObject);
+            return generatedObject;
         }
 
-        GeneratedObject generatedObject = render(generationContext);
-        GeneratorCache.putGeneratedObject(cacheKey, generatedObject);
-        return generatedObject;
+        return render(generationContext);
     }
 
     /**

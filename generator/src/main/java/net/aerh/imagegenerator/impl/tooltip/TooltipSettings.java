@@ -25,5 +25,6 @@ public class TooltipSettings {
     private final boolean renderBorder;
     private final boolean centeredText;
     private final int scaleFactor;
+    private final boolean aprilFools;
 
 }

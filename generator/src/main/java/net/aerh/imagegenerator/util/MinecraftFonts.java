@@ -2,6 +2,7 @@ package net.aerh.imagegenerator.util;
 
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
+import net.aerh.imagegenerator.text.MinecraftFont;
 import org.jetbrains.annotations.NotNull;
 
 import java.awt.*;
@@ -16,9 +17,11 @@ public class MinecraftFonts {
 
     public static final int REGULAR = 0;
 
-    private static final float DEFAULT_SIZE = 20.0f;
+    private static final float DEFAULT_SIZE = 15.5f;
     private static final Font UNIFONT;
     private static final Font UNIFONT_UPPER;
+    private static final Font GALACTIC;
+    private static final Font ILLAGERALT;
     private static final List<Font> MINECRAFT_FONTS = new ArrayList<>(4);
 
     static {
@@ -34,11 +37,21 @@ public class MinecraftFonts {
             registerFont(UNIFONT_UPPER);
         }
 
+        GALACTIC = loadFont("/minecraft/assets/fonts/Minecraft-Galactic.otf", DEFAULT_SIZE);
+        if (GALACTIC != null) {
+            registerFont(GALACTIC);
+        }
+
+        ILLAGERALT = loadFont("/minecraft/assets/fonts/Minecraft-Illageralt.otf", DEFAULT_SIZE);
+        if (ILLAGERALT != null) {
+            registerFont(ILLAGERALT);
+        }
+
         Object[][] fontConfigs = {
-            {"Regular", "/minecraft/assets/fonts/Minecraft-Regular.otf", 15.5f},
-            {"Bold", "/minecraft/assets/fonts/3_Minecraft-Bold.otf", 20.0f},
-            {"Italic", "/minecraft/assets/fonts/2_Minecraft-Italic.otf", 20.5f},
-            {"BoldItalic", "/minecraft/assets/fonts/4_Minecraft-BoldItalic.otf", 20.5f}
+            {"Regular", "/minecraft/assets/fonts/Minecraft-Regular.otf", DEFAULT_SIZE},
+            {"Bold", "/minecraft/assets/fonts/Minecraft-Bold.otf", DEFAULT_SIZE},
+            {"Italic", "/minecraft/assets/fonts/Minecraft-Italic.otf", DEFAULT_SIZE},
+            {"BoldItalic", "/minecraft/assets/fonts/Minecraft-BoldItalic.otf", DEFAULT_SIZE}
         };
 
         for (Object[] config : fontConfigs) {
@@ -60,7 +73,7 @@ public class MinecraftFonts {
 
 
     /**
-     * Load a font.
+     * Loads a font from the classpath.
      *
      * @param path The path where the font file is stored.
      * @param size The font size to use.
@@ -122,6 +135,29 @@ public class MinecraftFonts {
     @NotNull
     public static Font getFont(boolean bold, boolean italic) {
         return MINECRAFT_FONTS.get((bold ? 1 : 0) + (italic ? 2 : 0));
+    }
+
+    /**
+     * Returns the appropriate font for the given font family and style flags.
+     * <p>
+     * For {@link MinecraftFont#DEFAULT}, the bold/italic flags select the matching style variant.
+     * For {@link MinecraftFont#GALACTIC} and {@link MinecraftFont#ILLAGERALT}, bold/italic flags
+     * are ignored since these fonts don't have style variants; the regular default font is used
+     * as a fallback if the alternate font failed to load.
+     *
+     * @param fontFamily The font family to use
+     * @param bold       Whether the font should be bold (only applies to DEFAULT)
+     * @param italic     Whether the font should be italic (only applies to DEFAULT)
+     *
+     * @return The resolved font
+     */
+    @NotNull
+    public static Font getFont(@NotNull MinecraftFont fontFamily, boolean bold, boolean italic) {
+        return switch (fontFamily) {
+            case GALACTIC -> GALACTIC != null ? GALACTIC : MINECRAFT_FONTS.get(REGULAR);
+            case ILLAGERALT -> ILLAGERALT != null ? ILLAGERALT : MINECRAFT_FONTS.get(REGULAR);
+            default -> getFont(bold, italic);
+        };
     }
 
     /**

@@ -23,11 +23,11 @@ public class PowerStrength {
 
     static {
         try {
-            List<PowerStrength> powerStrengths = JsonLoader.loadFromJson(PowerStrength[].class, Objects.requireNonNull(PowerStrength.class.getClassLoader().getResource("data/power_strengths.json")));
-            POWER_STRENGTHS.addAll(powerStrengths);
+            POWER_STRENGTHS.addAll(JsonLoader.loadFromJson(PowerStrength[].class, Objects.requireNonNull(PowerStrength.class.getClassLoader().getResource("data/power_strengths.json"))));
         } catch (Exception e) {
             log.error("Failed to load power strength data", e);
         }
+        ExternalDataLoader.mergeExternal(POWER_STRENGTHS, PowerStrength[].class, "power_strengths.json", PowerStrength::getName);
     }
 
     private final String name;

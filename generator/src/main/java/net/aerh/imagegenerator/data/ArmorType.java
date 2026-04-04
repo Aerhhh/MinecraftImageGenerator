@@ -28,6 +28,7 @@ public class ArmorType {
         } catch (Exception e) {
             log.error("Failed to load armor type data", e);
         }
+        ExternalDataLoader.mergeExternal(ARMOR_TYPES, ArmorType[].class, "armor_types.json", ArmorType::getMaterialName);
     }
 
     private String materialName;

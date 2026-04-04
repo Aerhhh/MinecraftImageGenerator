@@ -26,6 +26,8 @@ public enum ChatFormat {
     LIGHT_PURPLE('d', 0xFF55FF, 0x3F153F),
     YELLOW('e', 0xFFFF55, 0x3F3F15),
     WHITE('f', 0xFFFFFF, 0x3F3F3F),
+    FONT_GALACTIC('g', true, 0xFFFFFF),
+    FONT_ILLAGERALT('h', true, 0xFFFFFF),
     OBFUSCATED('k', true, 0xFFFFFF), // Unknown BRGB
     BOLD('l', true, 0xFFFF55),
     STRIKETHROUGH('m', true, 0xFFFFFF), // Unknown BRGB
@@ -37,7 +39,7 @@ public enum ChatFormat {
     public static final char SECTION_SYMBOL = '§';
     public static final char AMPERSAND_SYMBOL = '&';
 
-    public static final Pattern VANILLA_PATTERN = Pattern.compile(SECTION_SYMBOL + "+([0-9A-FK-OR])", Pattern.CASE_INSENSITIVE);
+    public static final Pattern VANILLA_PATTERN = Pattern.compile(SECTION_SYMBOL + "+([0-9A-HK-OR])", Pattern.CASE_INSENSITIVE);
 
     @Getter
     private final char code;

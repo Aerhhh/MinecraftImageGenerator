@@ -26,6 +26,7 @@ public class Icon {
         } catch (Exception e) {
             log.error("Failed to load icon data", e);
         }
+        ExternalDataLoader.mergeExternal(ICONS, Icon[].class, "icons.json", Icon::getName);
     }
 
     private String name;

@@ -33,6 +33,8 @@ public class Gemstone {
         } catch (Exception e) {
             log.error("Failed to load gemstone data", e);
         }
+        ExternalDataLoader.mergeExternal(GEMSTONES, Gemstone[].class, "gemstones.json", Gemstone::getName,
+            builder -> builder.registerTypeAdapter(Color.class, new ColorDeserializer()));
     }
 
     private String name;

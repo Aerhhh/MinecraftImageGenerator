@@ -29,6 +29,7 @@ public class Rarity {
         } catch (Exception e) {
             log.error("Failed to load rarity data", e);
         }
+        ExternalDataLoader.mergeExternal(RARITIES, Rarity[].class, "rarities.json", Rarity::getName);
     }
 
     private final String name;
