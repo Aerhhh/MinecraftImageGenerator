@@ -48,6 +48,86 @@
         </dependency>
     </dependencies>
 
+    <profiles>
+        <profile>
+            <id>generate-fonts</id>
+            <properties>
+                <mc.version>latest</mc.version>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.6.3</version>
+                        <executions>
+                            <execution>
+                                <id>install-fontgen</id>
+                                <phase>generate-resources</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>pip</executable>
+                                    <arguments>
+                                        <argument>install</argument>
+                                        <argument>git+https://github.com/SkyBlock-Simplified/minecraft-fontgen.git</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>generate-fonts</id>
+                                <phase>generate-resources</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>python</executable>
+                                    <arguments>
+                                        <argument>-m</argument>
+                                        <argument>minecraft_fontgen</argument>
+                                        <argument>--version</argument>
+                                        <argument>${mc.version}</argument>
+                                        <argument>--output</argument>
+                                        <argument>${project.build.directory}/generated-fonts</argument>
+                                        <argument>--type</argument>
+                                        <argument>opentype</argument>
+                                        <argument>--silent</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-resources-plugin</artifactId>
+                        <version>3.3.1</version>
+                        <executions>
+                            <execution>
+                                <id>copy-fonts</id>
+                                <phase>generate-resources</phase>
+                                <goals>
+                                    <goal>copy-resources</goal>
+                                </goals>
+                                <configuration>
+                                    <outputDirectory>${project.basedir}/src/main/resources/minecraft/assets/fonts</outputDirectory>
+                                    <resources>
+                                        <resource>
+                                            <directory>${project.build.directory}/generated-fonts</directory>
+                                            <includes>
+                                                <include>Minecraft-*.otf</include>
+                                            </includes>
+                                        </resource>
+                                    </resources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
     <build>
         <plugins>
             <plugin>

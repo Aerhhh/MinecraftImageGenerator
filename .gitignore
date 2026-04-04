@@ -152,5 +152,8 @@ buildNumber.properties
 # Config with secrets
 config.json
 
+# Generated Minecraft fonts (built by minecraft-fontgen during CI)
+generator/src/main/resources/minecraft/assets/fonts/Minecraft-*.otf
+
 # Tooling build artifacts
 tooling/build/
