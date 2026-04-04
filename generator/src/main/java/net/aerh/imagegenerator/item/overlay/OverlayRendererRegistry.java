@@ -6,10 +6,10 @@ import net.aerh.imagegenerator.exception.GeneratorException;
 import net.aerh.imagegenerator.item.overlay.renderer.DualLayerOverlayRenderer;
 import net.aerh.imagegenerator.item.overlay.renderer.MappedOverlayRenderer;
 import net.aerh.imagegenerator.item.overlay.renderer.NormalOverlayRenderer;
+import net.hypixel.nerdbot.marmalade.pattern.Registry;
 
-import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Registry for OverlayRenderer implementations.
@@ -18,7 +18,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @UtilityClass
 public class OverlayRendererRegistry {
 
-    private static final Map<String, OverlayRenderer> RENDERERS = new ConcurrentHashMap<>();
+    private static final Registry<String, OverlayRenderer> RENDERERS =
+        new Registry<>(Registry.DuplicatePolicy.OVERWRITE, true);
 
     static {
         registerRenderer(new NormalOverlayRenderer());
@@ -29,11 +30,12 @@ public class OverlayRendererRegistry {
     /**
      * Register an overlay renderer.
      * The renderer will be accessible by its type name (case-insensitive).
+     * If a renderer with the same type name is already registered, it will be overwritten.
      *
      * @param renderer The renderer to register
      */
     public static void registerRenderer(OverlayRenderer renderer) {
-        RENDERERS.put(renderer.getTypeName().toUpperCase(), renderer);
+        RENDERERS.register(renderer.getTypeName(), renderer);
         log.info("Registered overlay renderer: {}", renderer.getTypeName());
     }
 
@@ -49,7 +51,7 @@ public class OverlayRendererRegistry {
             return Optional.empty();
         }
 
-        return Optional.ofNullable(RENDERERS.get(typeName.toUpperCase()));
+        return RENDERERS.get(typeName);
     }
 
     /**
@@ -62,6 +64,10 @@ public class OverlayRendererRegistry {
      * @throws GeneratorException if the renderer is not found
      */
     public static OverlayRenderer getRendererOrThrow(String typeName) {
-        return getRenderer(typeName).orElseThrow(() -> new GeneratorException("Unknown overlay type: " + typeName));
+        try {
+            return RENDERERS.getOrThrow(typeName);
+        } catch (NoSuchElementException e) {
+            throw new GeneratorException("Unknown overlay type: " + typeName);
+        }
     }
 }
