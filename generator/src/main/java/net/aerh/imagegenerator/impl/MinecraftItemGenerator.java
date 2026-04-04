@@ -111,7 +111,7 @@ public class MinecraftItemGenerator implements Generator {
         return new GeneratedObject(finalImage);
     }
 
-    public static class Builder implements ClassBuilder<MinecraftItemGenerator> {
+    public static class Builder extends net.hypixel.nerdbot.marmalade.pattern.Builder<MinecraftItemGenerator> implements ClassBuilder<MinecraftItemGenerator> {
         private String itemId;
         private String data;
         private String color;
@@ -190,11 +190,14 @@ public class MinecraftItemGenerator implements Generator {
         }
 
         @Override
-        public MinecraftItemGenerator build() {
+        protected void validate() {
             if (itemId == null || itemId.isBlank()) {
                 throw new IllegalArgumentException("itemId must not be blank");
             }
+        }
 
+        @Override
+        protected MinecraftItemGenerator construct() {
             // Use default overlay loader if not provided
             if (overlayLoader == null) {
                 overlayLoader = OverlayLoader.getInstance();
