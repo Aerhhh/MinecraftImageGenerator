@@ -5,13 +5,13 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import net.hypixel.nerdbot.marmalade.json.JsonLoader;
 import net.aerh.imagegenerator.text.ChatFormat;
+import net.hypixel.nerdbot.marmalade.registry.DataRegistry;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
+import java.io.IOException;
 import java.util.List;
-import java.util.Objects;
+import java.util.function.Function;
 
 @Slf4j
 @Getter
@@ -20,15 +20,34 @@ import java.util.Objects;
 @ToString
 public class Flavor implements FormattableEntry {
 
-    private static final List<Flavor> FLAVORS = new ArrayList<>();
+    private static final DataRegistry<Flavor> REGISTRY = new DataRegistry<>() {
+        @Override
+        protected Class<Flavor[]> getArrayType() {
+            return Flavor[].class;
+        }
+
+        @Override
+        protected String getResourcePath() {
+            return "data/flavor.json";
+        }
+
+        @Override
+        protected String getExternalFileName() {
+            return "flavor.json";
+        }
+
+        @Override
+        protected Function<Flavor, String> getNameExtractor() {
+            return Flavor::getName;
+        }
+    };
 
     static {
         try {
-            FLAVORS.addAll(JsonLoader.loadFromJson(Flavor[].class, Objects.requireNonNull(Flavor.class.getClassLoader().getResource("data/flavor.json"))));
-        } catch (Exception e) {
+            REGISTRY.load();
+        } catch (IOException e) {
             log.error("Failed to load flavor text data", e);
         }
-        ExternalDataLoader.mergeExternal(FLAVORS, Flavor[].class, "flavor.json", Flavor::getName);
     }
 
     private String icon;
@@ -41,14 +60,11 @@ public class Flavor implements FormattableEntry {
     private String parseType;
 
     public static Flavor byName(String name) {
-        return FLAVORS.stream()
-            .filter(flavor -> flavor.getName().equalsIgnoreCase(name))
-            .findFirst()
-            .orElse(null);
+        return REGISTRY.byName(name).orElse(null);
     }
 
     public static List<Flavor> getFlavors() {
-        return List.copyOf(FLAVORS);
+        return REGISTRY.getAll();
     }
 
     public ChatFormat getSecondaryColor() {

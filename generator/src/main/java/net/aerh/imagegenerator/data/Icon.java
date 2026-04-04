@@ -5,11 +5,11 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import net.hypixel.nerdbot.marmalade.json.JsonLoader;
+import net.hypixel.nerdbot.marmalade.registry.DataRegistry;
 
-import java.util.ArrayList;
+import java.io.IOException;
 import java.util.List;
-import java.util.Objects;
+import java.util.function.Function;
 
 @Slf4j
 @Getter
@@ -18,28 +18,44 @@ import java.util.Objects;
 @ToString
 public class Icon {
 
-    private static final List<Icon> ICONS = new ArrayList<>();
+    private static final DataRegistry<Icon> REGISTRY = new DataRegistry<>() {
+        @Override
+        protected Class<Icon[]> getArrayType() {
+            return Icon[].class;
+        }
+
+        @Override
+        protected String getResourcePath() {
+            return "data/icons.json";
+        }
+
+        @Override
+        protected String getExternalFileName() {
+            return "icons.json";
+        }
+
+        @Override
+        protected Function<Icon, String> getNameExtractor() {
+            return Icon::getName;
+        }
+    };
 
     static {
         try {
-            ICONS.addAll(JsonLoader.loadFromJson(Icon[].class, Objects.requireNonNull(Icon.class.getClassLoader().getResource("data/icons.json"))));
-        } catch (Exception e) {
+            REGISTRY.load();
+        } catch (IOException e) {
             log.error("Failed to load icon data", e);
         }
-        ExternalDataLoader.mergeExternal(ICONS, Icon[].class, "icons.json", Icon::getName);
     }
 
     private String name;
     private String icon;
 
     public static Icon byName(String name) {
-        return ICONS.stream()
-            .filter(icon -> icon.getName().equalsIgnoreCase(name))
-            .findFirst()
-            .orElse(null);
+        return REGISTRY.byName(name).orElse(null);
     }
 
     public static List<Icon> getIcons() {
-        return List.copyOf(ICONS);
+        return REGISTRY.getAll();
     }
 }

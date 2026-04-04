@@ -6,12 +6,12 @@ import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import net.aerh.imagegenerator.text.ChatFormat;
-import net.hypixel.nerdbot.marmalade.json.JsonLoader;
+import net.hypixel.nerdbot.marmalade.registry.DataRegistry;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
+import java.io.IOException;
 import java.util.List;
-import java.util.Objects;
+import java.util.function.Function;
 
 @Slf4j
 @Getter
@@ -20,15 +20,34 @@ import java.util.Objects;
 @ToString
 public class Stat implements FormattableEntry {
 
-    private static final List<Stat> STATS = new ArrayList<>();
+    private static final DataRegistry<Stat> REGISTRY = new DataRegistry<>() {
+        @Override
+        protected Class<Stat[]> getArrayType() {
+            return Stat[].class;
+        }
+
+        @Override
+        protected String getResourcePath() {
+            return "data/stats.json";
+        }
+
+        @Override
+        protected String getExternalFileName() {
+            return "stats.json";
+        }
+
+        @Override
+        protected Function<Stat, String> getNameExtractor() {
+            return Stat::getName;
+        }
+    };
 
     static {
         try {
-            STATS.addAll(JsonLoader.loadFromJson(Stat[].class, Objects.requireNonNull(Stat.class.getClassLoader().getResource("data/stats.json"))));
-        } catch (Exception e) {
+            REGISTRY.load();
+        } catch (IOException e) {
             log.error("Failed to load stat data", e);
         }
-        ExternalDataLoader.mergeExternal(STATS, Stat[].class, "stats.json", Stat::getName);
     }
 
     private String icon;
@@ -42,14 +61,11 @@ public class Stat implements FormattableEntry {
     private Float powerScalingMultiplier;
 
     public static Stat byName(String name) {
-        return STATS.stream()
-            .filter(stat -> stat.getName().equalsIgnoreCase(name))
-            .findFirst()
-            .orElse(null);
+        return REGISTRY.byName(name).orElse(null);
     }
 
     public static List<Stat> getStats() {
-        return List.copyOf(STATS);
+        return REGISTRY.getAll();
     }
 
     public static Stat byStatText(String text) {
@@ -59,27 +75,24 @@ public class Stat implements FormattableEntry {
 
         String normalized = text.trim();
 
-        for (Stat stat : STATS) {
+        return REGISTRY.findFirst(stat -> {
             if (stat.getStat() != null && stat.getStat().equalsIgnoreCase(normalized)) {
-                return stat;
+                return true;
             }
 
             if (stat.getDisplay() != null) {
                 String display = stat.getDisplay().trim();
                 String strippedDisplay = display.replaceAll("^[^A-Za-z0-9]+", "").trim();
-
-                if (strippedDisplay.equalsIgnoreCase(normalized)) {
-                    return stat;
-                }
+                return strippedDisplay.equalsIgnoreCase(normalized);
             }
-        }
 
-        return null;
+            return false;
+        }).orElse(null);
     }
 
     /**
      * In some cases, stats can have multiple colors.
-     * One for the number and another for the stat
+     * One for the number and another for the stat.
      *
      * @return Secondary {@link ChatFormat} of the stat
      */

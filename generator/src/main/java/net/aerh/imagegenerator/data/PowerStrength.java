@@ -5,11 +5,11 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import net.hypixel.nerdbot.marmalade.json.JsonLoader;
+import net.hypixel.nerdbot.marmalade.registry.DataRegistry;
 
-import java.util.ArrayList;
+import java.io.IOException;
 import java.util.List;
-import java.util.Objects;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -19,15 +19,34 @@ import java.util.stream.Collectors;
 @ToString
 public class PowerStrength {
 
-    private static final List<PowerStrength> POWER_STRENGTHS = new ArrayList<>();
+    private static final DataRegistry<PowerStrength> REGISTRY = new DataRegistry<>() {
+        @Override
+        protected Class<PowerStrength[]> getArrayType() {
+            return PowerStrength[].class;
+        }
+
+        @Override
+        protected String getResourcePath() {
+            return "data/power_strengths.json";
+        }
+
+        @Override
+        protected String getExternalFileName() {
+            return "power_strengths.json";
+        }
+
+        @Override
+        protected Function<PowerStrength, String> getNameExtractor() {
+            return PowerStrength::getName;
+        }
+    };
 
     static {
         try {
-            POWER_STRENGTHS.addAll(JsonLoader.loadFromJson(PowerStrength[].class, Objects.requireNonNull(PowerStrength.class.getClassLoader().getResource("data/power_strengths.json"))));
-        } catch (Exception e) {
+            REGISTRY.load();
+        } catch (IOException e) {
             log.error("Failed to load power strength data", e);
         }
-        ExternalDataLoader.mergeExternal(POWER_STRENGTHS, PowerStrength[].class, "power_strengths.json", PowerStrength::getName);
     }
 
     private final String name;
@@ -35,14 +54,11 @@ public class PowerStrength {
     private final boolean stone;
 
     public static PowerStrength byName(String name) {
-        return POWER_STRENGTHS.stream()
-            .filter(powerStrength -> powerStrength.getDisplay().equalsIgnoreCase(name))
-            .findFirst()
-            .orElse(null);
+        return REGISTRY.findFirst(ps -> ps.getDisplay().equalsIgnoreCase(name)).orElse(null);
     }
 
     public static List<String> getPowerStrengthNames() {
-        return POWER_STRENGTHS.stream().map(PowerStrength::getName).collect(Collectors.toList());
+        return REGISTRY.getAll().stream().map(PowerStrength::getName).collect(Collectors.toList());
     }
 
     public String getFormattedDisplay() {

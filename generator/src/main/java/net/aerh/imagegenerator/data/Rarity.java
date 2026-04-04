@@ -5,13 +5,12 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import net.hypixel.nerdbot.marmalade.json.JsonLoader;
 import net.aerh.imagegenerator.text.ChatFormat;
+import net.hypixel.nerdbot.marmalade.registry.DataRegistry;
 
-import java.util.ArrayList;
-import java.util.Collections;
+import java.io.IOException;
 import java.util.List;
-import java.util.Objects;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -21,15 +20,34 @@ import java.util.stream.Collectors;
 @ToString
 public class Rarity {
 
-    private static final List<Rarity> RARITIES = new ArrayList<>();
+    private static final DataRegistry<Rarity> REGISTRY = new DataRegistry<>() {
+        @Override
+        protected Class<Rarity[]> getArrayType() {
+            return Rarity[].class;
+        }
+
+        @Override
+        protected String getResourcePath() {
+            return "data/rarities.json";
+        }
+
+        @Override
+        protected String getExternalFileName() {
+            return "rarities.json";
+        }
+
+        @Override
+        protected Function<Rarity, String> getNameExtractor() {
+            return Rarity::getName;
+        }
+    };
 
     static {
         try {
-            RARITIES.addAll(JsonLoader.loadFromJson(Rarity[].class, Objects.requireNonNull(Rarity.class.getClassLoader().getResource("data/rarities.json"))));
-        } catch (Exception e) {
+            REGISTRY.load();
+        } catch (IOException e) {
             log.error("Failed to load rarity data", e);
         }
-        ExternalDataLoader.mergeExternal(RARITIES, Rarity[].class, "rarities.json", Rarity::getName);
     }
 
     private final String name;
@@ -37,18 +55,15 @@ public class Rarity {
     private final ChatFormat color;
 
     public static Rarity byName(String name) {
-        return RARITIES.stream()
-            .filter(rarity -> rarity.getDisplay().equalsIgnoreCase(name))
-            .findFirst()
-            .orElse(null);
+        return REGISTRY.findFirst(rarity -> rarity.getDisplay().equalsIgnoreCase(name)).orElse(null);
     }
 
     public static List<String> getRarityNames() {
-        return RARITIES.stream().map(Rarity::getName).collect(Collectors.toList());
+        return REGISTRY.getAll().stream().map(Rarity::getName).collect(Collectors.toList());
     }
 
     public static List<Rarity> getAllRarities() {
-        return Collections.unmodifiableList(RARITIES);
+        return REGISTRY.getAll();
     }
 
     public String getColorCode() {

@@ -5,12 +5,12 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import net.hypixel.nerdbot.marmalade.json.JsonLoader;
+import net.hypixel.nerdbot.marmalade.registry.DataRegistry;
 
-import java.util.ArrayList;
+import java.io.IOException;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -20,27 +20,48 @@ import java.util.stream.Collectors;
 @ToString
 public class ArmorType {
 
-    private static final List<ArmorType> ARMOR_TYPES = new ArrayList<>();
+    private static final DataRegistry<ArmorType> REGISTRY = new DataRegistry<>() {
+        @Override
+        protected Class<ArmorType[]> getArrayType() {
+            return ArmorType[].class;
+        }
+
+        @Override
+        protected String getResourcePath() {
+            return "data/armor_types.json";
+        }
+
+        @Override
+        protected String getExternalFileName() {
+            return "armor_types.json";
+        }
+
+        @Override
+        protected Function<ArmorType, String> getNameExtractor() {
+            return ArmorType::getMaterialName;
+        }
+    };
+
+    private static final Set<String> COLORABLE_ARMOR_NAMES;
 
     static {
         try {
-            ARMOR_TYPES.addAll(JsonLoader.loadFromJson(ArmorType[].class, Objects.requireNonNull(ArmorType.class.getClassLoader().getResource("data/armor_types.json"))));
-        } catch (Exception e) {
+            REGISTRY.load();
+        } catch (IOException e) {
             log.error("Failed to load armor type data", e);
         }
-        ExternalDataLoader.mergeExternal(ARMOR_TYPES, ArmorType[].class, "armor_types.json", ArmorType::getMaterialName);
+
+        COLORABLE_ARMOR_NAMES = REGISTRY.getAll().stream()
+            .filter(ArmorType::isSupportsCustomColoring)
+            .map(ArmorType::getMaterialName)
+            .collect(Collectors.toSet());
     }
 
     private String materialName;
     private boolean supportsCustomColoring;
 
-    private static final Set<String> COLORABLE_ARMOR_NAMES = ARMOR_TYPES.stream()
-        .filter(ArmorType::isSupportsCustomColoring)
-        .map(ArmorType::getMaterialName)
-        .collect(Collectors.toSet());
-
     /**
-     * Checks if the given overlay name represents colorable armor
+     * Checks if the given overlay name represents colorable armor.
      *
      * @param overlayName The overlay name to check
      * @return true if the armor supports custom coloring, false otherwise
@@ -59,7 +80,7 @@ public class ArmorType {
     }
 
     /**
-     * Gets the armor type from an overlay name
+     * Gets the armor type from an overlay name.
      *
      * @param overlayName The overlay name to parse
      * @return The matching ArmorType or null if none found
@@ -70,10 +91,10 @@ public class ArmorType {
         }
 
         String lowerCaseName = overlayName.toLowerCase();
-        return ARMOR_TYPES.stream()
-            .filter(type -> lowerCaseName.contains(type.getMaterialName()))
-            .findFirst()
-            .orElse(null);
+        return REGISTRY.findFirst(type -> lowerCaseName.contains(type.getMaterialName())).orElse(null);
     }
 
+    public static List<ArmorType> getAll() {
+        return REGISTRY.getAll();
+    }
 }
