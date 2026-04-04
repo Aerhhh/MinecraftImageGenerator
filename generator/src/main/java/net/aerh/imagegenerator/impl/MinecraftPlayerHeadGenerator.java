@@ -7,6 +7,7 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import net.hypixel.nerdbot.marmalade.exception.HttpException;
 import net.hypixel.nerdbot.marmalade.http.HttpClient;
 import net.hypixel.nerdbot.marmalade.image.ImageUtil;
 import net.aerh.imagegenerator.context.GenerationContext;
@@ -104,9 +105,8 @@ public class MinecraftPlayerHeadGenerator implements Generator {
 
         JsonObject userUUID;
         try {
-            userUUID = HttpClient.getJson(String.format("https://api.mojang.com/users/profiles/minecraft/%s", playerName));
-        } catch (IOException | InterruptedException e) {
-            Thread.currentThread().interrupt();
+            userUUID = HttpClient.getJson(String.format("https://api.mojang.com/users/profiles/minecraft/%s", playerName)).orElseThrow();
+        } catch (HttpException e) {
             throw new GeneratorException("Could not find player with name: `%s`", playerName);
         }
 
@@ -116,9 +116,8 @@ public class MinecraftPlayerHeadGenerator implements Generator {
 
         JsonObject userProfile;
         try {
-            userProfile = HttpClient.getJson(String.format("https://sessionserver.mojang.com/session/minecraft/profile/%s", userUUID.get("id").getAsString()));
-        } catch (IOException | InterruptedException e) {
-            Thread.currentThread().interrupt();
+            userProfile = HttpClient.getJson(String.format("https://sessionserver.mojang.com/session/minecraft/profile/%s", userUUID.get("id").getAsString())).orElseThrow();
+        } catch (HttpException e) {
             throw new GeneratorException("Could not find player with name: `%s`", playerName);
         }
 

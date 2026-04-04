@@ -481,7 +481,7 @@ public class MinecraftInventoryGenerator implements Generator {
         return new GeneratedObject(inventoryImage);
     }
 
-    public static class Builder implements ClassBuilder<MinecraftInventoryGenerator> {
+    public static class Builder extends net.hypixel.nerdbot.marmalade.pattern.Builder<MinecraftInventoryGenerator> implements ClassBuilder<MinecraftInventoryGenerator> {
         private int rows;
         private int slotsPerRow;
         private String containerTitle;
@@ -532,10 +532,14 @@ public class MinecraftInventoryGenerator implements Generator {
         }
 
         @Override
-        public MinecraftInventoryGenerator build() {
+        protected void validate() {
             if (rows <= 0 || slotsPerRow <= 0) {
                 throw new IllegalArgumentException("rows and slotsPerRow must be positive");
             }
+        }
+
+        @Override
+        protected MinecraftInventoryGenerator construct() {
             return new MinecraftInventoryGenerator(rows, slotsPerRow, containerTitle, inventoryString, drawBorder, drawBackground, animateGlint);
         }
     }
