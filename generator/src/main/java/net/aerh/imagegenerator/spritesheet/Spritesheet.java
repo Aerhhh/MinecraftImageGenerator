@@ -6,6 +6,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
+import net.hypixel.nerdbot.marmalade.functional.Pair;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -72,9 +73,10 @@ public class Spritesheet {
         return IMAGE_MAP.get(textureId);
     }
 
-    public static List<Map.Entry<String, BufferedImage>> searchForTexture(String textureId) {
+    public static List<Pair<String, BufferedImage>> searchForTexture(String textureId) {
         return IMAGE_MAP.entrySet().stream()
             .filter(entry -> entry.getKey().contains(textureId))
+            .map(entry -> Pair.of(entry.getKey(), entry.getValue()))
             .collect(Collectors.toList());
     }
 
