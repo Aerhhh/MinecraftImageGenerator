@@ -42,6 +42,16 @@ public final class CachingGenerator<I, O> implements Generator<I, O> {
                 .build();
     }
 
+    /**
+     * Renders the given input, returning a cached result when available and caching is not skipped.
+     *
+     * @param input   the render input; must not be {@code null}
+     * @param context the generation context; must not be {@code null}
+     *
+     * @return the rendered output, either from cache or freshly generated
+     *
+     * @throws RenderException if the delegate throws during rendering
+     */
     @Override
     public O render(I input, GenerationContext context) throws RenderException {
         Objects.requireNonNull(input, "input must not be null");
@@ -62,11 +72,21 @@ public final class CachingGenerator<I, O> implements Generator<I, O> {
         return result;
     }
 
+    /**
+     * Returns the input type supported by the delegate generator.
+     *
+     * @return the input class
+     */
     @Override
     public Class<I> inputType() {
         return delegate.inputType();
     }
 
+    /**
+     * Returns the output type produced by the delegate generator.
+     *
+     * @return the output class
+     */
     @Override
     public Class<O> outputType() {
         return delegate.outputType();

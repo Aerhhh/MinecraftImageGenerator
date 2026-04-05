@@ -68,21 +68,44 @@ public class ResourceFontProvider implements FontProvider {
         return fm;
     }
 
+    /**
+     * Returns the unique identifier for this font provider.
+     *
+     * @return the font ID (e.g. {@code "minecraft:default"})
+     */
     @Override
     public String id() {
         return fontId;
     }
 
+    /**
+     * Returns the loaded AWT {@link Font}.
+     *
+     * @return an {@link java.util.Optional} containing the font; never empty
+     */
     @Override
     public Optional<Font> getFont() {
         return Optional.of(font);
     }
 
+    /**
+     * Returns the pixel width of the given character in this font.
+     *
+     * @param c the character to measure
+     *
+     * @return the character width in pixels
+     */
     @Override
     public int getCharWidth(char c) {
         return metrics.charWidth(c);
     }
 
+    /**
+     * Returns {@code true} if this font can display the given character.
+     *
+     * @param c the character to test
+     * @return whether the font supports the character
+     */
     @Override
     public boolean supportsChar(char c) {
         return font.canDisplay(c);

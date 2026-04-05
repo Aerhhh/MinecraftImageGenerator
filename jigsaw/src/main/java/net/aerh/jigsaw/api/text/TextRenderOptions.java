@@ -11,6 +11,7 @@ package net.aerh.jigsaw.api.text;
  * @param padding         Pixel padding added to all sides of the output image.
  * @param firstLinePadding Additional top padding applied before the first line only.
  * @param maxLineLength   Maximum pixel width of a single line before wrapping or truncation.
+ * @see TextRenderer
  */
 public record TextRenderOptions(
         boolean shadow,

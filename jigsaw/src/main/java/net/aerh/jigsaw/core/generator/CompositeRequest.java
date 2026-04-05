@@ -19,9 +19,15 @@ public record CompositeRequest(
         int padding
 ) {
 
-    /** Determines how multiple results are arranged. */
+    /**
+     * Determines how multiple results are arranged within the composed image.
+     */
     public enum Layout {
+        /**
+         * Stack images top-to-bottom.
+         */
         VERTICAL,
+        /** Place images side by side. */
         HORIZONTAL
     }
 
@@ -39,34 +45,67 @@ public record CompositeRequest(
         return new Builder();
     }
 
+    /**
+     * Builder for {@link CompositeRequest}.
+     */
     public static final class Builder {
 
         private final List<GeneratorResult> results = new ArrayList<>();
         private Layout layout = Layout.VERTICAL;
         private int padding = 4;
 
-        private Builder() {}
+        private Builder() {
+        }
 
+        /**
+         * Adds a single result to compose.
+         *
+         * @param val the result to add; must not be {@code null}
+         * @return this builder for chaining
+         */
         public Builder result(GeneratorResult val) {
             this.results.add(Objects.requireNonNull(val, "result must not be null"));
             return this;
         }
 
+        /**
+         * Adds all results from the given list.
+         *
+         * @param val the results to add; must not be {@code null}
+         * @return this builder for chaining
+         */
         public Builder results(List<GeneratorResult> val) {
             this.results.addAll(Objects.requireNonNull(val, "results must not be null"));
             return this;
         }
 
+        /**
+         * Sets the layout direction.
+         *
+         * @param val the layout to use; must not be {@code null}
+         * @return this builder for chaining
+         */
         public Builder layout(Layout val) {
             this.layout = Objects.requireNonNull(val, "layout must not be null");
             return this;
         }
 
+        /**
+         * Sets the pixel gap between adjacent results.
+         *
+         * @param val the padding in pixels; must be {@code >= 0}
+         * @return this builder for chaining
+         */
         public Builder padding(int val) {
             this.padding = val;
             return this;
         }
 
+        /**
+         * Builds the {@link CompositeRequest}.
+         *
+         * @return a new request
+         */
         public CompositeRequest build() {
             return new CompositeRequest(results, layout, padding);
         }

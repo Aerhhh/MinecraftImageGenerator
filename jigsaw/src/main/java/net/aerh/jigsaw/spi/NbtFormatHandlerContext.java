@@ -9,6 +9,8 @@ import java.util.Optional;
  * Context provided to {@link NbtFormatHandler} instances during parsing.
  * <p>
  * Grants access to registered data registries without coupling handlers to the engine.
+ *
+ * @see NbtFormatHandler
  */
 public interface NbtFormatHandlerContext {
 

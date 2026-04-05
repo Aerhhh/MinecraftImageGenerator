@@ -6,6 +6,11 @@ import java.util.List;
 /**
  * Parses Minecraft-formatted text strings (using {@code §} or {@code &} as format markers)
  * into a list of {@link TextSegment}s, each carrying its own {@link TextStyle}.
+ *
+ * @see TextSegment
+ * @see TextStyle
+ * @see ChatColor
+ * @see ChatFormatting
  */
 public final class FormattingParser {
 

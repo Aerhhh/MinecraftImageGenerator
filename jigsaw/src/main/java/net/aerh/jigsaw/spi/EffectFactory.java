@@ -6,6 +6,8 @@ import net.aerh.jigsaw.api.effect.ImageEffect;
  * SPI contract for contributing an {@link ImageEffect} implementation.
  * <p>
  * Implementations are discovered via {@link java.util.ServiceLoader} or explicit registration.
+ *
+ * @see net.aerh.jigsaw.api.effect.ImageEffect
  */
 public interface EffectFactory {
 

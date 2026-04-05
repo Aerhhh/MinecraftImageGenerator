@@ -6,6 +6,8 @@ import java.util.Objects;
  * A typed wrapper around a cache key string.
  *
  * <p>Use {@link #of(Object)} to derive a key from any object via its {@link Object#toString()} representation.
+ *
+ * @param value the raw string value of this key; must not be {@code null}
  */
 public record CacheKey(String value) {
 

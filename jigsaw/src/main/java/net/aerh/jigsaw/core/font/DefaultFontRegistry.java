@@ -43,6 +43,15 @@ public class DefaultFontRegistry implements FontRegistry {
         return registry;
     }
 
+    /**
+     * Returns the provider registered under the given font ID.
+     *
+     * @param fontId the font identifier to look up; must not be {@code null}
+     *
+     * @return the registered {@link FontProvider}
+     *
+     * @throws net.aerh.jigsaw.exception.RegistryException if no provider is registered for the ID
+     */
     @Override
     public FontProvider resolve(String fontId) {
         Objects.requireNonNull(fontId, "fontId must not be null");
@@ -54,6 +63,13 @@ public class DefaultFontRegistry implements FontRegistry {
         return provider;
     }
 
+    /**
+     * Returns a font provider that supports the given character, falling back to the default font.
+     *
+     * @param c the character to find a provider for
+     * @return a suitable {@link FontProvider}
+     * @throws net.aerh.jigsaw.exception.RegistryException if no provider is registered at all
+     */
     @Override
     public FontProvider resolveForChar(char c) {
         // First pass: find a provider that explicitly supports the character
@@ -70,6 +86,14 @@ public class DefaultFontRegistry implements FontRegistry {
         throw new RegistryException("No FontProvider registered and no default font available");
     }
 
+    /**
+     * Measures the total pixel width of the given text using the specified font.
+     *
+     * @param text   the text to measure; must not be {@code null}
+     * @param fontId the font identifier to use for measurement; must not be {@code null}
+     * @return the total width in pixels
+     * @throws net.aerh.jigsaw.exception.RegistryException if the font is not registered
+     */
     @Override
     public int measureWidth(String text, String fontId) {
         Objects.requireNonNull(text, "text must not be null");
@@ -81,6 +105,11 @@ public class DefaultFontRegistry implements FontRegistry {
         return width;
     }
 
+    /**
+     * Registers a {@link FontProvider}, replacing any existing provider with the same ID.
+     *
+     * @param provider the provider to register; must not be {@code null}
+     */
     @Override
     public void register(FontProvider provider) {
         Objects.requireNonNull(provider, "provider must not be null");

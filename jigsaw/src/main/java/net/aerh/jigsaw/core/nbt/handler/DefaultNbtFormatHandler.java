@@ -21,21 +21,46 @@ import java.util.Optional;
  */
 public final class DefaultNbtFormatHandler implements NbtFormatHandler {
 
+    /**
+     * Returns the unique identifier for this handler.
+     *
+     * @return {@code "jigsaw:default"}
+     */
     @Override
     public String id() {
         return "jigsaw:default";
     }
 
+    /**
+     * Returns the lowest possible priority so this handler is always evaluated last.
+     *
+     * @return {@link Integer#MAX_VALUE}
+     */
     @Override
     public int priority() {
         return Integer.MAX_VALUE;
     }
 
+    /**
+     * Returns {@code true} for any non-null, non-blank input.
+     *
+     * @param input the normalized NBT string
+     *
+     * @return {@code true} unless the input is null or blank
+     */
     @Override
     public boolean canHandle(String input) {
         return input != null && !input.isBlank();
     }
 
+    /**
+     * Extracts the item ID from the input as a best-effort fallback, returning defaults for all other fields.
+     *
+     * @param input   the normalized NBT JSON string
+     * @param context the handler context (unused by this handler)
+     * @return a {@link ParsedItem} with only the item ID populated
+     * @throws ParseException never thrown by this handler
+     */
     @Override
     public ParsedItem parse(String input, NbtFormatHandlerContext context) throws ParseException {
         String itemId = tryExtractItemId(input);

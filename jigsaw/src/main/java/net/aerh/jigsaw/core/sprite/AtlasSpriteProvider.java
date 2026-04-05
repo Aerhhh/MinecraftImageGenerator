@@ -24,6 +24,8 @@ import java.util.stream.Collectors;
  * a JSON file that describes each sprite's position and size.
  *
  * <p>Sprites are extracted lazily on first access and then cached in a {@link ConcurrentHashMap}.
+ *
+ * @see SpriteProvider
  */
 public class AtlasSpriteProvider implements SpriteProvider {
 
@@ -85,6 +87,13 @@ public class AtlasSpriteProvider implements SpriteProvider {
         }
     }
 
+    /**
+     * Returns the sprite for the given texture ID, extracting it from the atlas if not yet cached.
+     *
+     * @param textureId the texture identifier to look up; must not be {@code null}
+     *
+     * @return an {@link Optional} containing the sprite, or empty if not found in the atlas
+     */
     @Override
     public Optional<BufferedImage> getSprite(String textureId) {
         Objects.requireNonNull(textureId, "textureId must not be null");
@@ -95,11 +104,22 @@ public class AtlasSpriteProvider implements SpriteProvider {
         return Optional.of(cache.computeIfAbsent(textureId, id -> extractSprite(coord)));
     }
 
+    /**
+     * Returns an immutable snapshot of all known sprite texture IDs.
+     *
+     * @return the set of available texture IDs
+     */
     @Override
     public Collection<String> availableSprites() {
         return List.copyOf(coordinates.keySet());
     }
 
+    /**
+     * Returns the first sprite whose texture ID contains the given query string.
+     *
+     * @param query the substring to search for; must not be {@code null}
+     * @return an {@link Optional} containing the first matching sprite, or empty if none found
+     */
     @Override
     public Optional<BufferedImage> search(String query) {
         Objects.requireNonNull(query, "query must not be null");

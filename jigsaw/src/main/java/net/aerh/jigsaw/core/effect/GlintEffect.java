@@ -47,21 +47,44 @@ public final class GlintEffect implements ImageEffect {
 
     private static final String GLINT_TEXTURE_PATH = "minecraft/assets/textures/glint.png";
 
+    /**
+     * Returns the unique identifier for this effect.
+     *
+     * @return {@code "glint"}
+     */
     @Override
     public String id() {
         return ID;
     }
 
+    /**
+     * Returns the priority of this effect. Lower values are applied first.
+     *
+     * @return {@code 100}
+     */
     @Override
     public int priority() {
         return PRIORITY;
     }
 
+    /**
+     * Returns {@code true} if the item is enchanted (i.e. the glint should be rendered).
+     *
+     * @param context the current effect context
+     *
+     * @return whether the enchantment glint applies
+     */
     @Override
     public boolean appliesTo(EffectContext context) {
         return context.enchanted();
     }
 
+    /**
+     * Generates the animated glint frames and returns the updated context.
+     *
+     * @param context the current effect context; must not be {@code null}
+     * @return the updated context containing all animation frames
+     */
     @Override
     public EffectContext apply(EffectContext context) {
         Objects.requireNonNull(context, "context must not be null");

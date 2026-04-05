@@ -19,6 +19,8 @@ import net.aerh.jigsaw.exception.RenderException;
  * Engine engine = Engine.builder().build();
  * GeneratorResult result = engine.renderItem("diamond_sword");
  * }</pre>
+ *
+ * @see EngineBuilder
  */
 public interface Engine {
 

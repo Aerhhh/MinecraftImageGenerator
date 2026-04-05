@@ -4,6 +4,8 @@ package net.aerh.jigsaw.api.effect;
  * A single transformation step applied to an item's image during rendering.
  * <p>
  * Effects are applied in ascending {@link #priority()} order. Lower numbers run first.
+ *
+ * @see EffectContext
  */
 public interface ImageEffect {
 

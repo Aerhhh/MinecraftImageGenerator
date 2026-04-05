@@ -5,6 +5,8 @@ import java.util.Optional;
 
 /**
  * Provides a font and character-level metrics for a specific font resource.
+ *
+ * @see FontRegistry
  */
 public interface FontProvider {
 

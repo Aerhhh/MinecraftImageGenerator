@@ -6,6 +6,8 @@ import java.util.Optional;
 
 /**
  * Source of item and block textures identified by texture IDs.
+ *
+ * @see net.aerh.jigsaw.api.Engine#sprites()
  */
 public interface SpriteProvider {
 

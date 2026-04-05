@@ -7,6 +7,9 @@ import net.aerh.jigsaw.api.data.RegistryKey;
  * SPI contract for contributing a {@link DataRegistry} to the engine.
  * <p>
  * Implementations are discovered via {@link java.util.ServiceLoader} or explicit registration.
+ *
+ * @see net.aerh.jigsaw.api.data.DataRegistry
+ * @see net.aerh.jigsaw.api.data.RegistryKey
  */
 public interface DataRegistryProvider {
 

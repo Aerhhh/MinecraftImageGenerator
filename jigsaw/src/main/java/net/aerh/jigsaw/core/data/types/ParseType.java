@@ -8,6 +8,10 @@ import java.util.Objects;
  * <p>The {@code formatWithDetails} string is used when extra runtime details are available
  * (e.g. ability names, item stats). The {@code formatWithoutDetails} string is used as the
  * fallback when those details are absent.
+ *
+ * @param name                 the identifier used as the registry lookup key
+ * @param formatWithDetails    format string applied when runtime details are available
+ * @param formatWithoutDetails format string applied when runtime details are absent
  */
 public record ParseType(String name, String formatWithDetails, String formatWithoutDetails) {
 

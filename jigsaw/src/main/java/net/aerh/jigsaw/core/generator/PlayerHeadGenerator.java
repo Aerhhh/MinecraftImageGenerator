@@ -44,6 +44,16 @@ public final class PlayerHeadGenerator implements Generator<PlayerHeadRequest, G
 
     private static final int FACE_SIZE = 8;
 
+    /**
+     * Loads the skin, composites the face and hat layers, and returns the result.
+     *
+     * @param input   the player head request; must not be {@code null}
+     * @param context the generation context; must not be {@code null}
+     *
+     * @return a static image of the player's face
+     *
+     * @throws RenderException if the skin cannot be loaded or decoded
+     */
     @Override
     public GeneratorResult render(PlayerHeadRequest input, GenerationContext context) throws RenderException {
         Objects.requireNonNull(input, "input must not be null");
@@ -59,11 +69,21 @@ public final class PlayerHeadGenerator implements Generator<PlayerHeadRequest, G
         return new GeneratorResult.StaticImage(face);
     }
 
+    /**
+     * Returns the input type accepted by this generator.
+     *
+     * @return {@link PlayerHeadRequest}
+     */
     @Override
     public Class<PlayerHeadRequest> inputType() {
         return PlayerHeadRequest.class;
     }
 
+    /**
+     * Returns the output type produced by this generator.
+     *
+     * @return {@link GeneratorResult}
+     */
     @Override
     public Class<GeneratorResult> outputType() {
         return GeneratorResult.class;

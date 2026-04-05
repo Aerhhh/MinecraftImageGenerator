@@ -7,6 +7,9 @@ import net.aerh.jigsaw.api.generator.GeneratorType;
  * SPI contract for contributing a {@link Generator} implementation.
  * <p>
  * Implementations are discovered via {@link java.util.ServiceLoader} or explicit registration.
+ *
+ * @see net.aerh.jigsaw.api.generator.Generator
+ * @see net.aerh.jigsaw.api.generator.GeneratorType
  */
 public interface GeneratorFactory {
 

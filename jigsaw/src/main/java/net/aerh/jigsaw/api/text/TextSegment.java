@@ -5,5 +5,7 @@ package net.aerh.jigsaw.api.text;
  *
  * @param text  The raw text content of this segment (no formatting codes).
  * @param style The style applied to this segment.
+ * @see FormattingParser
+ * @see TextStyle
  */
 public record TextSegment(String text, TextStyle style) {}

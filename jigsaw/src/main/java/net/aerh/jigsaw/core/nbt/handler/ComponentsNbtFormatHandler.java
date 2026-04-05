@@ -31,16 +31,33 @@ import java.util.Optional;
  */
 public final class ComponentsNbtFormatHandler implements NbtFormatHandler {
 
+    /**
+     * Returns the unique identifier for this handler.
+     *
+     * @return {@code "jigsaw:components"}
+     */
     @Override
     public String id() {
         return "jigsaw:components";
     }
 
+    /**
+     * Returns the priority of this handler. Lower values are evaluated first.
+     *
+     * @return {@code 100}
+     */
     @Override
     public int priority() {
         return 100;
     }
 
+    /**
+     * Returns {@code true} if the input contains a {@code "components"} key.
+     *
+     * @param input the normalized NBT string to inspect
+     *
+     * @return whether this handler can process the input
+     */
     @Override
     public boolean canHandle(String input) {
         if (input == null || input.isBlank()) {
@@ -49,6 +66,14 @@ public final class ComponentsNbtFormatHandler implements NbtFormatHandler {
         return input.contains("\"components\"") || input.contains("components:");
     }
 
+    /**
+     * Parses the 1.20.5+ components format and returns the extracted item data.
+     *
+     * @param input   the normalized NBT JSON string
+     * @param context the handler context providing optional registry access
+     * @return the parsed item
+     * @throws ParseException if the input cannot be parsed
+     */
     @Override
     public ParsedItem parse(String input, NbtFormatHandlerContext context) throws ParseException {
         JsonObject root = parseRoot(input);

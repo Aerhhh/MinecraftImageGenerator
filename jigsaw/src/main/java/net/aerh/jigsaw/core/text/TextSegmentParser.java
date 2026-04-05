@@ -17,6 +17,10 @@ import java.util.List;
 /**
  * Parses text into {@link TextSegment} lists from either legacy Minecraft formatting codes
  * or Minecraft JSON text component format.
+ *
+ * <p>Use {@link #parseLegacy(String)} for ampersand/section-sign coded strings and
+ * {@link #parseJson(String)} for JSON text component strings.
+ *
  */
 public final class TextSegmentParser {
 

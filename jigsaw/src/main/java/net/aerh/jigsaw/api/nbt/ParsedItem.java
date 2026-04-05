@@ -12,6 +12,7 @@ import java.util.Optional;
  * @param lore          The item's lore lines (may be empty).
  * @param displayName   The item's custom display name, or empty if not set.
  * @param dyeColor      The packed RGB dye color for leather armor or similar items, or empty if not dyed.
+ * @see NbtParser
  */
 public record ParsedItem(
         String itemId,

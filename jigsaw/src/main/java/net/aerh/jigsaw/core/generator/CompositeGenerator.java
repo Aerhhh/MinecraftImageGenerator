@@ -31,6 +31,16 @@ public final class CompositeGenerator implements Generator<CompositeRequest, Gen
     /** Fixed outer border added on all sides around the composed image. */
     private static final int OUTER_BORDER = 15;
 
+    /**
+     * Composes all results from the request into a single image or animation.
+     *
+     * @param input   the composite request; must not be {@code null}
+     * @param context the generation context; must not be {@code null}
+     *
+     * @return a static image or animated image depending on whether any input is animated
+     *
+     * @throws RenderException if composition fails
+     */
     @Override
     public GeneratorResult render(CompositeRequest input, GenerationContext context) throws RenderException {
         Objects.requireNonNull(input, "input must not be null");
@@ -54,11 +64,21 @@ public final class CompositeGenerator implements Generator<CompositeRequest, Gen
         return composeStatic(results, isVertical, padding);
     }
 
+    /**
+     * Returns the input type accepted by this generator.
+     *
+     * @return {@link CompositeRequest}
+     */
     @Override
     public Class<CompositeRequest> inputType() {
         return CompositeRequest.class;
     }
 
+    /**
+     * Returns the output type produced by this generator.
+     *
+     * @return {@link GeneratorResult}
+     */
     @Override
     public Class<GeneratorResult> outputType() {
         return GeneratorResult.class;

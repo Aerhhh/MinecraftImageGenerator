@@ -41,6 +41,9 @@ public record InventoryItem(
         return new Builder(slot, itemId);
     }
 
+    /**
+     * Builder for {@link InventoryItem}.
+     */
     public static final class Builder {
 
         private final int slot;
@@ -55,26 +58,56 @@ public record InventoryItem(
             this.itemId = Objects.requireNonNull(itemId, "itemId must not be null");
         }
 
+        /**
+         * Sets whether the enchantment glint should be rendered for this item.
+         *
+         * @param val {@code true} to render the glint
+         *
+         * @return this builder for chaining
+         */
         public Builder enchanted(boolean val) {
             this.enchanted = val;
             return this;
         }
 
+        /**
+         * Sets the stack count label (1-64).
+         *
+         * @param val the stack count; must be in {@code [1, 64]}
+         * @return this builder for chaining
+         */
         public Builder stackCount(int val) {
             this.stackCount = val;
             return this;
         }
 
+        /**
+         * Sets the optional durability fraction ({@code [0.0, 1.0]}).
+         *
+         * @param val the durability fraction
+         * @return this builder for chaining
+         */
         public Builder durabilityPercent(double val) {
             this.durabilityPercent = Optional.of(val);
             return this;
         }
 
+        /**
+         * Sets the optional Base64-encoded player skin texture for skull items.
+         *
+         * @param val the Base64 texture string; must not be {@code null}
+         * @return this builder for chaining
+         */
         public Builder playerHeadTexture(String val) {
             this.playerHeadTexture = Optional.of(val);
             return this;
         }
 
+        /**
+         * Builds the {@link InventoryItem}.
+         *
+         * @return a new inventory item
+         */
         public InventoryItem build() {
             return new InventoryItem(slot, itemId, enchanted, stackCount, durabilityPercent, playerHeadTexture);
         }

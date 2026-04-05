@@ -23,21 +23,44 @@ public final class HoverEffect implements ImageEffect {
     /** Slot background gray used to fill transparent pixels on hover. */
     private static final int SLOT_GRAY = 197;
 
+    /**
+     * Returns the unique identifier for this effect.
+     *
+     * @return {@code "hover"}
+     */
     @Override
     public String id() {
         return ID;
     }
 
+    /**
+     * Returns the priority of this effect. Lower values are applied first.
+     *
+     * @return {@code 200}
+     */
     @Override
     public int priority() {
         return PRIORITY;
     }
 
+    /**
+     * Returns {@code true} if the item is currently hovered.
+     *
+     * @param context the current effect context
+     *
+     * @return whether the hover highlight applies
+     */
     @Override
     public boolean appliesTo(EffectContext context) {
         return context.hovered();
     }
 
+    /**
+     * Applies the hover highlight to the image and returns the modified context.
+     *
+     * @param context the current effect context
+     * @return the updated context with the brightened image
+     */
     @Override
     public EffectContext apply(EffectContext context) {
         BufferedImage src = context.image();

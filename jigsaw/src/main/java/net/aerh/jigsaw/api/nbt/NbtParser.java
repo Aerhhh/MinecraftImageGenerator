@@ -4,6 +4,9 @@ import net.aerh.jigsaw.exception.ParseException;
 
 /**
  * Parses a raw NBT string into a {@link ParsedItem}.
+ *
+ * @see ParsedItem
+ * @see net.aerh.jigsaw.spi.NbtFormatHandler
  */
 public interface NbtParser {
 

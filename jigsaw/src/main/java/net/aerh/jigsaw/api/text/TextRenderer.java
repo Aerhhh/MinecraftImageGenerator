@@ -7,6 +7,8 @@ import java.util.List;
 
 /**
  * Renders a list of formatted text lines into a {@link GeneratorResult}.
+ *
+ * @see TextRenderOptions
  */
 public interface TextRenderer {
 

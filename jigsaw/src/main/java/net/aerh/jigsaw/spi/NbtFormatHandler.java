@@ -8,6 +8,9 @@ import net.aerh.jigsaw.exception.ParseException;
  * <p>
  * Handlers are evaluated in descending {@link #priority()} order; the first handler for which
  * {@link #canHandle(String)} returns {@code true} is used.
+ *
+ * @see NbtFormatHandlerContext
+ * @see net.aerh.jigsaw.api.nbt.ParsedItem
  */
 public interface NbtFormatHandler {
 

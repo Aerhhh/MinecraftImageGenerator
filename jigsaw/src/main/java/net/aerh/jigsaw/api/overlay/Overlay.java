@@ -9,6 +9,8 @@ import java.awt.image.BufferedImage;
  * @param texture      The overlay sprite to render.
  * @param colorMode    Whether the overlay is tinted by the item's color.
  * @param rendererType The renderer type key used to look up the {@link OverlayRenderer} for this overlay.
+ * @see OverlayRenderer
+ * @see ColorMode
  */
 public record Overlay(
         String itemId,

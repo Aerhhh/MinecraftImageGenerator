@@ -4,6 +4,8 @@ package net.aerh.jigsaw.api.font;
  * Central registry for {@link FontProvider} instances.
  * <p>
  * Resolves fonts by ID or by character coverage and computes text metrics.
+ *
+ * @see FontProvider
  */
 public interface FontRegistry {
 

@@ -6,6 +6,8 @@ import net.aerh.jigsaw.api.overlay.OverlayRenderer;
  * SPI contract for contributing an {@link OverlayRenderer} implementation.
  * <p>
  * Implementations are discovered via {@link java.util.ServiceLoader} or explicit registration.
+ *
+ * @see net.aerh.jigsaw.api.overlay.OverlayRenderer
  */
 public interface OverlayRendererFactory {
 

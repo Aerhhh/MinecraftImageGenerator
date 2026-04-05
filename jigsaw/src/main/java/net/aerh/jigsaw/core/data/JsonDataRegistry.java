@@ -69,22 +69,45 @@ public class JsonDataRegistry<T> implements DataRegistry<T> {
         }
     }
 
+    /**
+     * Returns the entry registered under the given ID, ignoring case.
+     *
+     * @param id the lookup key; must not be {@code null}
+     *
+     * @return an {@link Optional} containing the entry, or empty if not found
+     */
     @Override
     public Optional<T> get(String id) {
         Objects.requireNonNull(id, "id must not be null");
         return Optional.ofNullable(store.get(id.toLowerCase()));
     }
 
+    /**
+     * Returns all values currently stored in this registry.
+     *
+     * @return a live view of the registry's values
+     */
     @Override
     public Collection<T> values() {
         return store.values();
     }
 
+    /**
+     * Returns the {@link RegistryKey} that identifies this registry.
+     *
+     * @return the registry key
+     */
     @Override
     public RegistryKey<T> key() {
         return key;
     }
 
+    /**
+     * Registers an additional entry at runtime, normalizing the key to lower-case.
+     *
+     * @param id    the lookup key; must not be {@code null}
+     * @param value the value to store; must not be {@code null}
+     */
     @Override
     public void register(String id, T value) {
         Objects.requireNonNull(id, "id must not be null");
@@ -92,11 +115,21 @@ public class JsonDataRegistry<T> implements DataRegistry<T> {
         store.put(id.toLowerCase(), value);
     }
 
+    /**
+     * Returns the number of entries in this registry.
+     *
+     * @return the entry count
+     */
     @Override
     public int size() {
         return store.size();
     }
 
+    /**
+     * Returns {@code true} if this registry contains no entries.
+     *
+     * @return whether the registry is empty
+     */
     @Override
     public boolean isEmpty() {
         return store.isEmpty();

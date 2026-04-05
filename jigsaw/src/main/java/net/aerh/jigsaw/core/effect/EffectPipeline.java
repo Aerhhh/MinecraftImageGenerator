@@ -58,10 +58,21 @@ public final class EffectPipeline {
         return new EffectPipeline(combined);
     }
 
+    /**
+     * Returns a new, empty {@link Builder}.
+     *
+     * @return a fresh pipeline builder
+     */
     public static Builder builder() {
         return new Builder();
     }
 
+    /**
+     * Builder for {@link EffectPipeline}.
+     *
+     * <p>Add effects via {@link #add(ImageEffect)} and call {@link #build()} to produce an
+     * immutable pipeline. The builder may be reused after calling {@code build()}.
+     */
     public static final class Builder {
 
         /** Insertion-ordered list; we snapshot this at build() time. */

@@ -6,6 +6,9 @@ import java.awt.image.BufferedImage;
  * Strategy for compositing an {@link Overlay} onto a base item image.
  * <p>
  * Implementations are keyed by {@link #type()} and registered via the SPI.
+ *
+ * @see Overlay
+ * @see net.aerh.jigsaw.spi.OverlayRendererFactory
  */
 public interface OverlayRenderer {
 

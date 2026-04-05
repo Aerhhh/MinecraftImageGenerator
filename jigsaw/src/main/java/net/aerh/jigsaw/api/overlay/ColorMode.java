@@ -2,6 +2,9 @@ package net.aerh.jigsaw.api.overlay;
 
 /**
  * Controls how the overlay color is applied during rendering.
+ *
+ * @see Overlay
+ * @see OverlayRenderer
  */
 public enum ColorMode {
 

@@ -45,6 +45,16 @@ public final class ItemGenerator implements Generator<ItemRequest, GeneratorResu
         this.effectPipeline = Objects.requireNonNull(effectPipeline, "effectPipeline must not be null");
     }
 
+    /**
+     * Renders the item described by the request, applying all configured effects.
+     *
+     * @param input   the item request; must not be {@code null}
+     * @param context the generation context; must not be {@code null}
+     *
+     * @return a static image or animated image depending on whether the glint effect is applied
+     *
+     * @throws RenderException if the item sprite is not found or rendering fails
+     */
     @Override
     public GeneratorResult render(ItemRequest input, GenerationContext context) throws RenderException {
         Objects.requireNonNull(input, "input must not be null");
@@ -78,11 +88,21 @@ public final class ItemGenerator implements Generator<ItemRequest, GeneratorResu
         return toGeneratorResult(effectCtx);
     }
 
+    /**
+     * Returns the input type accepted by this generator.
+     *
+     * @return {@link ItemRequest}
+     */
     @Override
     public Class<ItemRequest> inputType() {
         return ItemRequest.class;
     }
 
+    /**
+     * Returns the output type produced by this generator.
+     *
+     * @return {@link GeneratorResult}
+     */
     @Override
     public Class<GeneratorResult> outputType() {
         return GeneratorResult.class;

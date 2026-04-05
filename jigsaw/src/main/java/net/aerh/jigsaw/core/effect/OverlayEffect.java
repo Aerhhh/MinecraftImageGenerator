@@ -39,21 +39,45 @@ public final class OverlayEffect implements ImageEffect {
         this.registry = Objects.requireNonNull(registry, "registry must not be null");
     }
 
+    /**
+     * Returns the unique identifier for this effect.
+     *
+     * @return {@code "overlay"}
+     */
     @Override
     public String id() {
         return ID;
     }
 
+    /**
+     * Returns the priority of this effect. Lower values are applied first.
+     *
+     * @return {@code 50}
+     */
     @Override
     public int priority() {
         return PRIORITY;
     }
 
+    /**
+     * Returns {@code true} if the context contains an {@code "overlayData"} metadata entry.
+     *
+     * @param context the current effect context
+     *
+     * @return whether the overlay should be applied
+     */
     @Override
     public boolean appliesTo(EffectContext context) {
         return context.metadata(META_OVERLAY_DATA, Overlay.class).isPresent();
     }
 
+    /**
+     * Applies the overlay to the base image using the appropriate renderer and returns the modified context.
+     * If no renderer is registered for the overlay's type, the context is returned unchanged.
+     *
+     * @param context the current effect context; must contain {@code "overlayData"} metadata
+     * @return the updated context with the overlay composited onto the image
+     */
     @Override
     public EffectContext apply(EffectContext context) {
         Overlay overlay = context.metadata(META_OVERLAY_DATA, Overlay.class)

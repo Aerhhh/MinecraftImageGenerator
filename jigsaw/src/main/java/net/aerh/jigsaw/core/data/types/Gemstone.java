@@ -13,6 +13,11 @@ import java.util.Objects;
  *
  * <p>{@code color} may be {@code null} for gemstones (e.g. gem_combat) that have no associated
  * color in the data file.
+ *
+ * @param name           the identifier used as the registry lookup key
+ * @param color          the optional color code for this gemstone; may be {@code null}
+ * @param icon           the icon character representing this gemstone
+ * @param formattedTiers an immutable map from tier name to Minecraft-formatted display strings
  */
 public record Gemstone(String name, @Nullable String color, String icon, Map<String, String> formattedTiers) {
 

@@ -6,6 +6,14 @@ import java.util.Objects;
 
 /**
  * Represents a flavor line type (e.g. "requires", "view_recipes") that can appear on item tooltips.
+ *
+ * @param icon      the icon character shown before the flavor line
+ * @param name      the identifier used as the registry lookup key
+ * @param stat      the stat key this flavor is associated with
+ * @param display   the human-readable display name
+ * @param color     the primary color code for this flavor line
+ * @param subColor  an optional secondary color code; may be {@code null} when not specified in the data
+ * @param parseType the name of the {@link ParseType} used to format this flavor line
  */
 public record Flavor(
         String icon,

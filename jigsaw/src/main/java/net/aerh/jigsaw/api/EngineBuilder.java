@@ -11,6 +11,8 @@ import net.aerh.jigsaw.spi.NbtFormatHandler;
  * <p>By default, the engine is built with all defaults enabled (sprite provider,
  * data registries, built-in effects, font registry, overlay registry). Call
  * {@link #noDefaults()} to opt out of defaults and configure everything manually.
+ *
+ * @see Engine
  */
 public interface EngineBuilder {
 

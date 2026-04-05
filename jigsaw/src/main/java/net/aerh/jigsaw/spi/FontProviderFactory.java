@@ -6,6 +6,8 @@ import net.aerh.jigsaw.api.font.FontProvider;
  * SPI contract for contributing a {@link FontProvider} to the font registry.
  * <p>
  * Implementations are discovered via {@link java.util.ServiceLoader} or explicit registration.
+ *
+ * @see net.aerh.jigsaw.api.font.FontProvider
  */
 public interface FontProviderFactory {
 

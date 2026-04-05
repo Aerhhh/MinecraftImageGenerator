@@ -22,16 +22,33 @@ import java.util.Optional;
  */
 public final class PreFlatteningNbtFormatHandler implements NbtFormatHandler {
 
+    /**
+     * Returns the unique identifier for this handler.
+     *
+     * @return {@code "jigsaw:pre-flattening"}
+     */
     @Override
     public String id() {
         return "jigsaw:pre-flattening";
     }
 
+    /**
+     * Returns the priority of this handler. Lower values are evaluated first.
+     *
+     * @return {@code 300}
+     */
     @Override
     public int priority() {
         return 300;
     }
 
+    /**
+     * Returns {@code true} if the input contains an {@code "ench"} key indicating pre-flattening format.
+     *
+     * @param input the normalized NBT string to inspect
+     *
+     * @return whether this handler can process the input
+     */
     @Override
     public boolean canHandle(String input) {
         if (input == null || input.isBlank()) {
@@ -40,6 +57,14 @@ public final class PreFlatteningNbtFormatHandler implements NbtFormatHandler {
         return input.contains("\"ench\"") || input.contains("ench:") || input.contains("ench:[");
     }
 
+    /**
+     * Parses the pre-1.13 pre-flattening format and returns the extracted item data.
+     *
+     * @param input   the normalized NBT JSON string
+     * @param context the handler context providing optional registry access
+     * @return the parsed item
+     * @throws ParseException if the input cannot be parsed
+     */
     @Override
     public ParsedItem parse(String input, NbtFormatHandlerContext context) throws ParseException {
         JsonObject root = parseRoot(input);

@@ -69,6 +69,16 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
         this.effectPipeline = Objects.requireNonNull(effectPipeline, "effectPipeline must not be null");
     }
 
+    /**
+     * Renders the inventory described by the request into a static or animated image.
+     *
+     * @param input   the inventory request; must not be {@code null}
+     * @param context the generation context; must not be {@code null}
+     *
+     * @return a static image, or an animated image if any item is enchanted
+     *
+     * @throws RenderException if rendering fails
+     */
     @Override
     public GeneratorResult render(InventoryRequest input, GenerationContext context) throws RenderException {
         Objects.requireNonNull(input, "input must not be null");
@@ -182,11 +192,21 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
         return new GeneratorResult.StaticImage(canvas);
     }
 
+    /**
+     * Returns the input type accepted by this generator.
+     *
+     * @return {@link InventoryRequest}
+     */
     @Override
     public Class<InventoryRequest> inputType() {
         return InventoryRequest.class;
     }
 
+    /**
+     * Returns the output type produced by this generator.
+     *
+     * @return {@link GeneratorResult}
+     */
     @Override
     public Class<GeneratorResult> outputType() {
         return GeneratorResult.class;

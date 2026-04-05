@@ -4,6 +4,9 @@ import java.util.Objects;
 
 /**
  * Represents a named icon character used in item tooltip rendering.
+ *
+ * @param name the identifier used as the registry lookup key
+ * @param icon the icon character to display in rendered tooltips
  */
 public record Icon(String name, String icon) {
 

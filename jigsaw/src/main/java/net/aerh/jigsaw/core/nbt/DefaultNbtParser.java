@@ -23,6 +23,8 @@ import java.util.Optional;
  * for which {@link NbtFormatHandler#canHandle(String)} returns {@code true} is used.
  * <p>
  * Throws {@link UnsupportedFormatException} if no handler accepts the input.
+ *
+ * @see NbtParser
  */
 public final class DefaultNbtParser implements NbtParser {
 
@@ -51,6 +53,17 @@ public final class DefaultNbtParser implements NbtParser {
         this.context = context;
     }
 
+    /**
+     * Parses the given NBT input by normalizing it to JSON and delegating to the first
+     * handler that accepts it.
+     *
+     * @param input the raw NBT string; must not be {@code null} or blank
+     *
+     * @return the parsed item data
+     *
+     * @throws ParseException                                       if the input is null, blank, or syntactically invalid
+     * @throws net.aerh.jigsaw.exception.UnsupportedFormatException if no registered handler accepts the input
+     */
     @Override
     public ParsedItem parse(String input) throws ParseException {
         if (input == null || input.isBlank()) {

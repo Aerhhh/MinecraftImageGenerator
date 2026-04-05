@@ -27,21 +27,44 @@ public final class DurabilityBarEffect implements ImageEffect {
     /** Height in pixels of the colored durability bar. */
     private static final int COLORED_BAR_HEIGHT = 1;
 
+    /**
+     * Returns the unique identifier for this effect.
+     *
+     * @return {@code "durability_bar"}
+     */
     @Override
     public String id() {
         return ID;
     }
 
+    /**
+     * Returns the priority of this effect. Lower values are applied first.
+     *
+     * @return {@code 300}
+     */
     @Override
     public int priority() {
         return PRIORITY;
     }
 
+    /**
+     * Returns {@code true} if the context contains a {@code "durabilityPercent"} metadata entry.
+     *
+     * @param context the current effect context
+     *
+     * @return whether the durability bar should be drawn
+     */
     @Override
     public boolean appliesTo(EffectContext context) {
         return context.metadata(META_KEY, Double.class).isPresent();
     }
 
+    /**
+     * Draws the durability bar onto the item image and returns the modified context.
+     *
+     * @param context the current effect context; must contain {@code "durabilityPercent"} metadata
+     * @return the updated context with the durability bar drawn
+     */
     @Override
     public EffectContext apply(EffectContext context) {
         double durability = context.metadata(META_KEY, Double.class)
