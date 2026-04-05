@@ -18,6 +18,7 @@ import java.util.Optional;
  * @param name           the internal identifier (e.g. {@code "gem_ruby"})
  * @param color          the hex color string, or {@code null} if not applicable
  * @param icon           the unicode icon character for the gemstone
+ * @param formattedIcon  the pre-colored icon string with ampersand codes, or {@code null}
  * @param formattedTiers a map of tier name to formatted display template string
  *                       (e.g. {@code "flawless"} to {@code "&5[%s&5]&r"})
  */
@@ -25,6 +26,7 @@ public record Gemstone(
     String name,
     @Nullable String color,
     String icon,
+    @Nullable String formattedIcon,
     Map<String, String> formattedTiers
 ) {
 
