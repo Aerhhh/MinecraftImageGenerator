@@ -1,6 +1,7 @@
 package net.aerh.jigsaw.core.effect;
 
 import net.aerh.jigsaw.api.effect.EffectContext;
+import net.aerh.jigsaw.api.effect.MetadataKeys;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -20,7 +21,7 @@ class DurabilityBarEffectTest {
         return EffectContext.builder()
                 .image(blankImage())
                 .build()
-                .withMetadata("durabilityPercent", percent);
+            .withMetadata(MetadataKeys.DURABILITY_PERCENT, percent);
     }
 
     @BeforeEach
@@ -63,7 +64,7 @@ class DurabilityBarEffectTest {
         EffectContext ctx = EffectContext.builder()
                 .image(blankImage())
                 .build()
-                .withMetadata("durabilityPercent", "not-a-double");
+            .withMetadata(MetadataKeys.DURABILITY_PERCENT, "not-a-double");
 
         assertThat(durabilityBar.appliesTo(ctx)).isFalse();
     }
@@ -148,7 +149,7 @@ class DurabilityBarEffectTest {
         EffectContext ctx = EffectContext.builder()
                 .image(white)
                 .build()
-                .withMetadata("durabilityPercent", 0.5);
+            .withMetadata(MetadataKeys.DURABILITY_PERCENT, 0.5);
 
         EffectContext result = durabilityBar.apply(ctx);
         BufferedImage img = result.image();

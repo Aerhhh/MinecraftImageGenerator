@@ -6,13 +6,13 @@ import net.aerh.jigsaw.api.generator.Generator;
 import net.aerh.jigsaw.api.generator.GeneratorResult;
 import net.aerh.jigsaw.api.sprite.SpriteProvider;
 import net.aerh.jigsaw.core.effect.EffectPipeline;
+import net.aerh.jigsaw.core.util.GraphicsUtil;
 import net.aerh.jigsaw.exception.RenderException;
 
 import javax.imageio.ImageIO;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics2D;
-import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
@@ -98,8 +98,7 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
 
         BufferedImage canvas = new BufferedImage(imageWidth, imageHeight, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = canvas.createGraphics();
-        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
-        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
+        GraphicsUtil.disableAntialiasing(g);
 
         // Background
         if (input.drawBackground()) {

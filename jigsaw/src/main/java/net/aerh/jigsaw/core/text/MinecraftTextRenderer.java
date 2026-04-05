@@ -3,11 +3,11 @@ package net.aerh.jigsaw.core.text;
 import net.aerh.jigsaw.api.generator.GeneratorResult;
 import net.aerh.jigsaw.api.text.TextSegment;
 import net.aerh.jigsaw.api.text.TextRenderOptions;
+import net.aerh.jigsaw.core.util.GraphicsUtil;
 
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics2D;
-import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.util.List;
 
@@ -74,8 +74,7 @@ public final class MinecraftTextRenderer {
         Graphics2D g = image.createGraphics();
 
         // Disable anti-aliasing for the pixel-exact Minecraft look
-        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
-        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
+        GraphicsUtil.disableAntialiasing(g);
 
         // Background
         Color bg = applyAlpha(BACKGROUND_COLOR, options.alpha());

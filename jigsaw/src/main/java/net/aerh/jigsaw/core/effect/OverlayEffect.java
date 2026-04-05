@@ -2,6 +2,7 @@ package net.aerh.jigsaw.core.effect;
 
 import net.aerh.jigsaw.api.effect.EffectContext;
 import net.aerh.jigsaw.api.effect.ImageEffect;
+import net.aerh.jigsaw.api.effect.MetadataKeys;
 import net.aerh.jigsaw.api.overlay.Overlay;
 import net.aerh.jigsaw.api.overlay.OverlayRenderer;
 import net.aerh.jigsaw.core.overlay.OverlayRegistry;
@@ -24,8 +25,8 @@ public final class OverlayEffect implements ImageEffect {
     private static final String ID = "overlay";
     private static final int PRIORITY = 50;
 
-    static final String META_OVERLAY_DATA = "overlayData";
-    static final String META_OVERLAY_COLOR = "overlayColor";
+    static final String META_OVERLAY_DATA = MetadataKeys.OVERLAY_DATA;
+    static final String META_OVERLAY_COLOR = MetadataKeys.OVERLAY_COLOR;
     private static final int DEFAULT_COLOR = 0xFFFFFFFF;
 
     private final OverlayRegistry registry;

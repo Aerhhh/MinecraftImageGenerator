@@ -30,9 +30,10 @@ public record ItemRequest(
 
     /**
      * Returns a builder for constructing an {@link ItemRequest}.
+     * Call {@link Builder#itemId(String)} to set the required item ID before building.
      */
-    public static Builder builder(String itemId) {
-        return new Builder(itemId);
+    public static Builder builder() {
+        return new Builder();
     }
 
     /**
@@ -40,15 +41,26 @@ public record ItemRequest(
      */
     public static final class Builder {
 
-        private final String itemId;
+        private String itemId;
         private boolean enchanted = false;
         private boolean hovered = false;
         private boolean bigImage = false;
         private Optional<Double> durabilityPercent = Optional.empty();
         private Optional<Integer> dyeColor = Optional.empty();
 
-        private Builder(String itemId) {
-            this.itemId = Objects.requireNonNull(itemId, "itemId must not be null");
+        private Builder() {
+        }
+
+        /**
+         * Sets the Minecraft item ID (e.g. {@code "diamond_sword"}).
+         *
+         * @param val the item ID; must not be {@code null}
+         *
+         * @return this builder for chaining
+         */
+        public Builder itemId(String val) {
+            this.itemId = Objects.requireNonNull(val, "itemId must not be null");
+            return this;
         }
 
         /**
@@ -111,8 +123,10 @@ public record ItemRequest(
          * Builds the {@link ItemRequest}.
          *
          * @return a new request
+         * @throws NullPointerException if {@code itemId} has not been set
          */
         public ItemRequest build() {
+            Objects.requireNonNull(itemId, "itemId must not be null");
             return new ItemRequest(itemId, enchanted, hovered, bigImage, durabilityPercent, dyeColor);
         }
     }

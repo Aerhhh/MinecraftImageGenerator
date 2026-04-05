@@ -2,6 +2,7 @@ package net.aerh.jigsaw.core.effect;
 
 import net.aerh.jigsaw.api.effect.EffectContext;
 import net.aerh.jigsaw.api.effect.ImageEffect;
+import net.aerh.jigsaw.api.effect.MetadataKeys;
 
 import java.awt.image.BufferedImage;
 
@@ -20,7 +21,7 @@ public final class DurabilityBarEffect implements ImageEffect {
 
     private static final String ID = "durability_bar";
     private static final int PRIORITY = 300;
-    private static final String META_KEY = "durabilityPercent";
+    private static final String META_KEY = MetadataKeys.DURABILITY_PERCENT;
 
     /** Height in pixels of the black background bar. */
     private static final int BAR_HEIGHT = 2;

@@ -2,6 +2,7 @@ package net.aerh.jigsaw.core.effect;
 
 import net.aerh.jigsaw.api.effect.EffectContext;
 import net.aerh.jigsaw.api.effect.ImageEffect;
+import net.aerh.jigsaw.core.util.ColorUtil;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -133,9 +134,9 @@ public final class GlintEffect implements ImageEffect {
                     int bG = (basePixel >> 8) & 0xFF;
                     int bB = basePixel & 0xFF;
 
-                    int gR = clamp(Math.round(bR + glintBrightness * TINT_R * 255f));
-                    int gG = clamp(Math.round(bG + glintBrightness * TINT_G * 255f));
-                    int gB = clamp(Math.round(bB + glintBrightness * TINT_B * 255f));
+                    int gR = ColorUtil.clamp(Math.round(bR + glintBrightness * TINT_R * 255f));
+                    int gG = ColorUtil.clamp(Math.round(bG + glintBrightness * TINT_G * 255f));
+                    int gB = ColorUtil.clamp(Math.round(bB + glintBrightness * TINT_B * 255f));
 
                     frame.setRGB(x, y, (baseAlpha << 24) | (gR << 16) | (gG << 8) | gB);
                 }
@@ -222,10 +223,6 @@ public final class GlintEffect implements ImageEffect {
 
     private static float lerp(float a, float b, float t) {
         return a + (b - a) * t;
-    }
-
-    private static int clamp(int v) {
-        return Math.max(0, Math.min(255, v));
     }
 
     private static BufferedImage loadGlintTexture() {

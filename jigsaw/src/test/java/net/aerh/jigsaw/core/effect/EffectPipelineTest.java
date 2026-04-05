@@ -178,7 +178,29 @@ class EffectPipelineTest {
                 .isInstanceOf(NullPointerException.class);
     }
 
-    // Test 8: Effects with equal priority maintain stable relative insertion order
+    // Test 8: Adding a null effect to the builder throws NullPointerException
+    @Test
+    void builder_addNullEffectThrowsNullPointerException() {
+        assertThatThrownBy(() -> EffectPipeline.builder().add(null))
+            .isInstanceOf(NullPointerException.class);
+    }
+
+    // Test 9: Execute with context that has an image set returns a context with an image
+    @Test
+    void execute_contextWithImageSetPreservesImageThroughPipeline() {
+        BufferedImage img = blankImage();
+        EffectContext ctx = EffectContext.builder()
+            .image(img)
+            .itemId("minecraft:stone")
+            .build();
+
+        EffectPipeline pipeline = EffectPipeline.builder().build();
+        EffectContext result = pipeline.execute(ctx);
+
+        assertThat(result.image()).isSameAs(img);
+    }
+
+    // Test 10: Effects with equal priority maintain stable relative insertion order
     @Test
     void execute_equalPriorityEffectsMaintainInsertionOrder() {
         List<String> log = new ArrayList<>();
@@ -194,7 +216,7 @@ class EffectPipelineTest {
         assertThat(log).containsExactly("first", "second", "third");
     }
 
-    // Test 9: Effect context propagates through pipeline (later effects see earlier effects' output)
+    // Test 11: Effect context propagates through pipeline (later effects see earlier effects' output)
     @Test
     void execute_contextPropagatesThroughPipeline() {
         // First effect adds metadata; second effect reads it

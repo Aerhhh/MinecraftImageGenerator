@@ -94,7 +94,7 @@ public final class DefaultEngine implements Engine {
         Objects.requireNonNull(itemId, "itemId must not be null");
         Objects.requireNonNull(context, "context must not be null");
 
-        ItemRequest request = ItemRequest.builder(itemId).build();
+        ItemRequest request = ItemRequest.builder().itemId(itemId).build();
         return itemGenerator.render(request, context);
     }
 
@@ -140,8 +140,9 @@ public final class DefaultEngine implements Engine {
 
         ParsedItem item = nbtParser.parse(nbt);
 
-        ItemRequest.Builder requestBuilder = ItemRequest.builder(item.itemId())
-                .enchanted(item.enchanted());
+        ItemRequest.Builder requestBuilder = ItemRequest.builder()
+            .itemId(item.itemId())
+            .enchanted(item.enchanted());
 
         item.dyeColor().ifPresent(requestBuilder::dyeColor);
 

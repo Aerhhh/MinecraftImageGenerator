@@ -3,6 +3,7 @@ package net.aerh.jigsaw.core.overlay;
 import net.aerh.jigsaw.api.overlay.ColorMode;
 import net.aerh.jigsaw.api.overlay.Overlay;
 import net.aerh.jigsaw.api.overlay.OverlayRenderer;
+import net.aerh.jigsaw.core.util.ColorUtil;
 
 import java.awt.AlphaComposite;
 import java.awt.Graphics2D;
@@ -23,15 +24,39 @@ final class DualLayerOverlayRenderer implements OverlayRenderer {
         return "dual_layer";
     }
 
+    private static BufferedImage tintImage(BufferedImage src, float r, float g, float b, int w, int h) {
+        BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                int srcX = x % src.getWidth();
+                int srcY = y % src.getHeight();
+                int pixel = src.getRGB(srcX, srcY);
+
+                int a = (pixel >> 24) & 0xFF;
+                if (a == 0) {
+                    continue;
+                }
+
+                int pr = ColorUtil.clamp(Math.round(((pixel >> 16) & 0xFF) * r));
+                int pg = ColorUtil.clamp(Math.round(((pixel >> 8) & 0xFF) * g));
+                int pb = ColorUtil.clamp(Math.round((pixel & 0xFF) * b));
+
+                out.setRGB(x, y, (a << 24) | (pr << 16) | (pg << 8) | pb);
+            }
+        }
+        return out;
+    }
+
     @Override
     public BufferedImage render(BufferedImage base, Overlay overlay, int color) {
         int w = base.getWidth();
         int h = base.getHeight();
 
         boolean applyTint = overlay.colorMode() == ColorMode.OVERLAY;
-        float tintR = applyTint ? ((color >> 16) & 0xFF) / 255f : 1f;
-        float tintG = applyTint ? ((color >> 8) & 0xFF) / 255f : 1f;
-        float tintB = applyTint ? (color & 0xFF) / 255f : 1f;
+        float[] tint = applyTint ? ColorUtil.extractTintRgb(color) : new float[]{1f, 1f, 1f};
+        float tintR = tint[0];
+        float tintG = tint[1];
+        float tintB = tint[2];
 
         // Build a tinted copy of the overlay texture
         BufferedImage tinted = tintImage(overlay.texture(), tintR, tintG, tintB, w, h);
@@ -49,30 +74,4 @@ final class DualLayerOverlayRenderer implements OverlayRenderer {
         return result;
     }
 
-    private static BufferedImage tintImage(BufferedImage src, float r, float g, float b, int w, int h) {
-        BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
-        for (int y = 0; y < h; y++) {
-            for (int x = 0; x < w; x++) {
-                int srcX = x % src.getWidth();
-                int srcY = y % src.getHeight();
-                int pixel = src.getRGB(srcX, srcY);
-
-                int a = (pixel >> 24) & 0xFF;
-                if (a == 0) {
-                    continue;
-                }
-
-                int pr = clamp(Math.round(((pixel >> 16) & 0xFF) * r));
-                int pg = clamp(Math.round(((pixel >> 8) & 0xFF) * g));
-                int pb = clamp(Math.round((pixel & 0xFF) * b));
-
-                out.setRGB(x, y, (a << 24) | (pr << 16) | (pg << 8) | pb);
-            }
-        }
-        return out;
-    }
-
-    private static int clamp(int v) {
-        return Math.max(0, Math.min(255, v));
-    }
 }

@@ -3,6 +3,7 @@ package net.aerh.jigsaw.core.overlay;
 import net.aerh.jigsaw.api.overlay.ColorMode;
 import net.aerh.jigsaw.api.overlay.Overlay;
 import net.aerh.jigsaw.api.overlay.OverlayRenderer;
+import net.aerh.jigsaw.core.util.ColorUtil;
 
 import java.awt.image.BufferedImage;
 
@@ -29,9 +30,10 @@ final class NormalOverlayRenderer implements OverlayRenderer {
         BufferedImage overlayTex = overlay.texture();
         boolean applyTint = overlay.colorMode() == ColorMode.OVERLAY;
 
-        float tintR = applyTint ? ((color >> 16) & 0xFF) / 255f : 1f;
-        float tintG = applyTint ? ((color >> 8) & 0xFF) / 255f : 1f;
-        float tintB = applyTint ? (color & 0xFF) / 255f : 1f;
+        float[] tint = applyTint ? ColorUtil.extractTintRgb(color) : new float[]{1f, 1f, 1f};
+        float tintR = tint[0];
+        float tintG = tint[1];
+        float tintB = tint[2];
 
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
@@ -44,9 +46,9 @@ final class NormalOverlayRenderer implements OverlayRenderer {
                     continue;
                 }
 
-                int oR = clamp(Math.round(((overlayPixel >> 16) & 0xFF) * tintR));
-                int oG = clamp(Math.round(((overlayPixel >> 8) & 0xFF) * tintG));
-                int oB = clamp(Math.round((overlayPixel & 0xFF) * tintB));
+                int oR = ColorUtil.clamp(Math.round(((overlayPixel >> 16) & 0xFF) * tintR));
+                int oG = ColorUtil.clamp(Math.round(((overlayPixel >> 8) & 0xFF) * tintG));
+                int oB = ColorUtil.clamp(Math.round((overlayPixel & 0xFF) * tintB));
 
                 // Alpha-composite overlay over base
                 int bA = (basePixel >> 24) & 0xFF;
@@ -62,10 +64,10 @@ final class NormalOverlayRenderer implements OverlayRenderer {
                 if (outAlpha == 0f) {
                     rR = rG = rB = rA = 0;
                 } else {
-                    rR = clamp(Math.round((oR * oAlpha + bR * bAlpha * (1f - oAlpha)) / outAlpha));
-                    rG = clamp(Math.round((oG * oAlpha + bG * bAlpha * (1f - oAlpha)) / outAlpha));
-                    rB = clamp(Math.round((oB * oAlpha + bB * bAlpha * (1f - oAlpha)) / outAlpha));
-                    rA = clamp(Math.round(outAlpha * 255f));
+                    rR = ColorUtil.clamp(Math.round((oR * oAlpha + bR * bAlpha * (1f - oAlpha)) / outAlpha));
+                    rG = ColorUtil.clamp(Math.round((oG * oAlpha + bG * bAlpha * (1f - oAlpha)) / outAlpha));
+                    rB = ColorUtil.clamp(Math.round((oB * oAlpha + bB * bAlpha * (1f - oAlpha)) / outAlpha));
+                    rA = ColorUtil.clamp(Math.round(outAlpha * 255f));
                 }
 
                 result.setRGB(x, y, (rA << 24) | (rR << 16) | (rG << 8) | rB);
@@ -81,7 +83,4 @@ final class NormalOverlayRenderer implements OverlayRenderer {
         return img.getRGB(wx, wy);
     }
 
-    private static int clamp(int v) {
-        return Math.max(0, Math.min(255, v));
-    }
 }

@@ -33,6 +33,9 @@ public record PlayerHeadRequest(
         if (scale < 1) {
             throw new IllegalArgumentException("scale must be >= 1, got: " + scale);
         }
+        if (scale > 64) {
+            throw new IllegalArgumentException("scale must be <= 64, got: " + scale);
+        }
     }
 
     /**

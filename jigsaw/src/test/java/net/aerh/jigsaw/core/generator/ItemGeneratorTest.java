@@ -2,6 +2,7 @@ package net.aerh.jigsaw.core.generator;
 
 import net.aerh.jigsaw.api.effect.EffectContext;
 import net.aerh.jigsaw.api.effect.ImageEffect;
+import net.aerh.jigsaw.api.effect.MetadataKeys;
 import net.aerh.jigsaw.api.generator.GenerationContext;
 import net.aerh.jigsaw.api.generator.GeneratorResult;
 import net.aerh.jigsaw.api.sprite.SpriteProvider;
@@ -44,7 +45,7 @@ class ItemGeneratorTest {
 
     @Test
     void render_knownItemReturnsStaticImage() throws RenderException {
-        ItemRequest request = ItemRequest.builder("diamond_sword").build();
+        ItemRequest request = ItemRequest.builder().itemId("diamond_sword").build();
         GeneratorResult result = generator.render(request, GenerationContext.defaults());
 
         assertThat(result).isInstanceOf(GeneratorResult.StaticImage.class);
@@ -58,7 +59,7 @@ class ItemGeneratorTest {
 
     @Test
     void render_unknownItemThrowsRenderException() {
-        ItemRequest request = ItemRequest.builder("totally_unknown_item_xyz").build();
+        ItemRequest request = ItemRequest.builder().itemId("totally_unknown_item_xyz").build();
 
         assertThatThrownBy(() -> generator.render(request, GenerationContext.defaults()))
                 .isInstanceOf(RenderException.class)
@@ -67,7 +68,7 @@ class ItemGeneratorTest {
 
     @Test
     void render_unknownItemRenderExceptionContainsItemId() {
-        ItemRequest request = ItemRequest.builder("missing_item").build();
+        ItemRequest request = ItemRequest.builder().itemId("missing_item").build();
 
         assertThatThrownBy(() -> generator.render(request, GenerationContext.defaults()))
                 .isInstanceOf(RenderException.class)
@@ -82,8 +83,8 @@ class ItemGeneratorTest {
 
     @Test
     void render_bigImageUpscalesByFactorOfTen() throws RenderException {
-        ItemRequest normal = ItemRequest.builder("diamond_sword").build();
-        ItemRequest big = ItemRequest.builder("diamond_sword").bigImage(true).build();
+        ItemRequest normal = ItemRequest.builder().itemId("diamond_sword").build();
+        ItemRequest big = ItemRequest.builder().itemId("diamond_sword").bigImage(true).build();
 
         GeneratorResult normalResult = generator.render(normal, GenerationContext.defaults());
         GeneratorResult bigResult = generator.render(big, GenerationContext.defaults());
@@ -113,7 +114,7 @@ class ItemGeneratorTest {
         EffectPipeline pipeline = EffectPipeline.builder().add(trackingEffect).build();
         ItemGenerator gen = new ItemGenerator(spriteProvider, pipeline);
 
-        gen.render(ItemRequest.builder("diamond_sword").build(), GenerationContext.defaults());
+        gen.render(ItemRequest.builder().itemId("diamond_sword").build(), GenerationContext.defaults());
 
         assertThat(log).containsExactly("executed");
     }
@@ -125,7 +126,7 @@ class ItemGeneratorTest {
                 .build();
 
         ItemGenerator gen = new ItemGenerator(spriteProvider, glintPipeline);
-        ItemRequest request = ItemRequest.builder("diamond_sword").enchanted(true).build();
+        ItemRequest request = ItemRequest.builder().itemId("diamond_sword").enchanted(true).build();
 
         GeneratorResult result = gen.render(request, GenerationContext.defaults());
 
@@ -142,7 +143,7 @@ class ItemGeneratorTest {
             @Override public String id() { return "detector"; }
             @Override public int priority() { return 0; }
             @Override public boolean appliesTo(EffectContext ctx) {
-                return ctx.metadata("durabilityPercent", Double.class).isPresent();
+                return ctx.metadata(MetadataKeys.DURABILITY_PERCENT, Double.class).isPresent();
             }
             @Override public EffectContext apply(EffectContext ctx) {
                 applied[0] = true;
@@ -153,7 +154,8 @@ class ItemGeneratorTest {
         EffectPipeline pipeline = EffectPipeline.builder().add(durabilityDetector).build();
         ItemGenerator gen = new ItemGenerator(spriteProvider, pipeline);
 
-        ItemRequest request = ItemRequest.builder("diamond_sword")
+        ItemRequest request = ItemRequest.builder()
+            .itemId("diamond_sword")
                 .durabilityPercent(0.5)
                 .build();
 
@@ -184,7 +186,7 @@ class ItemGeneratorTest {
 
     @Test
     void render_nullContextThrowsNullPointerException() {
-        ItemRequest request = ItemRequest.builder("diamond_sword").build();
+        ItemRequest request = ItemRequest.builder().itemId("diamond_sword").build();
         assertThatThrownBy(() -> generator.render(request, null))
                 .isInstanceOf(NullPointerException.class);
     }

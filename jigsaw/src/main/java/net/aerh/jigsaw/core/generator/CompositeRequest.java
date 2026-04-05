@@ -71,11 +71,15 @@ public record CompositeRequest(
         /**
          * Adds all results from the given list.
          *
-         * @param val the results to add; must not be {@code null}
+         * @param val the results to add; must not be {@code null}, and must not contain {@code null} elements
          * @return this builder for chaining
          */
         public Builder results(List<GeneratorResult> val) {
-            this.results.addAll(Objects.requireNonNull(val, "results must not be null"));
+            Objects.requireNonNull(val, "results must not be null");
+            for (GeneratorResult result : val) {
+                Objects.requireNonNull(result, "result elements must not be null");
+            }
+            this.results.addAll(val);
             return this;
         }
 

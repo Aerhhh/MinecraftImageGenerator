@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -292,8 +293,10 @@ public final class EffectContext {
          * Builds and returns the configured {@link EffectContext}.
          *
          * @return a new immutable {@code EffectContext}
+         * @throws NullPointerException if {@code image} has not been set
          */
         public EffectContext build() {
+            Objects.requireNonNull(image, "image must not be null");
             return new EffectContext(this);
         }
     }

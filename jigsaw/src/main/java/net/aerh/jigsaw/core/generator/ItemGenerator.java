@@ -1,6 +1,7 @@
 package net.aerh.jigsaw.core.generator;
 
 import net.aerh.jigsaw.api.effect.EffectContext;
+import net.aerh.jigsaw.api.effect.MetadataKeys;
 import net.aerh.jigsaw.api.generator.GenerationContext;
 import net.aerh.jigsaw.api.generator.Generator;
 import net.aerh.jigsaw.api.generator.GeneratorResult;
@@ -29,7 +30,7 @@ import java.util.Objects;
 public final class ItemGenerator implements Generator<ItemRequest, GeneratorResult> {
 
     private static final double BIG_IMAGE_SCALE = 10.0;
-    private static final String DURABILITY_META_KEY = "durabilityPercent";
+    private static final String DURABILITY_META_KEY = MetadataKeys.DURABILITY_PERCENT;
 
     private final SpriteProvider spriteProvider;
     private final EffectPipeline effectPipeline;
