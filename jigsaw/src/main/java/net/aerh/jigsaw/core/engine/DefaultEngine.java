@@ -38,6 +38,7 @@ import net.aerh.jigsaw.core.overlay.OverlayColorProvider;
 import net.aerh.jigsaw.core.overlay.OverlayLoader;
 import net.aerh.jigsaw.core.overlay.OverlayRegistry;
 import net.aerh.jigsaw.core.sprite.AtlasSpriteProvider;
+import net.aerh.jigsaw.core.text.MinecraftTextRenderer;
 import net.aerh.jigsaw.exception.ParseException;
 import net.aerh.jigsaw.exception.RenderException;
 import net.aerh.jigsaw.exception.RegistryException;
@@ -88,6 +89,10 @@ public final class DefaultEngine implements Engine {
         this.nbtParser = nbtParser;
         this.registries = Map.copyOf(registries);
         this.overlayColorProvider = overlayColorProvider;
+
+        // Eagerly initialize the text renderer so the first render call is not blocked
+        // by font loading and obfuscation character width precomputation.
+        MinecraftTextRenderer.init();
     }
 
     /**

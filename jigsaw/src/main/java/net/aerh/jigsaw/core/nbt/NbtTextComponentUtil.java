@@ -78,26 +78,30 @@ public final class NbtTextComponentUtil {
      * @return An ampersand-coded string, or an empty string if the element is null/empty.
      */
     public static String toFormattedString(JsonElement element) {
+        return toFormattedString(element, "");
+    }
+
+    private static String toFormattedString(JsonElement element, String inheritedPrefix) {
         if (element == null || element.isJsonNull()) {
             return "";
         }
         if (element.isJsonPrimitive()) {
-            return element.getAsString();
+            return inheritedPrefix + element.getAsString();
         }
         if (element.isJsonArray()) {
             StringBuilder sb = new StringBuilder();
             for (JsonElement child : element.getAsJsonArray()) {
-                sb.append(toFormattedString(child));
+                sb.append(toFormattedString(child, inheritedPrefix));
             }
             return sb.toString();
         }
         if (element.isJsonObject()) {
-            return objectToFormattedString(element.getAsJsonObject());
+            return objectToFormattedString(element.getAsJsonObject(), inheritedPrefix);
         }
         return "";
     }
 
-    private static String objectToFormattedString(JsonObject obj) {
+    private static String objectToFormattedString(JsonObject obj, String inheritedPrefix) {
         StringBuilder prefix = new StringBuilder();
 
         if (obj.has("color")) {
@@ -108,34 +112,60 @@ public final class NbtTextComponentUtil {
             }
         }
 
-        if (obj.has("bold") && obj.get("bold").getAsBoolean()) {
+        if (isTruthy(obj, "bold")) {
             prefix.append('&').append(ChatFormatting.BOLD.code());
         }
-        if (obj.has("italic") && obj.get("italic").getAsBoolean()) {
+        if (isTruthy(obj, "italic")) {
             prefix.append('&').append(ChatFormatting.ITALIC.code());
         }
-        if (obj.has("underlined") && obj.get("underlined").getAsBoolean()) {
+        if (isTruthy(obj, "underlined")) {
             prefix.append('&').append(ChatFormatting.UNDERLINE.code());
         }
-        if (obj.has("strikethrough") && obj.get("strikethrough").getAsBoolean()) {
+        if (isTruthy(obj, "strikethrough")) {
             prefix.append('&').append(ChatFormatting.STRIKETHROUGH.code());
         }
-        if (obj.has("obfuscated") && obj.get("obfuscated").getAsBoolean()) {
+        if (isTruthy(obj, "obfuscated")) {
             prefix.append('&').append(ChatFormatting.OBFUSCATED.code());
         }
 
+        // Build the full prefix for this component and its children
+        String fullPrefix = prefix.isEmpty() ? inheritedPrefix : inheritedPrefix + prefix;
+
         StringBuilder sb = new StringBuilder();
         if (obj.has("text")) {
-            sb.append(prefix).append(obj.get("text").getAsString());
+            String text = obj.get("text").getAsString();
+            if (!text.isEmpty()) {
+                sb.append(fullPrefix).append(text);
+            }
         }
 
         if (obj.has("extra") && obj.get("extra").isJsonArray()) {
             for (JsonElement child : obj.getAsJsonArray("extra")) {
-                sb.append(toFormattedString(child));
+                sb.append(toFormattedString(child, fullPrefix));
             }
         }
 
         return sb.toString();
+    }
+
+    /**
+     * Checks if a JSON field is truthy - handles both boolean true and numeric 1 (from SNBT byte values).
+     */
+    private static boolean isTruthy(JsonObject obj, String key) {
+        if (!obj.has(key)) {
+            return false;
+        }
+        JsonElement element = obj.get(key);
+        if (element.isJsonPrimitive()) {
+            var prim = element.getAsJsonPrimitive();
+            if (prim.isBoolean()) {
+                return prim.getAsBoolean();
+            }
+            if (prim.isNumber()) {
+                return prim.getAsInt() != 0;
+            }
+        }
+        return false;
     }
 
     /**

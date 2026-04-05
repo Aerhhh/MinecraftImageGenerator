@@ -65,6 +65,15 @@ public final class MinecraftTextRenderer {
     }
 
     /**
+     * Forces eager initialization of fonts and obfuscation character width tables.
+     * Call this during application startup to avoid blocking the first render call.
+     */
+    public static void init() {
+        // Touching any static field triggers the static initializer block above.
+        // This method exists so callers can trigger initialization explicitly.
+    }
+
+    /**
      * Precomputes character widths for the text obfuscation/magic formatting effect.
      *
      * <p>The four style variants (regular, bold, italic, bold+italic) are indexed 0-3 matching
