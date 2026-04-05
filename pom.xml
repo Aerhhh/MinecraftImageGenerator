@@ -14,6 +14,7 @@
         <module>generator</module>
         <module>tooling</module>
         <module>jigsaw</module>
+        <module>skyblock</module>
     </modules>
 
     <properties>

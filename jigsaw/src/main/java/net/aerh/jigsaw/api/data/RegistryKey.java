@@ -10,8 +10,8 @@ import java.util.Objects;
  * {@link net.aerh.jigsaw.api.Engine#registry(RegistryKey)} to obtain the corresponding registry:
  *
  * <pre>{@code
- * RegistryKey<Rarity> KEY = RegistryKey.of("rarities", Rarity.class);
- * DataRegistry<Rarity> registry = engine.registry(KEY);
+ * RegistryKey<MyType> KEY = RegistryKey.of("my_types", MyType.class);
+ * DataRegistry<MyType> registry = engine.registry(KEY);
  * }</pre>
  *
  * @param <T>  the type of objects stored in the registry identified by this key

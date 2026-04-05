@@ -2,8 +2,6 @@ package net.aerh.jigsaw.integration;
 
 import net.aerh.jigsaw.api.Engine;
 import net.aerh.jigsaw.api.generator.GeneratorResult;
-import net.aerh.jigsaw.core.data.DataRegistryKeys;
-import net.aerh.jigsaw.core.data.types.*;
 import net.aerh.jigsaw.exception.RenderException;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -13,10 +11,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Integration tests for {@link Engine} built with default configuration.
- *
- * <p>NBT-related tests are omitted because the NBT implementation classes
- * ({@code DefaultNbtParser} and format handlers) are being built in parallel
- * and may not yet be available on the classpath.
  */
 class EngineIntegrationTest {
 
@@ -53,68 +47,6 @@ class EngineIntegrationTest {
     // -------------------------------------------------------------------------
     // Data registries
     // -------------------------------------------------------------------------
-
-    @Test
-    void registry_raritiesIsLoaded() {
-        var reg = engine.registry(DataRegistryKeys.RARITIES);
-        assertThat(reg).isNotNull();
-        assertThat(reg.isEmpty()).isFalse();
-    }
-
-    @Test
-    void registry_raritiesContainsLegendary() {
-        var reg = engine.registry(DataRegistryKeys.RARITIES);
-        assertThat(reg.get("legendary")).isPresent();
-    }
-
-    @Test
-    void registry_statsIsLoaded() {
-        var reg = engine.registry(DataRegistryKeys.STATS);
-        assertThat(reg).isNotNull();
-        assertThat(reg.isEmpty()).isFalse();
-    }
-
-    @Test
-    void registry_flavorsIsLoaded() {
-        var reg = engine.registry(DataRegistryKeys.FLAVORS);
-        assertThat(reg).isNotNull();
-        assertThat(reg.isEmpty()).isFalse();
-    }
-
-    @Test
-    void registry_gemstonesIsLoaded() {
-        var reg = engine.registry(DataRegistryKeys.GEMSTONES);
-        assertThat(reg).isNotNull();
-        assertThat(reg.isEmpty()).isFalse();
-    }
-
-    @Test
-    void registry_iconsIsLoaded() {
-        var reg = engine.registry(DataRegistryKeys.ICONS);
-        assertThat(reg).isNotNull();
-        assertThat(reg.isEmpty()).isFalse();
-    }
-
-    @Test
-    void registry_parseTypesIsLoaded() {
-        var reg = engine.registry(DataRegistryKeys.PARSE_TYPES);
-        assertThat(reg).isNotNull();
-        assertThat(reg.isEmpty()).isFalse();
-    }
-
-    @Test
-    void registry_powerStrengthsIsLoaded() {
-        var reg = engine.registry(DataRegistryKeys.POWER_STRENGTHS);
-        assertThat(reg).isNotNull();
-        assertThat(reg.isEmpty()).isFalse();
-    }
-
-    @Test
-    void registry_armorTypesIsLoaded() {
-        var reg = engine.registry(DataRegistryKeys.ARMOR_TYPES);
-        assertThat(reg).isNotNull();
-        assertThat(reg.isEmpty()).isFalse();
-    }
 
     @Test
     void registry_unknownKeyThrowsException() {

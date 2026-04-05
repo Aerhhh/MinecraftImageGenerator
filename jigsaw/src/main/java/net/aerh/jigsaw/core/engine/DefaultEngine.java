@@ -12,9 +12,6 @@ import net.aerh.jigsaw.api.nbt.NbtParser;
 import net.aerh.jigsaw.api.nbt.ParsedItem;
 import net.aerh.jigsaw.api.overlay.OverlayRenderer;
 import net.aerh.jigsaw.api.sprite.SpriteProvider;
-import net.aerh.jigsaw.core.data.DataRegistryKeys;
-import net.aerh.jigsaw.core.data.JsonDataRegistry;
-import net.aerh.jigsaw.core.data.types.*;
 import net.aerh.jigsaw.core.effect.DurabilityBarEffect;
 import net.aerh.jigsaw.core.effect.EffectPipeline;
 import net.aerh.jigsaw.core.effect.GlintEffect;
@@ -190,7 +187,6 @@ public final class DefaultEngine implements Engine {
      * <ul>
      *   <li>The bundled {@link AtlasSpriteProvider} atlas.</li>
      *   <li>The {@link GlintEffect}, {@link HoverEffect}, and {@link DurabilityBarEffect} in the effect pipeline.</li>
-     *   <li>All eight built-in data registries (rarities, stats, flavors, gemstones, icons, parse types, power strengths, armor types).</li>
      *   <li>The four built-in {@link NbtFormatHandler}s (components, post-flattening, pre-flattening, default).</li>
      *   <li>Any additional handlers discovered at runtime via {@link ServiceLoader}.</li>
      * </ul>
@@ -307,11 +303,8 @@ public final class DefaultEngine implements Engine {
             OverlayRegistry overlayRegistry = OverlayRegistry.withDefaults();
             overlayRenderers.forEach(overlayRegistry::register);
 
-            // Data registries
+            // Data registries - empty by default; consumers register their own via the registry API
             Map<String, DataRegistry<?>> registries = new HashMap<>();
-            if (useDefaults) {
-                registerDefaultRegistries(registries);
-            }
 
             // NBT parser
             List<NbtFormatHandler> handlers = new ArrayList<>(nbtHandlers);
@@ -323,43 +316,6 @@ public final class DefaultEngine implements Engine {
             ItemGenerator itemGenerator = new ItemGenerator(spriteProvider, effectPipeline);
 
             return new DefaultEngine(spriteProvider, itemGenerator, nbtParser, registries);
-        }
-
-        /**
-         * Populates the registries map with all 8 built-in data types.
-         */
-        private static void registerDefaultRegistries(Map<String, DataRegistry<?>> registries) {
-            registries.put(DataRegistryKeys.RARITIES.name(),
-                    new JsonDataRegistry<>(DataRegistryKeys.RARITIES, Rarity[].class,
-                            "data/rarities.json", Rarity::name));
-
-            registries.put(DataRegistryKeys.STATS.name(),
-                    new JsonDataRegistry<>(DataRegistryKeys.STATS, Stat[].class,
-                            "data/stats.json", Stat::name));
-
-            registries.put(DataRegistryKeys.FLAVORS.name(),
-                    new JsonDataRegistry<>(DataRegistryKeys.FLAVORS, Flavor[].class,
-                            "data/flavor.json", Flavor::name));
-
-            registries.put(DataRegistryKeys.GEMSTONES.name(),
-                    new JsonDataRegistry<>(DataRegistryKeys.GEMSTONES, Gemstone[].class,
-                            "data/gemstones.json", Gemstone::name));
-
-            registries.put(DataRegistryKeys.ICONS.name(),
-                    new JsonDataRegistry<>(DataRegistryKeys.ICONS, Icon[].class,
-                            "data/icons.json", Icon::name));
-
-            registries.put(DataRegistryKeys.PARSE_TYPES.name(),
-                    new JsonDataRegistry<>(DataRegistryKeys.PARSE_TYPES, ParseType[].class,
-                            "data/parse_types.json", ParseType::name));
-
-            registries.put(DataRegistryKeys.POWER_STRENGTHS.name(),
-                    new JsonDataRegistry<>(DataRegistryKeys.POWER_STRENGTHS, PowerStrength[].class,
-                            "data/power_strengths.json", PowerStrength::name));
-
-            registries.put(DataRegistryKeys.ARMOR_TYPES.name(),
-                    new JsonDataRegistry<>(DataRegistryKeys.ARMOR_TYPES, ArmorType[].class,
-                            "data/armor_types.json", ArmorType::materialName));
         }
 
         /**

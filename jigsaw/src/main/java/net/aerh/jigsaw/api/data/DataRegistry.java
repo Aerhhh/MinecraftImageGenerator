@@ -10,9 +10,9 @@ import java.util.Optional;
  * {@link net.aerh.jigsaw.api.Engine#registry(RegistryKey)}. Type-safe usage example:
  *
  * <pre>{@code
- * RegistryKey<Rarity> key = RegistryKey.of("rarities", Rarity.class);
- * DataRegistry<Rarity> registry = engine.registry(key);
- * Rarity epic = registry.get("EPIC").orElseThrow();
+ * RegistryKey<MyType> key = RegistryKey.of("my_types", MyType.class);
+ * DataRegistry<MyType> registry = engine.registry(key);
+ * MyType entry = registry.get("my_key").orElseThrow();
  * }</pre>
  *
  * @param <T> the type of objects stored in this registry
