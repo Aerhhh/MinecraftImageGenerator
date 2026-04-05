@@ -1,6 +1,10 @@
 package net.aerh.jigsaw.api.generator;
 
+import net.hypixel.nerdbot.marmalade.image.ImageUtil;
+
 import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.List;
 
 /**
@@ -93,6 +97,23 @@ public sealed interface GeneratorResult {
         @Override
         public boolean isAnimated() {
             return true;
+        }
+
+        /**
+         * Encodes all frames into an animated GIF and returns the raw bytes.
+         *
+         * <p>The GIF is encoded with the frame delay stored in this result and is set to loop
+         * indefinitely.
+         *
+         * @return the GIF-encoded byte array; never {@code null} or empty
+         * @throws UncheckedIOException if GIF encoding fails
+         */
+        public byte[] toGifBytes() {
+            try {
+                return ImageUtil.toGifBytes(frames, frameDelayMs, true);
+            } catch (IOException e) {
+                throw new UncheckedIOException("Failed to encode animated GIF", e);
+            }
         }
     }
 }

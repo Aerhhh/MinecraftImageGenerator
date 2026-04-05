@@ -211,6 +211,21 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
         return GeneratorResult.class;
     }
 
+    /**
+     * Returns the scale factor derived from the sprite provider's actual sprite size relative to
+     * the standard 16x16 Minecraft texture resolution.
+     *
+     * <p>For example, a sprite provider that returns 32x32 sprites yields a scale factor of 2;
+     * a provider returning 128x128 sprites yields 8. If no sprites are available the value
+     * defaults to 1 (no scaling).
+     *
+     * @return the integer scale factor; always {@code >= 1}
+     */
+    public int getScaleFactor() {
+        int spriteSize = detectSpriteSize();
+        return Math.max(1, spriteSize / 16);
+    }
+
     private int detectSpriteSize() {
         return spriteProvider.availableSprites().stream()
                 .findFirst()

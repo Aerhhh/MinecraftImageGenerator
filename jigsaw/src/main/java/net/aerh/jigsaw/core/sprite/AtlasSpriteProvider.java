@@ -10,12 +10,15 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
+import java.util.AbstractMap;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -127,6 +130,42 @@ public class AtlasSpriteProvider implements SpriteProvider {
                 .filter(name -> name.contains(query))
                 .findFirst()
                 .flatMap(this::getSprite);
+    }
+
+    /**
+     * Returns all sprites whose texture ID contains the given query string (case-insensitive),
+     * sorted alphabetically by texture ID.
+     *
+     * @param query the substring to search for; must not be {@code null}
+     * @return an alphabetically ordered list of matching name-to-image entries; never {@code null}
+     */
+    @Override
+    public List<Map.Entry<String, BufferedImage>> searchAll(String query) {
+        Objects.requireNonNull(query, "query must not be null");
+        String lowerQuery = query.toLowerCase();
+        return coordinates.keySet().stream()
+                .filter(name -> name.toLowerCase().contains(lowerQuery))
+                .sorted()
+                .map(name -> (Map.Entry<String, BufferedImage>) new AbstractMap.SimpleImmutableEntry<>(
+                        name, getSprite(name).orElse(null)))
+                .filter(entry -> entry.getValue() != null)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Returns a snapshot of every loaded sprite, keyed by texture ID.
+     *
+     * <p>The returned map is sorted alphabetically by texture ID and is unmodifiable.
+     *
+     * @return an unmodifiable, alphabetically sorted map of all texture IDs to their images
+     */
+    @Override
+    public Map<String, BufferedImage> getAllSprites() {
+        TreeMap<String, BufferedImage> result = new TreeMap<>();
+        for (String id : coordinates.keySet()) {
+            getSprite(id).ifPresent(img -> result.put(id, img));
+        }
+        return Collections.unmodifiableMap(result);
     }
 
     private BufferedImage extractSprite(ImageCoordinates coord) {

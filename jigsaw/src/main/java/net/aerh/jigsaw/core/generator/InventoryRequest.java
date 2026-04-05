@@ -147,6 +147,29 @@ public record InventoryRequest(
         }
 
         /**
+         * Parses a {@code %%}-delimited inventory string and adds the resulting items to the
+         * item list.
+         *
+         * <p>The format is described in detail in {@link InventoryStringParser}. Each token in the
+         * string is {@code material[,modifier...]:slotSpec}. Multi-slot tokens are expanded into
+         * one {@link InventoryItem} per slot.
+         *
+         * @param inventoryString the inventory string to parse; must not be {@code null} or blank
+         * @return this builder for chaining
+         * @throws IllegalArgumentException if the string contains malformed tokens
+         */
+        public Builder withInventoryString(String inventoryString) {
+            Objects.requireNonNull(inventoryString, "inventoryString must not be null");
+            if (inventoryString.isBlank()) {
+                return this;
+            }
+            int totalSlots = rows * slotsPerRow;
+            InventoryStringParser parser = new InventoryStringParser(totalSlots);
+            this.items.addAll(parser.parse(inventoryString));
+            return this;
+        }
+
+        /**
          * Builds the {@link InventoryRequest}.
          *
          * @return a new request
