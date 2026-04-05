@@ -1,5 +1,7 @@
 package net.aerh.jigsaw.core.generator;
 
+import net.aerh.jigsaw.api.generator.RenderRequest;
+
 import java.util.Objects;
 import java.util.Optional;
 
@@ -20,7 +22,7 @@ public record ItemRequest(
         boolean bigImage,
         Optional<Double> durabilityPercent,
         Optional<Integer> dyeColor
-) {
+) implements RenderRequest {
 
     public ItemRequest {
         Objects.requireNonNull(itemId, "itemId must not be null");

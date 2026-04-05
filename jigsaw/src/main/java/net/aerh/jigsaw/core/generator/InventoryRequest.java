@@ -1,5 +1,7 @@
 package net.aerh.jigsaw.core.generator;
 
+import net.aerh.jigsaw.api.generator.RenderRequest;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -23,7 +25,7 @@ public record InventoryRequest(
         boolean drawBorder,
         boolean drawBackground,
         List<InventoryItem> items
-) {
+) implements RenderRequest {
 
     public InventoryRequest {
         Objects.requireNonNull(title, "title must not be null");

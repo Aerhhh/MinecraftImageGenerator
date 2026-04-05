@@ -11,20 +11,20 @@ import java.util.function.Consumer;
  * <pre>{@code
  * GenerationContext context = GenerationContext.builder()
  *         .skipCache(true)
- *         .feedback(msg -> System.out.println("[jigsaw] " + msg))
+ *         .feedback((msg, ephemeral) -> System.out.println("[jigsaw] " + msg))
  *         .build();
- * GeneratorResult result = engine.renderItem("diamond_sword", context);
+ * GeneratorResult result = engine.render(ItemRequest.builder().itemId("diamond_sword").build(), context);
  * }</pre>
  *
  * @param skipCache whether the engine should bypass cached results and force a fresh render
- * @param feedback  a consumer that receives diagnostic or progress messages during rendering;
+ * @param feedback  callback that receives diagnostic or progress messages during rendering;
  *                  may be a no-op but must not be {@code null}
  *
- * @see net.aerh.jigsaw.api.Engine#renderItem(String, GenerationContext)
+ * @see net.aerh.jigsaw.api.Engine#render(RenderRequest, GenerationContext)
  */
-public record GenerationContext(boolean skipCache, Consumer<String> feedback) {
+public record GenerationContext(boolean skipCache, GenerationFeedback feedback) {
 
-    private static final GenerationContext DEFAULTS = new GenerationContext(false, msg -> {});
+    private static final GenerationContext DEFAULTS = new GenerationContext(false, GenerationFeedback.noop());
 
     /**
      * Returns a shared {@code GenerationContext} with all defaults: caching enabled, no-op feedback.
@@ -51,7 +51,7 @@ public record GenerationContext(boolean skipCache, Consumer<String> feedback) {
     public static final class Builder {
 
         private boolean skipCache = false;
-        private Consumer<String> feedback = msg -> {};
+        private GenerationFeedback feedback = GenerationFeedback.noop();
 
         private Builder() {
         }
@@ -68,13 +68,26 @@ public record GenerationContext(boolean skipCache, Consumer<String> feedback) {
         }
 
         /**
-         * Sets the feedback consumer that receives diagnostic messages during rendering.
+         * Sets the feedback callback that receives diagnostic messages during rendering.
+         *
+         * @param val the feedback callback; must not be {@code null}
+         * @return this builder
+         */
+        public Builder feedback(GenerationFeedback val) {
+            this.feedback = val;
+            return this;
+        }
+
+        /**
+         * Sets a simple feedback consumer that ignores the {@code forceEphemeral} flag.
+         *
+         * <p>This is a convenience overload for callers that do not need ephemeral control.
          *
          * @param val the consumer; must not be {@code null}
          * @return this builder
          */
         public Builder feedback(Consumer<String> val) {
-            this.feedback = val;
+            this.feedback = GenerationFeedback.fromConsumer(val);
             return this;
         }
 

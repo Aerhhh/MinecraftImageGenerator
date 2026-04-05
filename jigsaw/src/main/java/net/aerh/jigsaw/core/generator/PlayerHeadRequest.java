@@ -1,5 +1,7 @@
 package net.aerh.jigsaw.core.generator;
 
+import net.aerh.jigsaw.api.generator.RenderRequest;
+
 import java.util.Objects;
 import java.util.Optional;
 
@@ -20,7 +22,7 @@ public record PlayerHeadRequest(
         Optional<String> textureUrl,
         Optional<String> playerName,
         int scale
-) {
+) implements RenderRequest {
 
     public PlayerHeadRequest {
         Objects.requireNonNull(base64Texture, "base64Texture must not be null");

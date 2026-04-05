@@ -1,5 +1,6 @@
 package net.aerh.jigsaw.core.generator;
 
+import net.aerh.jigsaw.api.generator.RenderRequest;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -33,7 +34,7 @@ public record TooltipRequest(
         boolean renderBorder,
         int scaleFactor,
         boolean bypassMaxLineLength
-) {
+) implements RenderRequest {
 
     /** Default background alpha value. */
     public static final int DEFAULT_ALPHA = 255;

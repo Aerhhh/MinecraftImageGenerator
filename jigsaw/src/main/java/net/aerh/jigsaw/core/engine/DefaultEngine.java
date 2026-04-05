@@ -8,6 +8,7 @@ import net.aerh.jigsaw.api.effect.ImageEffect;
 import net.aerh.jigsaw.api.font.FontProvider;
 import net.aerh.jigsaw.api.generator.GenerationContext;
 import net.aerh.jigsaw.api.generator.GeneratorResult;
+import net.aerh.jigsaw.api.generator.RenderRequest;
 import net.aerh.jigsaw.api.nbt.NbtParser;
 import net.aerh.jigsaw.api.nbt.ParsedItem;
 import net.aerh.jigsaw.api.overlay.OverlayRenderer;
@@ -17,8 +18,16 @@ import net.aerh.jigsaw.core.effect.EffectPipeline;
 import net.aerh.jigsaw.core.effect.GlintEffect;
 import net.aerh.jigsaw.core.effect.HoverEffect;
 import net.aerh.jigsaw.core.font.DefaultFontRegistry;
+import net.aerh.jigsaw.core.generator.CompositeRequest;
+import net.aerh.jigsaw.core.generator.InventoryGenerator;
+import net.aerh.jigsaw.core.generator.InventoryRequest;
 import net.aerh.jigsaw.core.generator.ItemGenerator;
 import net.aerh.jigsaw.core.generator.ItemRequest;
+import net.aerh.jigsaw.core.generator.PlayerHeadGenerator;
+import net.aerh.jigsaw.core.generator.PlayerHeadRequest;
+import net.aerh.jigsaw.core.generator.ResultComposer;
+import net.aerh.jigsaw.core.generator.TooltipGenerator;
+import net.aerh.jigsaw.core.generator.TooltipRequest;
 import net.aerh.jigsaw.core.nbt.DefaultNbtParser;
 import net.aerh.jigsaw.core.nbt.handler.ComponentsNbtFormatHandler;
 import net.aerh.jigsaw.core.nbt.handler.DefaultNbtFormatHandler;
@@ -29,6 +38,7 @@ import net.aerh.jigsaw.core.sprite.AtlasSpriteProvider;
 import net.aerh.jigsaw.exception.ParseException;
 import net.aerh.jigsaw.exception.RenderException;
 import net.aerh.jigsaw.exception.RegistryException;
+import net.aerh.jigsaw.exception.ValidationException;
 import net.aerh.jigsaw.spi.NbtFormatHandler;
 
 import java.util.ArrayList;
@@ -39,7 +49,8 @@ import java.util.Objects;
 import java.util.ServiceLoader;
 
 /**
- * Default implementation of {@link Engine} that wires together all built-in components.
+ * Default implementation of {@link Engine} that wires together all built-in components
+ * and dispatches render requests to the appropriate generator.
  *
  * <p>Use {@link Engine#builder()} (which delegates to {@link Builder}) to construct an instance.
  *
@@ -49,50 +60,70 @@ public final class DefaultEngine implements Engine {
 
     private final SpriteProvider spriteProvider;
     private final ItemGenerator itemGenerator;
+    private final TooltipGenerator tooltipGenerator;
+    private final InventoryGenerator inventoryGenerator;
+    private final PlayerHeadGenerator playerHeadGenerator;
     private final NbtParser nbtParser;
     private final Map<String, DataRegistry<?>> registries;
 
     private DefaultEngine(
             SpriteProvider spriteProvider,
             ItemGenerator itemGenerator,
+            TooltipGenerator tooltipGenerator,
+            InventoryGenerator inventoryGenerator,
+            PlayerHeadGenerator playerHeadGenerator,
             NbtParser nbtParser,
             Map<String, DataRegistry<?>> registries
     ) {
         this.spriteProvider = spriteProvider;
         this.itemGenerator = itemGenerator;
+        this.tooltipGenerator = tooltipGenerator;
+        this.inventoryGenerator = inventoryGenerator;
+        this.playerHeadGenerator = playerHeadGenerator;
         this.nbtParser = nbtParser;
         this.registries = Map.copyOf(registries);
     }
 
     /**
-     * Renders the item with the given ID using default generation context options.
+     * Renders the given request using default generation context options.
      *
-     * @param itemId the Minecraft item ID to render; must not be {@code null}
-     *
+     * @param request the render request; must not be {@code null}
      * @return the rendered result
-     *
-     * @throws RenderException if the item is unknown or rendering fails
+     * @throws RenderException if rendering fails
+     * @throws ParseException  if the request involves NBT parsing that fails
      */
     @Override
-    public GeneratorResult renderItem(String itemId) throws RenderException {
-        return renderItem(itemId, GenerationContext.defaults());
+    public GeneratorResult render(RenderRequest request) throws RenderException, ParseException {
+        return render(request, GenerationContext.defaults());
     }
 
     /**
-     * Renders the item with the given ID using the supplied generation context.
+     * Renders the given request using the supplied generation context.
      *
-     * @param itemId  the Minecraft item ID to render; must not be {@code null}
-     * @param context the generation context controlling rendering behavior; must not be {@code null}
+     * <p>Dispatches to the appropriate generator based on the concrete type of the request.
+     * For {@link CompositeRequest}s, each sub-request is rendered recursively and the results
+     * are composed according to the request's layout and padding.
+     *
+     * @param request the render request; must not be {@code null}
+     * @param context the generation context; must not be {@code null}
      * @return the rendered result
-     * @throws RenderException if the item is unknown or rendering fails
+     * @throws RenderException      if rendering fails
+     * @throws ParseException       if the request involves NBT parsing that fails
+     * @throws ValidationException  if the request type is not recognized
      */
     @Override
-    public GeneratorResult renderItem(String itemId, GenerationContext context) throws RenderException {
-        Objects.requireNonNull(itemId, "itemId must not be null");
+    public GeneratorResult render(RenderRequest request, GenerationContext context) throws RenderException, ParseException {
+        Objects.requireNonNull(request, "request must not be null");
         Objects.requireNonNull(context, "context must not be null");
 
-        ItemRequest request = ItemRequest.builder().itemId(itemId).build();
-        return itemGenerator.render(request, context);
+        return switch (request) {
+            case ItemRequest r -> itemGenerator.render(r, context);
+            case TooltipRequest r -> tooltipGenerator.render(r, context);
+            case InventoryRequest r -> inventoryGenerator.render(r, context);
+            case PlayerHeadRequest r -> playerHeadGenerator.render(r, context);
+            case CompositeRequest r -> renderComposite(r, context);
+            default -> throw new ValidationException("Unknown request type: " + request.getClass().getName());
+        };
     }
 
     /**
@@ -152,7 +183,7 @@ public final class DefaultEngine implements Engine {
      * @param <T> the type of objects in the registry
      * @param key the registry key to look up; must not be {@code null}
      * @return the registry for the given key
-     * @throws net.aerh.jigsaw.exception.RegistryException if no registry is registered for the key
+     * @throws RegistryException if no registry is registered for the key
      */
     @Override
     @SuppressWarnings("unchecked")
@@ -174,6 +205,19 @@ public final class DefaultEngine implements Engine {
     @Override
     public SpriteProvider sprites() {
         return spriteProvider;
+    }
+
+    /**
+     * Renders a composite request by dispatching each sub-request recursively and
+     * composing the results.
+     */
+    private GeneratorResult renderComposite(CompositeRequest request, GenerationContext context)
+            throws RenderException, ParseException {
+        List<GeneratorResult> results = new ArrayList<>();
+        for (RenderRequest sub : request.requests()) {
+            results.add(render(sub, context));
+        }
+        return ResultComposer.compose(results, request.layout(), request.padding());
     }
 
     // -------------------------------------------------------------------------
@@ -298,8 +342,6 @@ public final class DefaultEngine implements Engine {
             fontProviders.forEach(fontRegistry::register);
 
             // Overlay registry
-            // Note: OverlayRegistry only exposes withDefaults(); both paths start from there.
-            // When noDefaults() is used, caller-supplied renderers still work (they override or extend).
             OverlayRegistry overlayRegistry = OverlayRegistry.withDefaults();
             overlayRenderers.forEach(overlayRegistry::register);
 
@@ -313,21 +355,28 @@ public final class DefaultEngine implements Engine {
             }
             NbtParser nbtParser = buildNbtParser(handlers);
 
+            // Generators
             ItemGenerator itemGenerator = new ItemGenerator(spriteProvider, effectPipeline);
+            TooltipGenerator tooltipGenerator = new TooltipGenerator();
+            InventoryGenerator inventoryGenerator = new InventoryGenerator(spriteProvider, effectPipeline);
+            PlayerHeadGenerator playerHeadGenerator = new PlayerHeadGenerator();
 
-            return new DefaultEngine(spriteProvider, itemGenerator, nbtParser, registries);
+            return new DefaultEngine(
+                    spriteProvider,
+                    itemGenerator,
+                    tooltipGenerator,
+                    inventoryGenerator,
+                    playerHeadGenerator,
+                    nbtParser,
+                    registries
+            );
         }
 
         /**
          * Registers the default NBT format handlers discovered via {@link ServiceLoader} and
          * the built-in programmatic registrations.
-         *
-         * <p>ServiceLoader-discovered handlers are added first; the explicit programmatic
-         * defaults are appended afterwards so that callers can override via {@link #nbtHandler}.
-         * Duplicate implementations (same class) are deduplicated by class identity.
          */
         private static void addDefaultNbtHandlers(List<NbtFormatHandler> handlers) {
-            // Programmatic defaults - all classes are now available at compile time
             handlers.add(new ComponentsNbtFormatHandler());
             handlers.add(new PostFlatteningNbtFormatHandler());
             handlers.add(new PreFlatteningNbtFormatHandler());
@@ -339,7 +388,6 @@ public final class DefaultEngine implements Engine {
          * discovered via {@link ServiceLoader}.
          */
         private static NbtParser buildNbtParser(List<NbtFormatHandler> handlers) {
-            // Merge ServiceLoader-discovered handlers, avoiding duplicates by class
             List<NbtFormatHandler> merged = new ArrayList<>(handlers);
             for (NbtFormatHandler discovered : ServiceLoader.load(NbtFormatHandler.class)) {
                 boolean alreadyPresent = merged.stream()
