@@ -1,6 +1,4 @@
 jdk:
-  - openjdk21
-before_install:
-  - pip install git+https://github.com/SkyBlock-Simplified/minecraft-fontgen.git
-  - python -m minecraft_fontgen --version latest --output /tmp/minecraft-fonts --type opentype --silent
-  - cp /tmp/minecraft-fonts/Minecraft-*.otf generator/src/main/resources/minecraft/assets/fonts/
+  - openjdk25
+install:
+  - mvn clean install -DskipTests -pl jigsaw,skyblock -am
