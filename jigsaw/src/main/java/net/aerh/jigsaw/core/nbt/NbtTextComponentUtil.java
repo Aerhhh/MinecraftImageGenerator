@@ -102,34 +102,58 @@ public final class NbtTextComponentUtil {
     }
 
     private static String objectToFormattedString(JsonObject obj, String inheritedPrefix) {
-        StringBuilder prefix = new StringBuilder();
+        // Check if this component explicitly disables any formatting that the parent had active
+        boolean overridesFormatting = isFalsy(obj, "bold") || isFalsy(obj, "italic")
+            || isFalsy(obj, "underlined") || isFalsy(obj, "strikethrough") || isFalsy(obj, "obfuscated");
 
-        if (obj.has("color")) {
-            String colorStr = obj.get("color").getAsString();
-            char code = resolveColorCode(colorStr);
-            if (code != 0) {
-                prefix.append('&').append(code);
+        String fullPrefix;
+
+        if (overridesFormatting) {
+            // This component explicitly disables some formatting, so we need to reset
+            // and rebuild from scratch instead of inheriting the parent's prefix
+            StringBuilder prefix = new StringBuilder();
+            prefix.append("&r");
+
+            // Re-apply color (from this component or inherited)
+            if (obj.has("color")) {
+                char code = resolveColorCode(obj.get("color").getAsString());
+                if (code != 0) {
+                    prefix.append('&').append(code);
+                }
+            } else {
+                // Extract color from inherited prefix if present
+                String inheritedColor = extractLastColorCode(inheritedPrefix);
+                if (inheritedColor != null) {
+                    prefix.append(inheritedColor);
+                }
             }
-        }
 
-        if (isTruthy(obj, "bold")) {
-            prefix.append('&').append(ChatFormatting.BOLD.code());
-        }
-        if (isTruthy(obj, "italic")) {
-            prefix.append('&').append(ChatFormatting.ITALIC.code());
-        }
-        if (isTruthy(obj, "underlined")) {
-            prefix.append('&').append(ChatFormatting.UNDERLINE.code());
-        }
-        if (isTruthy(obj, "strikethrough")) {
-            prefix.append('&').append(ChatFormatting.STRIKETHROUGH.code());
-        }
-        if (isTruthy(obj, "obfuscated")) {
-            prefix.append('&').append(ChatFormatting.OBFUSCATED.code());
-        }
+            // Only add formatting that is explicitly true on this component
+            if (isTruthy(obj, "bold")) prefix.append('&').append(ChatFormatting.BOLD.code());
+            if (isTruthy(obj, "italic")) prefix.append('&').append(ChatFormatting.ITALIC.code());
+            if (isTruthy(obj, "underlined")) prefix.append('&').append(ChatFormatting.UNDERLINE.code());
+            if (isTruthy(obj, "strikethrough")) prefix.append('&').append(ChatFormatting.STRIKETHROUGH.code());
+            if (isTruthy(obj, "obfuscated")) prefix.append('&').append(ChatFormatting.OBFUSCATED.code());
 
-        // Build the full prefix for this component and its children
-        String fullPrefix = prefix.isEmpty() ? inheritedPrefix : inheritedPrefix + prefix;
+            fullPrefix = prefix.toString();
+        } else {
+            StringBuilder prefix = new StringBuilder();
+
+            if (obj.has("color")) {
+                char code = resolveColorCode(obj.get("color").getAsString());
+                if (code != 0) {
+                    prefix.append('&').append(code);
+                }
+            }
+
+            if (isTruthy(obj, "bold")) prefix.append('&').append(ChatFormatting.BOLD.code());
+            if (isTruthy(obj, "italic")) prefix.append('&').append(ChatFormatting.ITALIC.code());
+            if (isTruthy(obj, "underlined")) prefix.append('&').append(ChatFormatting.UNDERLINE.code());
+            if (isTruthy(obj, "strikethrough")) prefix.append('&').append(ChatFormatting.STRIKETHROUGH.code());
+            if (isTruthy(obj, "obfuscated")) prefix.append('&').append(ChatFormatting.OBFUSCATED.code());
+
+            fullPrefix = prefix.isEmpty() ? inheritedPrefix : inheritedPrefix + prefix;
+        }
 
         StringBuilder sb = new StringBuilder();
         if (obj.has("text")) {
@@ -146,6 +170,40 @@ public final class NbtTextComponentUtil {
         }
 
         return sb.toString();
+    }
+
+    /**
+     * Checks if a JSON field is explicitly false/0 (not just absent).
+     */
+    private static boolean isFalsy(JsonObject obj, String key) {
+        if (!obj.has(key)) {
+            return false;
+        }
+        JsonElement element = obj.get(key);
+        if (element.isJsonPrimitive()) {
+            var prim = element.getAsJsonPrimitive();
+            if (prim.isBoolean()) {
+                return !prim.getAsBoolean();
+            }
+            if (prim.isNumber()) {
+                return prim.getAsInt() == 0;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Extracts the last color code (e.g. "&d") from a prefix string, or null if none found.
+     */
+    private static String extractLastColorCode(String prefix) {
+        if (prefix == null) return null;
+        int lastIdx = -1;
+        for (int i = 0; i < prefix.length() - 1; i++) {
+            if (prefix.charAt(i) == '&' && "0123456789abcdef".indexOf(Character.toLowerCase(prefix.charAt(i + 1))) != -1) {
+                lastIdx = i;
+            }
+        }
+        return lastIdx >= 0 ? prefix.substring(lastIdx, lastIdx + 2) : null;
     }
 
     /**
