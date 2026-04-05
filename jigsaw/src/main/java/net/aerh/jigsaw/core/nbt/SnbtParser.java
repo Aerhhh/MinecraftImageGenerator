@@ -232,7 +232,63 @@ public final class SnbtParser {
         if (c == '"' || c == '\'') {
             return parseQuotedString();
         }
-        return parseBareword();
+        // Handle namespaced keys like "minecraft:lore" where the colon is part of the key,
+        // not the key-value separator. A colon is part of the key if the character after it
+        // is a letter or underscore AND there is another colon before the next comma/closing brace
+        // (i.e. there's still a key-value separator to come). Otherwise it's the separator.
+        int start = pos;
+        while (pos < input.length()) {
+            char ch = input.charAt(pos);
+            if (ch == ':') {
+                // Look ahead: is there another ':' before the next ',' or '}'?
+                // If so, this colon is part of a namespaced key.
+                if (hasAnotherColonBeforeEndOfEntry(pos + 1)) {
+                    pos++;
+                    continue;
+                }
+                break; // key-value separator
+            }
+            if (ch == '}' || ch == '{' || ch == '[' || ch == ']' || ch == ',' || Character.isWhitespace(ch)) {
+                break;
+            }
+            pos++;
+        }
+        String key = input.substring(start, pos);
+        if (key.isEmpty()) {
+            throw new ParseException("Expected key at position " + pos, Map.of("input", input));
+        }
+        return key;
+    }
+
+    /**
+     * Scans forward from the given position looking for another ':' before hitting
+     * a ',' or '}' (at the same nesting level). Skips over nested compounds/lists/strings.
+     */
+    private boolean hasAnotherColonBeforeEndOfEntry(int from) {
+        int depth = 0;
+        for (int i = from; i < input.length(); i++) {
+            char ch = input.charAt(i);
+            if (ch == '"' || ch == '\'') {
+                // Skip quoted string
+                i++;
+                while (i < input.length() && input.charAt(i) != ch) {
+                    if (input.charAt(i) == '\\') i++;
+                    i++;
+                }
+                continue;
+            }
+            if (ch == '{' || ch == '[') {
+                depth++;
+            } else if (ch == '}' || ch == ']') {
+                if (depth == 0) return false;
+                depth--;
+            } else if (ch == ',' && depth == 0) {
+                return false;
+            } else if (ch == ':' && depth == 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String parseQuotedString() throws ParseException {

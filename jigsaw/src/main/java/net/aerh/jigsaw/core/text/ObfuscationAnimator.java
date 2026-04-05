@@ -5,6 +5,8 @@ import net.aerh.jigsaw.api.text.TextSegment;
 import net.aerh.jigsaw.api.text.TextRenderOptions;
 import net.aerh.jigsaw.api.text.TextStyle;
 
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -16,6 +18,8 @@ import java.util.Random;
  *
  * <p>Non-obfuscated segments are identical across all frames. Obfuscated segments are replaced
  * with random printable ASCII characters (0x21-0x7E) of the same length on every frame.
+ *
+ * <p>All frames are rendered at a consistent size determined by the first frame's dimensions.
  *
  * <p>Default frame rate is 10 FPS (100ms frame delay).
  */
@@ -54,8 +58,8 @@ public final class ObfuscationAnimator {
      *
      * @param layout       the laid-out text to animate; must not be {@code null}
      * @param options      the render options for each frame; must not be {@code null}
-     * @param frameCount   the number of animation frames to generate; must be &gt;= 1
-     * @param frameDelayMs the delay between frames in milliseconds; must be &gt; 0
+     * @param frameCount   the number of animation frames to generate; must be >= 1
+     * @param frameDelayMs the delay between frames in milliseconds; must be > 0
      */
     public ObfuscationAnimator(TextLayout layout, TextRenderOptions options, int frameCount, int frameDelayMs) {
         this.layout = Objects.requireNonNull(layout, "layout must not be null");
@@ -74,15 +78,38 @@ public final class ObfuscationAnimator {
     /**
      * Generates the animation frames and returns them as an {@link GeneratorResult.AnimatedImage}.
      *
+     * <p>All frames are rendered to the same dimensions. The first frame's size is used as the
+     * reference, and subsequent frames are drawn onto a canvas of that size to ensure consistency.
+     *
      * @return the animated result; never {@code null}
      */
     public GeneratorResult.AnimatedImage animate() {
-        List<java.awt.image.BufferedImage> frames = new ArrayList<>(frameCount);
+        List<BufferedImage> frames = new ArrayList<>(frameCount);
+
+        int targetWidth = -1;
+        int targetHeight = -1;
 
         for (int i = 0; i < frameCount; i++) {
             TextLayout frameLayout = buildFrameLayout();
             GeneratorResult rendered = MinecraftTextRenderer.renderLayout(frameLayout, options);
-            frames.add(rendered.firstFrame());
+            BufferedImage frameImage = rendered.firstFrame();
+
+            if (i == 0) {
+                targetWidth = frameImage.getWidth();
+                targetHeight = frameImage.getHeight();
+                frames.add(frameImage);
+            } else {
+                // Ensure consistent dimensions across all frames
+                if (frameImage.getWidth() == targetWidth && frameImage.getHeight() == targetHeight) {
+                    frames.add(frameImage);
+                } else {
+                    BufferedImage resized = new BufferedImage(targetWidth, targetHeight, BufferedImage.TYPE_INT_ARGB);
+                    Graphics2D g = resized.createGraphics();
+                    g.drawImage(frameImage, 0, 0, null);
+                    g.dispose();
+                    frames.add(resized);
+                }
+            }
         }
 
         return new GeneratorResult.AnimatedImage(frames, frameDelayMs);

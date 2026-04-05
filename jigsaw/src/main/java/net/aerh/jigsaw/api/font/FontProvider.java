@@ -21,6 +21,16 @@ public interface FontProvider {
     Optional<Font> getFont();
 
     /**
+     * Returns the AWT {@link Font} derived at the given size, or {@code null} if not loaded.
+     *
+     * @param size the desired point size
+     * @return the derived font, or {@code null} if this provider has no font loaded
+     */
+    default Font getFont(float size) {
+        return getFont().map(f -> f.deriveFont(size)).orElse(null);
+    }
+
+    /**
      * Returns the pixel width of the given character in this font at its default size.
      */
     int getCharWidth(char c);

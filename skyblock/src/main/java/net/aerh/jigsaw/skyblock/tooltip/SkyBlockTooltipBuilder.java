@@ -242,7 +242,7 @@ public final class SkyBlockTooltipBuilder {
         private int padding = TooltipRequest.DEFAULT_PADDING;
         private boolean firstLinePadding = true;
         private int maxLineLength = TooltipRequest.DEFAULT_MAX_LINE_LENGTH;
-        private boolean centeredText = false;
+        private boolean centered = false;
         private boolean renderBorder = true;
         private transient int scaleFactor = 1;
 
@@ -342,11 +342,11 @@ public final class SkyBlockTooltipBuilder {
         /**
          * Sets whether each line should be horizontally centered.
          *
-         * @param centeredText {@code true} to center text
+         * @param centered {@code true} to center text
          * @return this builder
          */
-        public Builder centeredText(boolean centeredText) {
-            this.centeredText = centeredText;
+        public Builder centered(boolean centered) {
+            this.centered = centered;
             return this;
         }
 
@@ -401,9 +401,9 @@ public final class SkyBlockTooltipBuilder {
 
             // Lore lines
             String resolvedLore = resolvePlaceholders(itemLore);
-            String[] rawLines = normalizeNewlines(resolvedLore).split("\n", -1);
-            for (String line : rawLines) {
-                if (!line.isEmpty()) {
+            if (resolvedLore != null && !resolvedLore.isEmpty()) {
+                String[] rawLines = normalizeNewlines(resolvedLore).split("\n", -1);
+                for (String line : rawLines) {
                     lines.add(line);
                 }
             }
@@ -432,7 +432,7 @@ public final class SkyBlockTooltipBuilder {
                 .padding(padding)
                 .firstLinePadding(firstLinePadding)
                 .maxLineLength(maxLineLength)
-                .centeredText(centeredText)
+                .centeredText(centered)
                 .renderBorder(renderBorder)
                 .scaleFactor(scaleFactor)
                 .build();

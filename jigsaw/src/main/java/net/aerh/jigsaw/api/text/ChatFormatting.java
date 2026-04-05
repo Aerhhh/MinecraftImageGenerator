@@ -16,6 +16,12 @@ import java.util.Map;
  */
 public enum ChatFormatting {
 
+    /** Switches to the Standard Galactic Alphabet font ({@code §g}). */
+    FONT_GALACTIC('g'),
+
+    /** Switches to the Illageralt font ({@code §h}). */
+    FONT_ILLAGERALT('h'),
+
     /**
      * Randomises the displayed characters on each render tick ({@code §k}).
      */

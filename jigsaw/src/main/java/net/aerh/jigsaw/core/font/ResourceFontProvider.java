@@ -23,38 +23,55 @@ import java.util.Optional;
 public class ResourceFontProvider implements FontProvider {
 
     private static final Logger log = LoggerFactory.getLogger(ResourceFontProvider.class);
-    private static final float DEFAULT_FONT_SIZE = 16f;
+
+    /**
+     * Default font size matching the pixel-perfect Minecraft tooltip rendering.
+     */
+    public static final float DEFAULT_FONT_SIZE = 15.5f;
 
     private final String fontId;
     private final Font font;
     private final FontMetrics metrics;
 
     /**
+     * Creates a provider loading at the default size of {@value #DEFAULT_FONT_SIZE}pt.
+     *
      * @param fontId       unique identifier (e.g. {@code "minecraft:default"})
-     * @param resourcePath classpath path to the font file (e.g. {@code "minecraft/assets/fonts/unifont-17.0.03.otf"})
+     * @param resourcePath classpath path to the font file (e.g. {@code "minecraft/assets/fonts/Minecraft-Regular.otf"})
      */
     public ResourceFontProvider(String fontId, String resourcePath) {
+        this(fontId, resourcePath, DEFAULT_FONT_SIZE);
+    }
+
+    /**
+     * Creates a provider loading at a specific size.
+     *
+     * @param fontId       unique identifier (e.g. {@code "minecraft:default"})
+     * @param resourcePath classpath path to the font file (e.g. {@code "minecraft/assets/fonts/Minecraft-Regular.otf"})
+     * @param fontSize     the point size to load the font at
+     */
+    public ResourceFontProvider(String fontId, String resourcePath, float fontSize) {
         Objects.requireNonNull(fontId, "fontId must not be null");
         Objects.requireNonNull(resourcePath, "resourcePath must not be null");
 
         this.fontId = fontId;
-        this.font = loadFont(resourcePath);
+        this.font = loadFont(resourcePath, fontSize);
         this.metrics = buildMetrics(this.font);
     }
 
-    private static Font loadFont(String resourcePath) {
+    private static Font loadFont(String resourcePath, float fontSize) {
         ClassLoader cl = Thread.currentThread().getContextClassLoader();
         try (InputStream is = cl.getResourceAsStream(resourcePath)) {
             if (is == null) {
                 log.warn("Font resource not found: {}; falling back to monospaced font", resourcePath);
-                return new Font(Font.MONOSPACED, Font.PLAIN, (int) DEFAULT_FONT_SIZE);
+                return new Font(Font.MONOSPACED, Font.PLAIN, (int) fontSize);
             }
-            Font loaded = Font.createFont(Font.TRUETYPE_FONT, is).deriveFont(DEFAULT_FONT_SIZE);
-            log.debug("Loaded font from: {}", resourcePath);
+            Font loaded = Font.createFont(Font.TRUETYPE_FONT, is).deriveFont(fontSize);
+            log.debug("Loaded font from: {} at size {}", resourcePath, fontSize);
             return loaded;
         } catch (Exception e) {
             log.warn("Failed to load font from: {}; falling back to monospaced font", resourcePath, e);
-            return new Font(Font.MONOSPACED, Font.PLAIN, (int) DEFAULT_FONT_SIZE);
+            return new Font(Font.MONOSPACED, Font.PLAIN, (int) fontSize);
         }
     }
 

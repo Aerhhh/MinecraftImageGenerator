@@ -1,5 +1,7 @@
 package net.aerh.jigsaw.api.text;
 
+import net.aerh.jigsaw.core.font.MinecraftFontId;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -113,6 +115,8 @@ public final class FormattingParser {
 
     private static TextStyle applyFormatting(TextStyle style, ChatFormatting formatting) {
         return switch (formatting) {
+            case FONT_GALACTIC -> style.withFont(MinecraftFontId.GALACTIC);
+            case FONT_ILLAGERALT -> style.withFont(MinecraftFontId.ILLAGERALT);
             case BOLD -> style.withBold(true);
             case ITALIC -> style.withItalic(true);
             case OBFUSCATED -> style.withObfuscated(true);

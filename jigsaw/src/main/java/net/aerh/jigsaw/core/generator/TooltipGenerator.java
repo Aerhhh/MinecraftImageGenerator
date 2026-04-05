@@ -3,14 +3,9 @@ package net.aerh.jigsaw.core.generator;
 import net.aerh.jigsaw.api.generator.GenerationContext;
 import net.aerh.jigsaw.api.generator.Generator;
 import net.aerh.jigsaw.api.generator.GeneratorResult;
-import net.aerh.jigsaw.api.text.FormattingParser;
 import net.aerh.jigsaw.api.text.TextRenderOptions;
-import net.aerh.jigsaw.api.text.TextSegment;
-import net.aerh.jigsaw.api.text.TextStyle;
 import net.aerh.jigsaw.core.text.MinecraftTextRenderer;
-import net.aerh.jigsaw.core.text.TextLayout;
-import net.aerh.jigsaw.core.text.TextLayoutEngine;
-import net.aerh.jigsaw.core.text.TextLayoutOptions;
+import net.aerh.jigsaw.core.text.TextWrapper;
 import net.aerh.jigsaw.exception.RenderException;
 
 import java.util.ArrayList;
@@ -21,13 +16,16 @@ import java.util.Objects;
  * Renders a Minecraft-style item tooltip from a {@link TooltipRequest}.
  *
  * <p>The caller is responsible for pre-formatting all lines with color codes ({@code &} or
- * {@code §}). No placeholder expansion or rarity handling is performed here.
+ * {@code /u00a7}). No placeholder expansion or rarity handling is performed here.
  *
  * <p>The rendering pipeline:
  * <ol>
- *   <li>Parse each line into {@link TextSegment}s using {@link FormattingParser}.</li>
- *   <li>Lay out the segments via {@link TextLayoutEngine}.</li>
- *   <li>Render via {@link MinecraftTextRenderer}.</li>
+ *   <li>Wrap each input line at {@code maxLineLength} visible characters (unless
+ *       {@code bypassMaxLineLength} is set, in which case newlines within lines are still
+ *       split but no width-based wrapping is applied).</li>
+ *   <li>Parse each line into text segments internally.</li>
+ *   <li>Measure all lines to determine the tooltip width.</li>
+ *   <li>Render text with shadows, border, and all formatting effects.</li>
  * </ol>
  */
 public final class TooltipGenerator implements Generator<TooltipRequest, GeneratorResult> {
@@ -43,7 +41,7 @@ public final class TooltipGenerator implements Generator<TooltipRequest, Generat
      *
      * @param input   the tooltip request; must not be {@code null}
      * @param context the generation context; must not be {@code null}
-     * @return a static image containing the rendered tooltip
+     * @return a result containing the rendered tooltip (static or animated if obfuscated text is present)
      * @throws RenderException if rendering fails
      */
     @Override
@@ -51,17 +49,16 @@ public final class TooltipGenerator implements Generator<TooltipRequest, Generat
         Objects.requireNonNull(input, "input must not be null");
         Objects.requireNonNull(context, "context must not be null");
 
-        List<TextSegment> allSegments = parseLinesToSegments(input.lines());
+        List<String> wrappedLines = new ArrayList<>();
+        for (String line : input.lines()) {
+            if (input.bypassMaxLineLength()) {
+                wrappedLines.addAll(splitOnNewlines(line));
+            } else {
+                wrappedLines.addAll(TextWrapper.wrapString(line, input.maxLineLength()));
+            }
+        }
 
-        TextLayoutOptions layoutOptions = new TextLayoutOptions(
-                input.maxLineLength(),
-                input.centeredText(),
-                input.scaleFactor()
-        );
-
-        TextLayout layout = TextLayoutEngine.layout(allSegments, layoutOptions);
-
-        int firstLinePaddingPx = input.firstLinePadding() ? 13 : 0;
+        int firstLinePaddingPx = input.firstLinePadding() ? 1 : 0;
 
         TextRenderOptions renderOptions = new TextRenderOptions(
                 true,
@@ -74,7 +71,7 @@ public final class TooltipGenerator implements Generator<TooltipRequest, Generat
                 input.maxLineLength()
         );
 
-        return MinecraftTextRenderer.renderLayout(layout, renderOptions);
+        return MinecraftTextRenderer.renderLines(wrappedLines, renderOptions);
     }
 
     @Override
@@ -87,21 +84,25 @@ public final class TooltipGenerator implements Generator<TooltipRequest, Generat
         return GeneratorResult.class;
     }
 
+    // -----------------------------------------------------------------------
+    // Private helpers
+    // -----------------------------------------------------------------------
+
     /**
-     * Converts a list of raw formatted lines into a flat list of {@link TextSegment}s,
-     * inserting newline segments between lines.
+     * Splits a single line string on embedded newline characters ({@code \n}) and on literal
+     * {@code \n} markers (backslash + n), returning one entry per resulting line. Used when
+     * {@code bypassMaxLineLength} is active and width-based wrapping is intentionally skipped.
+     *
+     * @param line the line to split; must not be {@code null}
+     * @return a list containing at least one element
      */
-    private static List<TextSegment> parseLinesToSegments(List<String> rawLines) {
-        List<TextSegment> allSegments = new ArrayList<>();
-
-        for (int i = 0; i < rawLines.size(); i++) {
-            if (i > 0) {
-                allSegments.add(new TextSegment("\n", TextStyle.DEFAULT));
-            }
-            List<TextSegment> lineSegments = FormattingParser.parse(rawLines.get(i));
-            allSegments.addAll(lineSegments);
+    private static List<String> splitOnNewlines(String line) {
+        String normalized = TextWrapper.normalizeNewlines(line);
+        if (normalized == null || normalized.isEmpty()) {
+            List<String> result = new ArrayList<>();
+            result.add(line);
+            return result;
         }
-
-        return allSegments;
+        return List.of(normalized.split("\n", -1));
     }
 }

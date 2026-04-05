@@ -116,9 +116,10 @@ public final class ComponentsNbtFormatHandler implements NbtFormatHandler {
 
     private String extractItemId(JsonObject root) {
         if (root.has("id")) {
-            return root.get("id").getAsString();
+            String id = root.get("id").getAsString();
+            return id.startsWith("minecraft:") ? id.substring("minecraft:".length()) : id;
         }
-        return "minecraft:air";
+        return "air";
     }
 
     private JsonObject extractComponents(JsonObject root) {
@@ -201,11 +202,17 @@ public final class ComponentsNbtFormatHandler implements NbtFormatHandler {
             return Optional.empty();
         }
         JsonElement nameElement = components.get("minecraft:custom_name");
-        String raw = nameElement.getAsString();
-        JsonElement parsed = NbtTextComponentUtil.tryParseJson(raw);
-        String formatted = parsed != null
-                ? NbtTextComponentUtil.toFormattedString(parsed)
-                : raw;
+        String formatted;
+        if (nameElement.isJsonObject() || nameElement.isJsonArray()) {
+            // Already a structured text component (common with SNBT input)
+            formatted = NbtTextComponentUtil.toFormattedString(nameElement);
+        } else {
+            String raw = nameElement.getAsString();
+            JsonElement parsed = NbtTextComponentUtil.tryParseJson(raw);
+            formatted = parsed != null
+                    ? NbtTextComponentUtil.toFormattedString(parsed)
+                    : raw;
+        }
         return formatted.isBlank() ? Optional.empty() : Optional.of(formatted);
     }
 
