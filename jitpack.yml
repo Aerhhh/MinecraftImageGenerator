@@ -1,4 +1,4 @@
 jdk:
   - openjdk25
 install:
-  - mvn clean install -DskipTests -pl jigsaw,skyblock -am
+  - ./mvnw clean install -DskipTests -pl jigsaw,skyblock -am
