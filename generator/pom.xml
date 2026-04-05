@@ -6,7 +6,7 @@
 
     <parent>
         <groupId>net.aerh</groupId>
-        <artifactId>MinecraftImageGenerator-parent</artifactId>
+        <artifactId>jigsaw-parent</artifactId>
         <version>1.0.0-SNAPSHOT</version>
     </parent>
 

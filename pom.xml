@@ -5,14 +5,15 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>net.aerh</groupId>
-    <artifactId>MinecraftImageGenerator-parent</artifactId>
+    <artifactId>jigsaw-parent</artifactId>
     <version>1.0.0-SNAPSHOT</version>
-    <name>MinecraftImageGenerator</name>
+    <name>Jigsaw</name>
     <packaging>pom</packaging>
 
     <modules>
         <module>generator</module>
         <module>tooling</module>
+        <module>jigsaw</module>
     </modules>
 
     <properties>
