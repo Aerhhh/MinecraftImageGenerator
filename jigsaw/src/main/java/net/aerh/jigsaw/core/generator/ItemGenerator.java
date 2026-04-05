@@ -5,15 +5,21 @@ import net.aerh.jigsaw.api.effect.MetadataKeys;
 import net.aerh.jigsaw.api.generator.GenerationContext;
 import net.aerh.jigsaw.api.generator.Generator;
 import net.aerh.jigsaw.api.generator.GeneratorResult;
+import net.aerh.jigsaw.api.overlay.ColorMode;
+import net.aerh.jigsaw.api.overlay.Overlay;
 import net.aerh.jigsaw.api.sprite.SpriteProvider;
 import net.aerh.jigsaw.core.effect.EffectPipeline;
+import net.aerh.jigsaw.core.overlay.ItemOverlayData;
+import net.aerh.jigsaw.core.overlay.OverlayLoader;
 import net.aerh.jigsaw.exception.RenderException;
 import net.aerh.jigsaw.exception.UnknownItemException;
 import net.hypixel.nerdbot.marmalade.image.ImageUtil;
 
 import java.awt.image.BufferedImage;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Renders a Minecraft item sprite, optionally applying effects.
@@ -34,16 +40,29 @@ public final class ItemGenerator implements Generator<ItemRequest, GeneratorResu
 
     private final SpriteProvider spriteProvider;
     private final EffectPipeline effectPipeline;
+    private final OverlayLoader overlayLoader;
 
     /**
      * Creates a new {@link ItemGenerator}.
      *
      * @param spriteProvider the sprite provider to load item textures from; must not be {@code null}
      * @param effectPipeline the pipeline of effects to apply; must not be {@code null}
+     * @param overlayLoader  the overlay loader for looking up item overlays; may be {@code null} if overlays are not needed
      */
-    public ItemGenerator(SpriteProvider spriteProvider, EffectPipeline effectPipeline) {
+    public ItemGenerator(SpriteProvider spriteProvider, EffectPipeline effectPipeline, OverlayLoader overlayLoader) {
         this.spriteProvider = Objects.requireNonNull(spriteProvider, "spriteProvider must not be null");
         this.effectPipeline = Objects.requireNonNull(effectPipeline, "effectPipeline must not be null");
+        this.overlayLoader = overlayLoader;
+    }
+
+    /**
+     * Creates a new {@link ItemGenerator} without overlay support.
+     *
+     * @param spriteProvider the sprite provider to load item textures from; must not be {@code null}
+     * @param effectPipeline the pipeline of effects to apply; must not be {@code null}
+     */
+    public ItemGenerator(SpriteProvider spriteProvider, EffectPipeline effectPipeline) {
+        this(spriteProvider, effectPipeline, null);
     }
 
     /**
@@ -75,15 +94,42 @@ public final class ItemGenerator implements Generator<ItemRequest, GeneratorResu
             sprite = ImageUtil.upscaleImage(sprite, input.scale());
         }
 
+        Map<String, Object> metadata = new HashMap<>();
+
+        input.durabilityPercent().ifPresent(d -> metadata.put(DURABILITY_META_KEY, d));
+
+        // Wire overlay metadata when the item has a registered overlay
+        if (overlayLoader != null) {
+            Optional<ItemOverlayData> overlayData = overlayLoader.getOverlay(input.itemId());
+            overlayData.ifPresent(data -> {
+                Overlay overlay = new Overlay(
+                        input.itemId(),
+                        data.overlayTexture(),
+                        data.colorMode(),
+                        data.rendererType()
+                );
+                metadata.put(MetadataKeys.OVERLAY_DATA, overlay);
+
+                // Resolve the dye color: use the packed integer from the request if present,
+                // otherwise fall back to default color for the category
+                int color = input.dyeColor()
+                        .or(() -> {
+                            int[] defaults = data.defaultColors();
+                            return defaults != null && defaults.length > 0
+                                    ? Optional.of(defaults[0])
+                                    : Optional.empty();
+                        })
+                        .orElse(0xFFFFFFFF);
+                metadata.put(MetadataKeys.OVERLAY_COLOR, color);
+            });
+        }
+
         EffectContext.Builder ctxBuilder = EffectContext.builder()
                 .image(sprite)
                 .itemId(input.itemId())
                 .enchanted(input.enchanted())
-                .hovered(input.hovered());
-
-        input.durabilityPercent().ifPresent(d -> ctxBuilder.metadata(
-                Map.of(DURABILITY_META_KEY, d)
-        ));
+                .hovered(input.hovered())
+                .metadata(metadata);
 
         EffectContext effectCtx = effectPipeline.execute(ctxBuilder.build());
         return toGeneratorResult(effectCtx);

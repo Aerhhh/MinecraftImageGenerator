@@ -17,6 +17,7 @@ import net.aerh.jigsaw.core.effect.DurabilityBarEffect;
 import net.aerh.jigsaw.core.effect.EffectPipeline;
 import net.aerh.jigsaw.core.effect.GlintEffect;
 import net.aerh.jigsaw.core.effect.HoverEffect;
+import net.aerh.jigsaw.core.effect.OverlayEffect;
 import net.aerh.jigsaw.core.font.DefaultFontRegistry;
 import net.aerh.jigsaw.core.generator.CompositeRequest;
 import net.aerh.jigsaw.core.generator.InventoryGenerator;
@@ -34,6 +35,7 @@ import net.aerh.jigsaw.core.nbt.handler.DefaultNbtFormatHandler;
 import net.aerh.jigsaw.core.nbt.handler.PostFlatteningNbtFormatHandler;
 import net.aerh.jigsaw.core.nbt.handler.PreFlatteningNbtFormatHandler;
 import net.aerh.jigsaw.core.overlay.OverlayColorProvider;
+import net.aerh.jigsaw.core.overlay.OverlayLoader;
 import net.aerh.jigsaw.core.overlay.OverlayRegistry;
 import net.aerh.jigsaw.core.sprite.AtlasSpriteProvider;
 import net.aerh.jigsaw.exception.ParseException;
@@ -349,7 +351,6 @@ public final class DefaultEngine implements Engine {
                         .add(new DurabilityBarEffect());
             }
             extraEffects.forEach(pipelineBuilder::add);
-            EffectPipeline effectPipeline = pipelineBuilder.build();
 
             // Font registry
             DefaultFontRegistry fontRegistry = DefaultFontRegistry.withBuiltins();
@@ -358,6 +359,16 @@ public final class DefaultEngine implements Engine {
             // Overlay registry
             OverlayRegistry overlayRegistry = OverlayRegistry.withDefaults();
             overlayRenderers.forEach(overlayRegistry::register);
+
+            // Overlay loader
+            OverlayLoader overlayLoader = useDefaults ? OverlayLoader.fromDefaults() : null;
+
+            // Add OverlayEffect to the pipeline
+            if (useDefaults) {
+                pipelineBuilder.add(new OverlayEffect(overlayRegistry));
+            }
+
+            EffectPipeline effectPipeline = pipelineBuilder.build();
 
             // Data registries - empty by default; consumers register their own via the registry API
             Map<String, DataRegistry<?>> registries = new HashMap<>();
@@ -373,7 +384,7 @@ public final class DefaultEngine implements Engine {
             OverlayColorProvider overlayColorProvider = OverlayColorProvider.fromDefaults();
 
             // Generators
-            ItemGenerator itemGenerator = new ItemGenerator(spriteProvider, effectPipeline);
+            ItemGenerator itemGenerator = new ItemGenerator(spriteProvider, effectPipeline, overlayLoader);
             TooltipGenerator tooltipGenerator = new TooltipGenerator();
             InventoryGenerator inventoryGenerator = new InventoryGenerator(spriteProvider, effectPipeline);
             PlayerHeadGenerator playerHeadGenerator = new PlayerHeadGenerator();

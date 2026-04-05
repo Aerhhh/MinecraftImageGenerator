@@ -5,14 +5,22 @@ import net.aerh.jigsaw.api.overlay.Overlay;
 import net.aerh.jigsaw.api.overlay.OverlayRenderer;
 import net.aerh.jigsaw.core.util.ColorUtil;
 
+import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 
 /**
- * Renders an overlay by multiplying each overlay pixel's RGB channels by the
- * normalized tint color, then compositing the result over the base image.
- * <p>
- * When {@link ColorMode#BASE} is specified the tint is ignored and the overlay
- * is drawn without modification.
+ * Renders an overlay using simple multiplicative color tinting.
+ *
+ * <p>The rendering logic depends on the overlay's {@link ColorMode}:
+ * <ul>
+ *   <li><b>OVERLAY mode</b> (potions, arrows, firework stars): The overlay texture is tinted
+ *       with the color using simple multiplication ({@code (src / 255) * desired}), then
+ *       composited on top of the base image.</li>
+ *   <li><b>BASE mode</b> (leather armor): The base item texture is tinted with the color
+ *       using simple multiplication, then the overlay is composited on top untinted.
+ *       This means the base layer gets colored while the overlay (e.g. armor trim details)
+ *       stays as-is.</li>
+ * </ul>
  */
 final class NormalOverlayRenderer implements OverlayRenderer {
 
@@ -25,55 +33,69 @@ final class NormalOverlayRenderer implements OverlayRenderer {
     public BufferedImage render(BufferedImage base, Overlay overlay, int color) {
         int w = base.getWidth();
         int h = base.getHeight();
-        BufferedImage result = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
 
         BufferedImage overlayTex = overlay.texture();
-        boolean applyTint = overlay.colorMode() == ColorMode.OVERLAY;
+        boolean isOverlayMode = overlay.colorMode() == ColorMode.OVERLAY;
 
-        float[] tint = applyTint ? ColorUtil.extractTintRgb(color) : new float[]{1f, 1f, 1f};
+        float[] tint = ColorUtil.extractTintRgb(color);
         float tintR = tint[0];
         float tintG = tint[1];
         float tintB = tint[2];
 
-        for (int y = 0; y < h; y++) {
-            for (int x = 0; x < w; x++) {
-                int basePixel = base.getRGB(x, y);
-                int overlayPixel = getWrappedPixel(overlayTex, x, y);
+        BufferedImage finalBase;
+        BufferedImage finalOverlay;
 
-                int oA = (overlayPixel >> 24) & 0xFF;
-                if (oA == 0) {
-                    result.setRGB(x, y, basePixel);
+        if (isOverlayMode) {
+            // OVERLAY mode: tint the overlay texture, draw on top of unchanged base
+            finalBase = base;
+            finalOverlay = tintImage(overlayTex, tintR, tintG, tintB, w, h);
+        } else {
+            // BASE mode: tint the base texture, draw untinted overlay on top
+            finalBase = tintImage(base, tintR, tintG, tintB, w, h);
+            finalOverlay = overlayTex;
+        }
+
+        return compositeImages(finalBase, finalOverlay, w, h);
+    }
+
+    /**
+     * Tints an image by multiplying each pixel's RGB channels by the given tint factors.
+     * Simple multiplicative: {@code (src / 255.0) * (tint * 255)} = {@code src * tint}.
+     */
+    private static BufferedImage tintImage(BufferedImage src, float tintR, float tintG, float tintB,
+                                           int targetW, int targetH) {
+        BufferedImage out = new BufferedImage(targetW, targetH, BufferedImage.TYPE_INT_ARGB);
+        for (int y = 0; y < targetH; y++) {
+            for (int x = 0; x < targetW; x++) {
+                int pixel = getWrappedPixel(src, x, y);
+                int a = (pixel >> 24) & 0xFF;
+                if (a == 0) {
                     continue;
                 }
 
-                int oR = ColorUtil.clamp(Math.round(((overlayPixel >> 16) & 0xFF) * tintR));
-                int oG = ColorUtil.clamp(Math.round(((overlayPixel >> 8) & 0xFF) * tintG));
-                int oB = ColorUtil.clamp(Math.round((overlayPixel & 0xFF) * tintB));
+                int r = ColorUtil.clamp(Math.round(((pixel >> 16) & 0xFF) * tintR));
+                int g = ColorUtil.clamp(Math.round(((pixel >> 8) & 0xFF) * tintG));
+                int b = ColorUtil.clamp(Math.round((pixel & 0xFF) * tintB));
 
-                // Alpha-composite overlay over base
-                int bA = (basePixel >> 24) & 0xFF;
-                int bR = (basePixel >> 16) & 0xFF;
-                int bG = (basePixel >> 8) & 0xFF;
-                int bB = basePixel & 0xFF;
-
-                float oAlpha = oA / 255f;
-                float bAlpha = bA / 255f;
-                float outAlpha = oAlpha + bAlpha * (1f - oAlpha);
-
-                int rR, rG, rB, rA;
-                if (outAlpha == 0f) {
-                    rR = rG = rB = rA = 0;
-                } else {
-                    rR = ColorUtil.clamp(Math.round((oR * oAlpha + bR * bAlpha * (1f - oAlpha)) / outAlpha));
-                    rG = ColorUtil.clamp(Math.round((oG * oAlpha + bG * bAlpha * (1f - oAlpha)) / outAlpha));
-                    rB = ColorUtil.clamp(Math.round((oB * oAlpha + bB * bAlpha * (1f - oAlpha)) / outAlpha));
-                    rA = ColorUtil.clamp(Math.round(outAlpha * 255f));
-                }
-
-                result.setRGB(x, y, (rA << 24) | (rR << 16) | (rG << 8) | rB);
+                out.setRGB(x, y, (a << 24) | (r << 16) | (g << 8) | b);
             }
         }
+        return out;
+    }
 
+    /**
+     * Composites the overlay on top of the base using alpha blending.
+     */
+    private static BufferedImage compositeImages(BufferedImage finalBase, BufferedImage finalOverlay,
+                                                 int w, int h) {
+        BufferedImage result = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = result.createGraphics();
+        try {
+            g.drawImage(finalBase, 0, 0, w, h, null);
+            g.drawImage(finalOverlay, 0, 0, w, h, null);
+        } finally {
+            g.dispose();
+        }
         return result;
     }
 
@@ -82,5 +104,4 @@ final class NormalOverlayRenderer implements OverlayRenderer {
         int wy = y % img.getHeight();
         return img.getRGB(wx, wy);
     }
-
 }

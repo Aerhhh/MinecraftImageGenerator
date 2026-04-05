@@ -114,7 +114,7 @@ class DefaultNbtParserTest {
         String input = "{\"id\":\"minecraft:diamond\",\"components\":{}}";
         ParsedItem item = parser.parse(input);
 
-        assertThat(item.itemId()).isEqualTo("minecraft:diamond");
+        assertThat(item.itemId()).isEqualTo("diamond");
     }
 
     // --- delegates to PostFlatteningNbtFormatHandler ---
@@ -131,7 +131,7 @@ class DefaultNbtParserTest {
         String input = "{\"id\":\"minecraft:sword\",\"tag\":{\"Enchantments\":[]}}";
         ParsedItem item = parser.parse(input);
 
-        assertThat(item.itemId()).isEqualTo("minecraft:sword");
+        assertThat(item.itemId()).isEqualTo("sword");
         assertThat(item.enchanted()).isFalse();
     }
 
@@ -147,7 +147,7 @@ class DefaultNbtParserTest {
         String snbt = "{id:\"minecraft:stone\",components:{}}";
         ParsedItem item = parser.parse(snbt);
 
-        assertThat(item.itemId()).isEqualTo("minecraft:stone");
+        assertThat(item.itemId()).isEqualTo("stone");
     }
 
     // --- fallback to default handler ---
@@ -159,7 +159,7 @@ class DefaultNbtParserTest {
         String input = "{\"id\":\"minecraft:stone\"}";
         ParsedItem item = parser.parse(input);
 
-        assertThat(item.itemId()).isEqualTo("minecraft:stone");
+        assertThat(item.itemId()).isEqualTo("stone");
         assertThat(item.enchanted()).isFalse();
         assertThat(item.lore()).isEmpty();
         assertThat(item.displayName()).isEmpty();

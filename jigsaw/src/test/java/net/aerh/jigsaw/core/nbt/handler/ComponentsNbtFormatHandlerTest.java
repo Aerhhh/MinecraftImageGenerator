@@ -73,7 +73,7 @@ class ComponentsNbtFormatHandlerTest {
         String input = "{\"id\":\"minecraft:diamond_sword\",\"components\":{}}";
         ParsedItem item = handler.parse(input, CONTEXT);
 
-        assertThat(item.itemId()).isEqualTo("minecraft:diamond_sword");
+        assertThat(item.itemId()).isEqualTo("diamond_sword");
     }
 
     @Test
@@ -81,7 +81,7 @@ class ComponentsNbtFormatHandlerTest {
         String input = "{\"components\":{}}";
         ParsedItem item = handler.parse(input, CONTEXT);
 
-        assertThat(item.itemId()).isEqualTo("minecraft:air");
+        assertThat(item.itemId()).isEqualTo("air");
     }
 
     // --- parse: enchanted ---

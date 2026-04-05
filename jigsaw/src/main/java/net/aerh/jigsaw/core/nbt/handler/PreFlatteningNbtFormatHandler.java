@@ -106,9 +106,10 @@ public final class PreFlatteningNbtFormatHandler implements NbtFormatHandler {
 
     private String extractItemId(JsonObject root) {
         if (root.has("id")) {
-            return root.get("id").getAsString();
+            String id = root.get("id").getAsString();
+            return id.startsWith("minecraft:") ? id.substring("minecraft:".length()) : id;
         }
-        return "minecraft:air";
+        return "air";
     }
 
     private JsonObject extractTag(JsonObject root) {

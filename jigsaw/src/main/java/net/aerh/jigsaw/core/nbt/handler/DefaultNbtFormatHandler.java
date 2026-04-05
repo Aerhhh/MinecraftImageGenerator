@@ -82,12 +82,13 @@ public final class DefaultNbtFormatHandler implements NbtFormatHandler {
             if (element.isJsonObject()) {
                 JsonObject obj = element.getAsJsonObject();
                 if (obj.has("id")) {
-                    return obj.get("id").getAsString();
+                    String id = obj.get("id").getAsString();
+                    return id.startsWith("minecraft:") ? id.substring("minecraft:".length()) : id;
                 }
             }
         } catch (Exception ignored) {
             // Best-effort; fall through to default
         }
-        return "minecraft:air";
+        return "air";
     }
 }

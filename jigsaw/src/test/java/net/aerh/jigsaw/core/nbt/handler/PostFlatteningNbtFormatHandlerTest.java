@@ -68,7 +68,7 @@ class PostFlatteningNbtFormatHandlerTest {
         String input = "{\"id\":\"minecraft:diamond_sword\",\"tag\":{}}";
         ParsedItem item = handler.parse(input, CONTEXT);
 
-        assertThat(item.itemId()).isEqualTo("minecraft:diamond_sword");
+        assertThat(item.itemId()).isEqualTo("diamond_sword");
     }
 
     @Test
@@ -76,7 +76,7 @@ class PostFlatteningNbtFormatHandlerTest {
         String input = "{\"tag\":{}}";
         ParsedItem item = handler.parse(input, CONTEXT);
 
-        assertThat(item.itemId()).isEqualTo("minecraft:air");
+        assertThat(item.itemId()).isEqualTo("air");
     }
 
     // --- parse: enchanted ---
