@@ -1,0 +1,4 @@
+net.aerh.jigsaw.core.nbt.handler.ComponentsNbtFormatHandler
+net.aerh.jigsaw.core.nbt.handler.PostFlatteningNbtFormatHandler
+net.aerh.jigsaw.core.nbt.handler.PreFlatteningNbtFormatHandler
+net.aerh.jigsaw.core.nbt.handler.DefaultNbtFormatHandler
