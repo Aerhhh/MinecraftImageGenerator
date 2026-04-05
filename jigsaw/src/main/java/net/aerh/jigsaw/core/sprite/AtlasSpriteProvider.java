@@ -1,0 +1,115 @@
+package net.aerh.jigsaw.core.sprite;
+
+import com.google.gson.Gson;
+import net.aerh.jigsaw.api.sprite.SpriteProvider;
+
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
+
+/**
+ * A {@link SpriteProvider} that reads sprites from a packed texture atlas image paired with
+ * a JSON file that describes each sprite's position and size.
+ *
+ * <p>Sprites are extracted lazily on first access and then cached in a {@link ConcurrentHashMap}.
+ */
+public class AtlasSpriteProvider implements SpriteProvider {
+
+    private static final Gson GSON = new Gson();
+
+    private static final String DEFAULT_ATLAS_IMAGE = "minecraft/assets/spritesheets/minecraft_texture_atlas.png";
+    private static final String DEFAULT_ATLAS_COORDINATES = "minecraft/assets/json/atlas_coordinates.json";
+
+    private final BufferedImage atlas;
+    private final Map<String, ImageCoordinates> coordinates;
+    private final ConcurrentHashMap<String, BufferedImage> cache = new ConcurrentHashMap<>();
+
+    /**
+     * Creates an {@link AtlasSpriteProvider} from the default bundled atlas and coordinates.
+     */
+    public static AtlasSpriteProvider fromDefaults() {
+        return new AtlasSpriteProvider(DEFAULT_ATLAS_IMAGE, DEFAULT_ATLAS_COORDINATES);
+    }
+
+    /**
+     * Creates an {@link AtlasSpriteProvider} from the given classpath resources.
+     *
+     * @param atlasImagePath       classpath path to the packed PNG atlas image
+     * @param coordinatesJsonPath  classpath path to the JSON coordinates file
+     */
+    public AtlasSpriteProvider(String atlasImagePath, String coordinatesJsonPath) {
+        Objects.requireNonNull(atlasImagePath, "atlasImagePath must not be null");
+        Objects.requireNonNull(coordinatesJsonPath, "coordinatesJsonPath must not be null");
+
+        this.atlas = loadAtlas(atlasImagePath);
+        this.coordinates = loadCoordinates(coordinatesJsonPath);
+    }
+
+    private static BufferedImage loadAtlas(String path) {
+        ClassLoader cl = Thread.currentThread().getContextClassLoader();
+        try (InputStream is = cl.getResourceAsStream(path)) {
+            if (is == null) {
+                throw new IllegalArgumentException("Atlas image not found on classpath: " + path);
+            }
+            return ImageIO.read(is);
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to read atlas image: " + path, e);
+        }
+    }
+
+    private static Map<String, ImageCoordinates> loadCoordinates(String path) {
+        ClassLoader cl = Thread.currentThread().getContextClassLoader();
+        try (InputStream is = cl.getResourceAsStream(path)) {
+            if (is == null) {
+                throw new IllegalArgumentException("Atlas coordinates not found on classpath: " + path);
+            }
+            try (Reader reader = new InputStreamReader(is, StandardCharsets.UTF_8)) {
+                ImageCoordinates[] entries = GSON.fromJson(reader, ImageCoordinates[].class);
+                return Arrays.stream(entries)
+                        .collect(Collectors.toMap(ImageCoordinates::name, c -> c));
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to read atlas coordinates: " + path, e);
+        }
+    }
+
+    @Override
+    public Optional<BufferedImage> getSprite(String textureId) {
+        Objects.requireNonNull(textureId, "textureId must not be null");
+        ImageCoordinates coord = coordinates.get(textureId);
+        if (coord == null) {
+            return Optional.empty();
+        }
+        return Optional.of(cache.computeIfAbsent(textureId, id -> extractSprite(coord)));
+    }
+
+    @Override
+    public Collection<String> availableSprites() {
+        return List.copyOf(coordinates.keySet());
+    }
+
+    @Override
+    public Optional<BufferedImage> search(String query) {
+        Objects.requireNonNull(query, "query must not be null");
+        return coordinates.keySet().stream()
+                .filter(name -> name.contains(query))
+                .findFirst()
+                .flatMap(this::getSprite);
+    }
+
+    private BufferedImage extractSprite(ImageCoordinates coord) {
+        return atlas.getSubimage(coord.x(), coord.y(), coord.size(), coord.size());
+    }
+}
