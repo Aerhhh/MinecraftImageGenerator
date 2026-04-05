@@ -14,14 +14,17 @@ import java.util.Objects;
  * according to the specified {@link Layout} and padding. Sub-requests may themselves be
  * {@code CompositeRequest}s, enabling naturally recursive composition.
  *
- * @param requests the sub-requests to render and compose; must not be {@code null} or empty
- * @param layout   whether to stack images vertically or side by side horizontally
- * @param padding  pixel gap between adjacent results (and around the outer edge)
+ * @param requests  the sub-requests to render and compose; must not be {@code null} or empty
+ * @param layout    whether to stack images vertically or side by side horizontally
+ * @param padding   pixel gap between adjacent results (and around the outer edge)
+ * @param autoScale when {@code true}, all sub-results are scaled so their heights match the tallest
+ *                  component before compositing
  */
 public record CompositeRequest(
         List<RenderRequest> requests,
         Layout layout,
-        int padding
+        int padding,
+        boolean autoScale
 ) implements RenderRequest {
 
     /**
@@ -48,6 +51,17 @@ public record CompositeRequest(
     }
 
     /**
+     * Convenience constructor without {@code autoScale} (defaults to {@code false}).
+     *
+     * @param requests the sub-requests
+     * @param layout   the layout direction
+     * @param padding  pixel gap between results
+     */
+    public CompositeRequest(List<RenderRequest> requests, Layout layout, int padding) {
+        this(requests, layout, padding, false);
+    }
+
+    /**
      * Returns a builder with default values (VERTICAL layout, 4px padding).
      *
      * @return a new builder
@@ -64,6 +78,7 @@ public record CompositeRequest(
         private final List<RenderRequest> requests = new ArrayList<>();
         private Layout layout = Layout.VERTICAL;
         private int padding = 4;
+        private boolean autoScale = false;
 
         private Builder() {
         }
@@ -134,12 +149,24 @@ public record CompositeRequest(
         }
 
         /**
+         * Sets whether sub-results should be automatically scaled so their heights all match
+         * the tallest component before compositing.
+         *
+         * @param val {@code true} to enable auto-scaling
+         * @return this builder for chaining
+         */
+        public Builder autoScale(boolean val) {
+            this.autoScale = val;
+            return this;
+        }
+
+        /**
          * Builds the {@link CompositeRequest}.
          *
          * @return a new request
          */
         public CompositeRequest build() {
-            return new CompositeRequest(requests, layout, padding);
+            return new CompositeRequest(requests, layout, padding, autoScale);
         }
     }
 }

@@ -9,6 +9,7 @@ import net.aerh.jigsaw.api.nbt.ParsedItem;
 import net.aerh.jigsaw.api.sprite.SpriteProvider;
 import net.aerh.jigsaw.core.engine.DefaultEngine;
 import net.aerh.jigsaw.core.generator.ItemRequest;
+import net.aerh.jigsaw.core.overlay.OverlayColorProvider;
 import net.aerh.jigsaw.exception.ParseException;
 import net.aerh.jigsaw.exception.RenderException;
 
@@ -79,6 +80,14 @@ public interface Engine {
      * @return the sprite provider
      */
     SpriteProvider sprites();
+
+    /**
+     * Returns the overlay color provider, which exposes named color options from all overlay
+     * categories for use in autocomplete and color resolution.
+     *
+     * @return the {@link OverlayColorProvider}
+     */
+    OverlayColorProvider overlayColors();
 
     /**
      * Convenience method that renders an item by ID using the default context.

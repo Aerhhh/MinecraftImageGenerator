@@ -33,6 +33,7 @@ import net.aerh.jigsaw.core.nbt.handler.ComponentsNbtFormatHandler;
 import net.aerh.jigsaw.core.nbt.handler.DefaultNbtFormatHandler;
 import net.aerh.jigsaw.core.nbt.handler.PostFlatteningNbtFormatHandler;
 import net.aerh.jigsaw.core.nbt.handler.PreFlatteningNbtFormatHandler;
+import net.aerh.jigsaw.core.overlay.OverlayColorProvider;
 import net.aerh.jigsaw.core.overlay.OverlayRegistry;
 import net.aerh.jigsaw.core.sprite.AtlasSpriteProvider;
 import net.aerh.jigsaw.exception.ParseException;
@@ -65,6 +66,7 @@ public final class DefaultEngine implements Engine {
     private final PlayerHeadGenerator playerHeadGenerator;
     private final NbtParser nbtParser;
     private final Map<String, DataRegistry<?>> registries;
+    private final OverlayColorProvider overlayColorProvider;
 
     private DefaultEngine(
             SpriteProvider spriteProvider,
@@ -73,7 +75,8 @@ public final class DefaultEngine implements Engine {
             InventoryGenerator inventoryGenerator,
             PlayerHeadGenerator playerHeadGenerator,
             NbtParser nbtParser,
-            Map<String, DataRegistry<?>> registries
+            Map<String, DataRegistry<?>> registries,
+            OverlayColorProvider overlayColorProvider
     ) {
         this.spriteProvider = spriteProvider;
         this.itemGenerator = itemGenerator;
@@ -82,6 +85,7 @@ public final class DefaultEngine implements Engine {
         this.playerHeadGenerator = playerHeadGenerator;
         this.nbtParser = nbtParser;
         this.registries = Map.copyOf(registries);
+        this.overlayColorProvider = overlayColorProvider;
     }
 
     /**
@@ -208,6 +212,16 @@ public final class DefaultEngine implements Engine {
     }
 
     /**
+     * Returns the overlay color provider for autocomplete and color resolution.
+     *
+     * @return the {@link OverlayColorProvider}
+     */
+    @Override
+    public OverlayColorProvider overlayColors() {
+        return overlayColorProvider;
+    }
+
+    /**
      * Renders a composite request by dispatching each sub-request recursively and
      * composing the results.
      */
@@ -217,7 +231,7 @@ public final class DefaultEngine implements Engine {
         for (RenderRequest sub : request.requests()) {
             results.add(render(sub, context));
         }
-        return ResultComposer.compose(results, request.layout(), request.padding());
+        return ResultComposer.compose(results, request.layout(), request.padding(), request.autoScale());
     }
 
     // -------------------------------------------------------------------------
@@ -355,6 +369,9 @@ public final class DefaultEngine implements Engine {
             }
             NbtParser nbtParser = buildNbtParser(handlers);
 
+            // Overlay color provider
+            OverlayColorProvider overlayColorProvider = OverlayColorProvider.fromDefaults();
+
             // Generators
             ItemGenerator itemGenerator = new ItemGenerator(spriteProvider, effectPipeline);
             TooltipGenerator tooltipGenerator = new TooltipGenerator();
@@ -368,7 +385,8 @@ public final class DefaultEngine implements Engine {
                     inventoryGenerator,
                     playerHeadGenerator,
                     nbtParser,
-                    registries
+                    registries,
+                    overlayColorProvider
             );
         }
 

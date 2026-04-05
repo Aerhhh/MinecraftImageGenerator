@@ -84,12 +84,13 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
         Objects.requireNonNull(input, "input must not be null");
         Objects.requireNonNull(context, "context must not be null");
 
-        // Determine sprite size from the first available sprite (or default 16x16)
-        int spriteSize = detectSpriteSize();
-        int slotSize = spriteSize + SLOT_PADDING * 2;
+        // Determine sprite size from the first available sprite (or default 16x16), then apply scale
+        int baseSprite = detectSpriteSize();
+        int spriteSize = baseSprite * input.scale();
+        int slotSize = spriteSize + SLOT_PADDING * 2 * input.scale();
 
-        int titleHeight = input.drawTitle() ? TITLE_HEIGHT : 0;
-        int border = input.drawBorder() ? BORDER_THICKNESS : 0;
+        int titleHeight = input.drawTitle() ? TITLE_HEIGHT * input.scale() : 0;
+        int border = input.drawBorder() ? BORDER_THICKNESS * input.scale() : 0;
 
         int contentWidth = input.slotsPerRow() * slotSize;
         int contentHeight = input.rows() * slotSize;
@@ -113,7 +114,7 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
 
         // Title
         if (input.drawTitle() && !input.title().isBlank()) {
-            drawTitle(g, input.title(), border, border, imageWidth - border * 2);
+            drawTitle(g, input.title(), border, border, imageWidth - border * 2, input.scale());
         }
 
         // Slot backgrounds
@@ -141,8 +142,9 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
                 continue; // Slot out of range
             }
 
-            int sx = slotsOriginX + col * slotSize + SLOT_PADDING;
-            int sy = slotsOriginY + row * slotSize + SLOT_PADDING;
+            int scaledPadding = SLOT_PADDING * input.scale();
+            int sx = slotsOriginX + col * slotSize + scaledPadding;
+            int sy = slotsOriginY + row * slotSize + scaledPadding;
 
             spriteProvider.getSprite(item.itemId()).ifPresent(sprite -> {
                 g.drawImage(sprite, sx, sy, spriteSize, spriteSize, null);
@@ -156,14 +158,15 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
         }
 
         // Draw stack counts
-        Font stackFont = new Font(Font.MONOSPACED, Font.PLAIN, Math.max(6, spriteSize / 2));
+        Font stackFont = new Font(Font.MONOSPACED, Font.PLAIN, Math.max(6, baseSprite / 2 * input.scale()));
         g.setFont(stackFont);
 
+        int scaledSlotPadding = SLOT_PADDING * input.scale();
         for (PlacedItem pi : placed) {
             if (pi.item().stackCount() > 1) {
                 String label = String.valueOf(pi.item().stackCount());
-                int textX = pi.slotX() + pi.slotSize() - SLOT_PADDING - label.length() * (stackFont.getSize() / 2);
-                int textY = pi.slotY() + pi.slotSize() - SLOT_PADDING;
+                int textX = pi.slotX() + pi.slotSize() - scaledSlotPadding - label.length() * (stackFont.getSize() / 2);
+                int textY = pi.slotY() + pi.slotSize() - scaledSlotPadding;
 
                 // Shadow
                 g.setColor(STACK_COUNT_SHADOW);
@@ -274,11 +277,11 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
         g.fillRect(x + 1, y + 1, size - 2, size - 2);
     }
 
-    private static void drawTitle(Graphics2D g, String title, int x, int y, int width) {
+    private static void drawTitle(Graphics2D g, String title, int x, int y, int width, int scale) {
         g.setColor(new Color(64, 64, 64));
-        Font titleFont = new Font(Font.SANS_SERIF, Font.PLAIN, 9);
+        Font titleFont = new Font(Font.SANS_SERIF, Font.PLAIN, 9 * scale);
         g.setFont(titleFont);
-        g.drawString(title, x + 4, y + TITLE_HEIGHT - 4);
+        g.drawString(title, x + 4 * scale, y + TITLE_HEIGHT * scale - 4 * scale);
     }
 
     /** Internal record bundling a placed item with its draw coordinates. */

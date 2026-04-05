@@ -16,6 +16,7 @@ import java.util.Objects;
  * @param drawBorder      whether to draw the Minecraft-style outer/inner border
  * @param drawBackground  whether to fill the background gray
  * @param items           list of items to place in the inventory
+ * @param scale           integer scale multiplier applied to all slot sizes and borders; must be in {@code [1, 64]}
  */
 public record InventoryRequest(
         int rows,
@@ -24,7 +25,8 @@ public record InventoryRequest(
         boolean drawTitle,
         boolean drawBorder,
         boolean drawBackground,
-        List<InventoryItem> items
+        List<InventoryItem> items,
+        int scale
 ) implements RenderRequest {
 
     public InventoryRequest {
@@ -35,6 +37,12 @@ public record InventoryRequest(
         }
         if (slotsPerRow < 1) {
             throw new IllegalArgumentException("slotsPerRow must be >= 1, got: " + slotsPerRow);
+        }
+        if (scale < 1) {
+            throw new IllegalArgumentException("scale must be >= 1, got: " + scale);
+        }
+        if (scale > 64) {
+            throw new IllegalArgumentException("scale must be <= 64, got: " + scale);
         }
         items = List.copyOf(items);
     }
@@ -56,6 +64,7 @@ public record InventoryRequest(
         private boolean drawBorder = true;
         private boolean drawBackground = true;
         private final List<InventoryItem> items = new ArrayList<>();
+        private int scale = 1;
 
         private Builder() {}
 
@@ -172,12 +181,24 @@ public record InventoryRequest(
         }
 
         /**
+         * Sets the integer scale multiplier applied to all slot sizes, borders, and text.
+         * Values are clamped to {@code [1, 64]}.
+         *
+         * @param val the scale factor
+         * @return this builder for chaining
+         */
+        public Builder scale(int val) {
+            this.scale = Math.max(1, Math.min(64, val));
+            return this;
+        }
+
+        /**
          * Builds the {@link InventoryRequest}.
          *
          * @return a new request
          */
         public InventoryRequest build() {
-            return new InventoryRequest(rows, slotsPerRow, title, drawTitle, drawBorder, drawBackground, items);
+            return new InventoryRequest(rows, slotsPerRow, title, drawTitle, drawBorder, drawBackground, items, scale);
         }
     }
 }

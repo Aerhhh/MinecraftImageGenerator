@@ -79,20 +79,20 @@ class ItemGeneratorTest {
                 });
     }
 
-    // --- bigImage upscaling ---
+    // --- scale upscaling ---
 
     @Test
-    void render_bigImageUpscalesByFactorOfTen() throws RenderException {
+    void render_scaleUpscalesByGivenFactor() throws RenderException {
         ItemRequest normal = ItemRequest.builder().itemId("diamond_sword").build();
-        ItemRequest big = ItemRequest.builder().itemId("diamond_sword").bigImage(true).build();
+        ItemRequest scaled = ItemRequest.builder().itemId("diamond_sword").scale(10).build();
 
         GeneratorResult normalResult = generator.render(normal, GenerationContext.defaults());
-        GeneratorResult bigResult = generator.render(big, GenerationContext.defaults());
+        GeneratorResult scaledResult = generator.render(scaled, GenerationContext.defaults());
 
         int normalW = normalResult.firstFrame().getWidth();
-        int bigW = bigResult.firstFrame().getWidth();
+        int scaledW = scaledResult.firstFrame().getWidth();
 
-        assertThat(bigW).isEqualTo(normalW * 10);
+        assertThat(scaledW).isEqualTo(normalW * 10);
     }
 
     // --- Effect pipeline execution ---

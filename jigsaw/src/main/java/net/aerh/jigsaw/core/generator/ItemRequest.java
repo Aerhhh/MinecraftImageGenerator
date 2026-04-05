@@ -1,6 +1,7 @@
 package net.aerh.jigsaw.core.generator;
 
 import net.aerh.jigsaw.api.generator.RenderRequest;
+import net.aerh.jigsaw.api.text.ChatColor;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -11,7 +12,7 @@ import java.util.Optional;
  * @param itemId            the Minecraft item ID (e.g. {@code "diamond_sword"})
  * @param enchanted         whether to apply the enchantment glint effect
  * @param hovered           whether to apply the hover highlight effect
- * @param bigImage          whether to upscale the image (10x)
+ * @param scale             integer scale multiplier applied to the item texture; must be in {@code [1, 64]}
  * @param durabilityPercent optional durability fraction in {@code [0.0, 1.0]}
  * @param dyeColor          optional packed RGB dye color for leather armor
  */
@@ -19,7 +20,7 @@ public record ItemRequest(
         String itemId,
         boolean enchanted,
         boolean hovered,
-        boolean bigImage,
+        int scale,
         Optional<Double> durabilityPercent,
         Optional<Integer> dyeColor
 ) implements RenderRequest {
@@ -28,6 +29,12 @@ public record ItemRequest(
         Objects.requireNonNull(itemId, "itemId must not be null");
         Objects.requireNonNull(durabilityPercent, "durabilityPercent must not be null");
         Objects.requireNonNull(dyeColor, "dyeColor must not be null");
+        if (scale < 1) {
+            throw new IllegalArgumentException("scale must be >= 1, got: " + scale);
+        }
+        if (scale > 64) {
+            throw new IllegalArgumentException("scale must be <= 64, got: " + scale);
+        }
     }
 
     /**
@@ -46,7 +53,7 @@ public record ItemRequest(
         private String itemId;
         private boolean enchanted = false;
         private boolean hovered = false;
-        private boolean bigImage = false;
+        private int scale = 1;
         private Optional<Double> durabilityPercent = Optional.empty();
         private Optional<Integer> dyeColor = Optional.empty();
 
@@ -89,13 +96,14 @@ public record ItemRequest(
         }
 
         /**
-         * Sets whether to upscale the image by 10x.
+         * Sets the integer scale multiplier applied to the item texture.
+         * Values are clamped to {@code [1, 64]}.
          *
-         * @param val {@code true} to upscale
+         * @param val the scale factor; must be in {@code [1, 64]}
          * @return this builder for chaining
          */
-        public Builder bigImage(boolean val) {
-            this.bigImage = val;
+        public Builder scale(int val) {
+            this.scale = Math.max(1, Math.min(64, val));
             return this;
         }
 
@@ -122,6 +130,23 @@ public record ItemRequest(
         }
 
         /**
+         * Sets the dye color from a named Minecraft color or a hex string.
+         *
+         * <p>If {@code nameOrHex} starts with {@code #}, it is parsed as a 6-digit hex RGB value
+         * (e.g. {@code "#FF0000"} for red). Otherwise it is looked up case-insensitively against
+         * the {@link ChatColor} enum names (e.g. {@code "red"}, {@code "dark_blue"}).
+         *
+         * @param nameOrHex the color name or hex string; must not be {@code null}
+         * @return this builder for chaining
+         * @throws IllegalArgumentException if the name is not recognized or the hex string is malformed
+         */
+        public Builder color(String nameOrHex) {
+            this.dyeColor = Optional.of(resolveColor(
+                    Objects.requireNonNull(nameOrHex, "nameOrHex must not be null")));
+            return this;
+        }
+
+        /**
          * Builds the {@link ItemRequest}.
          *
          * @return a new request
@@ -129,7 +154,29 @@ public record ItemRequest(
          */
         public ItemRequest build() {
             Objects.requireNonNull(itemId, "itemId must not be null");
-            return new ItemRequest(itemId, enchanted, hovered, bigImage, durabilityPercent, dyeColor);
+            return new ItemRequest(itemId, enchanted, hovered, scale, durabilityPercent, dyeColor);
+        }
+
+        /**
+         * Resolves a color name or hex string to a packed RGB integer.
+         *
+         * @param nameOrHex the color name or hex string
+         * @return the packed RGB integer (no alpha component)
+         * @throws IllegalArgumentException if the value cannot be resolved
+         */
+        private static int resolveColor(String nameOrHex) {
+            if (nameOrHex.startsWith("#")) {
+                try {
+                    return Integer.parseInt(nameOrHex.substring(1), 16);
+                } catch (NumberFormatException e) {
+                    throw new IllegalArgumentException("Invalid hex color: " + nameOrHex, e);
+                }
+            }
+            ChatColor color = ChatColor.byName(nameOrHex);
+            if (color != null) {
+                return color.color().getRGB() & 0xFFFFFF;
+            }
+            throw new IllegalArgumentException("Unknown color: " + nameOrHex);
         }
     }
 }

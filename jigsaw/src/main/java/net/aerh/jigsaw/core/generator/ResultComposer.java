@@ -1,6 +1,7 @@
 package net.aerh.jigsaw.core.generator;
 
 import net.aerh.jigsaw.api.generator.GeneratorResult;
+import net.hypixel.nerdbot.marmalade.image.ImageUtil;
 
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
@@ -36,28 +37,92 @@ public final class ResultComposer {
      *
      * <p>Returns a minimal 1x1 transparent image if the result list is empty.
      *
-     * @param results  the results to compose; must not be {@code null}
-     * @param layout   the layout direction; must not be {@code null}
-     * @param padding  the pixel gap between adjacent results; must be {@code >= 0}
+     * @param results   the results to compose; must not be {@code null}
+     * @param layout    the layout direction; must not be {@code null}
+     * @param padding   the pixel gap between adjacent results; must be {@code >= 0}
      * @return a composed static or animated image
      */
     public static GeneratorResult compose(
             List<GeneratorResult> results,
             CompositeRequest.Layout layout,
             int padding) {
+        return compose(results, layout, padding, false);
+    }
+
+    /**
+     * Composes the given results into a single {@link GeneratorResult}.
+     *
+     * <p>Returns a minimal 1x1 transparent image if the result list is empty.
+     *
+     * <p>When {@code autoScale} is {@code true}, each sub-result is scaled so that all heights
+     * match the tallest component before compositing (nearest-neighbor interpolation is used).
+     *
+     * @param results   the results to compose; must not be {@code null}
+     * @param layout    the layout direction; must not be {@code null}
+     * @param padding   the pixel gap between adjacent results; must be {@code >= 0}
+     * @param autoScale when {@code true}, scale all sub-results to match the tallest height
+     * @return a composed static or animated image
+     */
+    public static GeneratorResult compose(
+            List<GeneratorResult> results,
+            CompositeRequest.Layout layout,
+            int padding,
+            boolean autoScale) {
 
         if (results.isEmpty()) {
             BufferedImage empty = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
             return new GeneratorResult.StaticImage(empty);
         }
 
+        List<GeneratorResult> effective = autoScale ? autoScaleToTallest(results) : results;
         boolean isVertical = layout == CompositeRequest.Layout.VERTICAL;
-        boolean anyAnimated = results.stream().anyMatch(GeneratorResult::isAnimated);
+        boolean anyAnimated = effective.stream().anyMatch(GeneratorResult::isAnimated);
 
         if (anyAnimated) {
-            return composeAnimated(results, isVertical, padding);
+            return composeAnimated(effective, isVertical, padding);
         }
-        return composeStatic(results, isVertical, padding);
+        return composeStatic(effective, isVertical, padding);
+    }
+
+    /**
+     * Scales all results so their heights match the tallest result.
+     * Each result is scaled proportionally (preserving aspect ratio by matching height).
+     */
+    private static List<GeneratorResult> autoScaleToTallest(List<GeneratorResult> results) {
+        int maxHeight = results.stream()
+                .mapToInt(r -> r.firstFrame().getHeight())
+                .max()
+                .orElse(0);
+
+        if (maxHeight == 0) {
+            return results;
+        }
+
+        List<GeneratorResult> scaled = new ArrayList<>(results.size());
+        for (GeneratorResult result : results) {
+            int h = result.firstFrame().getHeight();
+            if (h == maxHeight || h == 0) {
+                scaled.add(result);
+            } else {
+                double factor = (double) maxHeight / h;
+                scaled.add(scaleResult(result, factor));
+            }
+        }
+        return scaled;
+    }
+
+    /**
+     * Scales a {@link GeneratorResult} by the given factor (nearest-neighbor interpolation).
+     */
+    private static GeneratorResult scaleResult(GeneratorResult result, double factor) {
+        if (result instanceof GeneratorResult.AnimatedImage anim) {
+            List<BufferedImage> frames = new ArrayList<>(anim.frames().size());
+            for (BufferedImage frame : anim.frames()) {
+                frames.add(ImageUtil.upscaleImage(frame, factor));
+            }
+            return new GeneratorResult.AnimatedImage(frames, anim.frameDelayMs());
+        }
+        return new GeneratorResult.StaticImage(ImageUtil.upscaleImage(result.firstFrame(), factor));
     }
 
     private static GeneratorResult composeStatic(

@@ -22,14 +22,14 @@ import java.util.Objects;
  * <ol>
  *   <li>Load the sprite from the {@link SpriteProvider}; throw {@link RenderException} wrapping
  *       {@link UnknownItemException} if the sprite is not found.</li>
- *   <li>If {@link ItemRequest#bigImage()} is set, upscale 10x via {@link ImageUtil#upscaleImage}.</li>
+ *   <li>If {@link ItemRequest#scale()} is greater than 1, upscale the texture by that factor
+ *       via {@link ImageUtil#upscaleImage}.</li>
  *   <li>Build an {@link EffectContext} from the request and run the {@link EffectPipeline}.</li>
  *   <li>Convert the resulting {@link EffectContext} to a {@link GeneratorResult}.</li>
  * </ol>
  */
 public final class ItemGenerator implements Generator<ItemRequest, GeneratorResult> {
 
-    private static final double BIG_IMAGE_SCALE = 10.0;
     private static final String DURABILITY_META_KEY = MetadataKeys.DURABILITY_PERCENT;
 
     private final SpriteProvider spriteProvider;
@@ -71,8 +71,8 @@ public final class ItemGenerator implements Generator<ItemRequest, GeneratorResu
                     );
                 });
 
-        if (input.bigImage()) {
-            sprite = ImageUtil.upscaleImage(sprite, BIG_IMAGE_SCALE);
+        if (input.scale() > 1) {
+            sprite = ImageUtil.upscaleImage(sprite, input.scale());
         }
 
         EffectContext.Builder ctxBuilder = EffectContext.builder()
