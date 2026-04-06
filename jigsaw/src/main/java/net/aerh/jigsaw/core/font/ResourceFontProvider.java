@@ -64,14 +64,14 @@ public class ResourceFontProvider implements FontProvider {
         try (InputStream is = cl.getResourceAsStream(resourcePath)) {
             if (is == null) {
                 log.warn("Font resource not found: {}; falling back to monospaced font", resourcePath);
-                return new Font(Font.MONOSPACED, Font.PLAIN, (int) fontSize);
+                return new Font(Font.MONOSPACED, Font.PLAIN, 1).deriveFont(fontSize);
             }
             Font loaded = Font.createFont(Font.TRUETYPE_FONT, is).deriveFont(fontSize);
             log.debug("Loaded font from: {} at size {}", resourcePath, fontSize);
             return loaded;
         } catch (Exception e) {
             log.warn("Failed to load font from: {}; falling back to monospaced font", resourcePath, e);
-            return new Font(Font.MONOSPACED, Font.PLAIN, (int) fontSize);
+            return new Font(Font.MONOSPACED, Font.PLAIN, 1).deriveFont(fontSize);
         }
     }
 

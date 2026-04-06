@@ -203,10 +203,14 @@ public final class ResultComposer {
         int cursor = 0;
         for (BufferedImage img : images) {
             if (vertical) {
-                g.drawImage(img, OUTER_BORDER, OUTER_BORDER + cursor, null);
+                // Center horizontally within the total width
+                int xOffset = (totalW - img.getWidth()) / 2;
+                g.drawImage(img, OUTER_BORDER + xOffset, OUTER_BORDER + cursor, null);
                 cursor += img.getHeight() + padding;
             } else {
-                g.drawImage(img, OUTER_BORDER + cursor, OUTER_BORDER, null);
+                // Center vertically within the total height
+                int yOffset = (totalH - img.getHeight()) / 2;
+                g.drawImage(img, OUTER_BORDER + cursor, OUTER_BORDER + yOffset, null);
                 cursor += img.getWidth() + padding;
             }
         }

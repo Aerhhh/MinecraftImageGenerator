@@ -62,7 +62,7 @@ public record CompositeRequest(
     }
 
     /**
-     * Returns a builder with default values (VERTICAL layout, 4px padding).
+     * Returns a builder with default values (HORIZONTAL layout, 4px padding).
      *
      * @return a new builder
      */
@@ -76,7 +76,7 @@ public record CompositeRequest(
     public static final class Builder {
 
         private final List<RenderRequest> requests = new ArrayList<>();
-        private Layout layout = Layout.VERTICAL;
+        private Layout layout = Layout.HORIZONTAL;
         private int padding = 4;
         private boolean autoScale = false;
 
