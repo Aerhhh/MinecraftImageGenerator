@@ -3,6 +3,7 @@ package net.aerh.jigsaw.api;
 import net.aerh.jigsaw.api.effect.ImageEffect;
 import net.aerh.jigsaw.api.font.FontProvider;
 import net.aerh.jigsaw.api.overlay.OverlayRenderer;
+import net.aerh.jigsaw.api.sprite.SpriteProvider;
 import net.aerh.jigsaw.spi.NbtFormatHandler;
 
 /**
@@ -54,6 +55,15 @@ public interface EngineBuilder {
      * @return this builder
      */
     EngineBuilder fontProvider(FontProvider provider);
+
+    /**
+     * Sets a custom {@link SpriteProvider} to use for loading item and block textures.
+     * If not called, the engine defaults to the built-in texture atlas.
+     *
+     * @param provider the sprite provider; must not be {@code null}
+     * @return this builder
+     */
+    EngineBuilder spriteProvider(SpriteProvider provider);
 
     /**
      * Builds and returns the configured {@link Engine}.

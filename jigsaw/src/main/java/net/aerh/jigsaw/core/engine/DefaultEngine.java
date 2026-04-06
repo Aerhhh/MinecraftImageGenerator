@@ -269,6 +269,7 @@ public final class DefaultEngine implements Engine {
         private final List<NbtFormatHandler> nbtHandlers = new ArrayList<>();
         private final List<OverlayRenderer> overlayRenderers = new ArrayList<>();
         private final List<FontProvider> fontProviders = new ArrayList<>();
+        private SpriteProvider customSpriteProvider;
 
         /** Creates a new builder with all defaults enabled. */
         public Builder() {
@@ -337,6 +338,19 @@ public final class DefaultEngine implements Engine {
         }
 
         /**
+         * Sets a custom {@link SpriteProvider} for loading item and block textures.
+         * If not called, the engine defaults to the built-in atlas.
+         *
+         * @param provider the sprite provider; must not be {@code null}
+         * @return this builder for chaining
+         */
+        @Override
+        public Builder spriteProvider(SpriteProvider provider) {
+            this.customSpriteProvider = Objects.requireNonNull(provider, "provider must not be null");
+            return this;
+        }
+
+        /**
          * Builds and returns the configured {@link Engine}.
          *
          * @return a fully initialized engine
@@ -345,7 +359,9 @@ public final class DefaultEngine implements Engine {
         @Override
         public Engine build() {
             // Sprite provider
-            SpriteProvider spriteProvider = useDefaults ? AtlasSpriteProvider.fromDefaults() : null;
+            SpriteProvider spriteProvider = customSpriteProvider != null
+                    ? customSpriteProvider
+                    : (useDefaults ? AtlasSpriteProvider.fromDefaults() : null);
             Objects.requireNonNull(spriteProvider, "A SpriteProvider is required. Use defaults or provide one.");
 
             // Effect pipeline
