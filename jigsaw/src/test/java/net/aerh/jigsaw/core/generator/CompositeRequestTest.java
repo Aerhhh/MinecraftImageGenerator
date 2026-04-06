@@ -65,5 +65,32 @@ class CompositeRequestTest {
         assertThat(inherited.scaleFactor()).isEqualTo(8);
     }
 
+    @Test
+    void withInheritedScale_nestedComposite_propagates() {
+        CompositeRequest inner = CompositeRequest.builder()
+                .add(new StubRequest())
+                .build();
+
+        CompositeRequest outer = CompositeRequest.builder()
+                .scaleFactor(4)
+                .add(inner)
+                .build();
+
+        // Simulate what DefaultEngine does
+        CompositeRequest propagated = (CompositeRequest) inner.withInheritedScale(outer.scaleFactor());
+        assertThat(propagated.scaleFactor()).isEqualTo(4);
+    }
+
+    @Test
+    void withInheritedScale_nestedComposite_explicitScalePreserved() {
+        CompositeRequest inner = CompositeRequest.builder()
+                .scaleFactor(8)
+                .add(new StubRequest())
+                .build();
+
+        CompositeRequest propagated = (CompositeRequest) inner.withInheritedScale(4);
+        assertThat(propagated.scaleFactor()).isEqualTo(8);
+    }
+
     record StubRequest() implements net.aerh.jigsaw.api.generator.RenderRequest {}
 }
