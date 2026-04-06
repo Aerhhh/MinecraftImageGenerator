@@ -244,6 +244,7 @@ public final class SkyBlockTooltipBuilder {
         private int maxLineLength = TooltipRequest.DEFAULT_MAX_LINE_LENGTH;
         private boolean centered = false;
         private boolean renderBorder = true;
+        private boolean bypassMaxLineLength = false;
         private transient int scaleFactor = 1;
 
         private Builder() {}
@@ -362,6 +363,18 @@ public final class SkyBlockTooltipBuilder {
         }
 
         /**
+         * Sets whether to bypass the maximum line length for text wrapping.
+         * When true, lines are only split on explicit newlines, not wrapped by width.
+         *
+         * @param bypassMaxLineLength true to disable width-based wrapping
+         * @return this builder
+         */
+        public Builder bypassMaxLineLength(boolean bypassMaxLineLength) {
+            this.bypassMaxLineLength = bypassMaxLineLength;
+            return this;
+        }
+
+        /**
          * Sets the integer scale multiplier applied to all pixel coordinates.
          * Values less than 1 are treated as 1.
          *
@@ -434,6 +447,7 @@ public final class SkyBlockTooltipBuilder {
                 .maxLineLength(maxLineLength)
                 .centeredText(centered)
                 .renderBorder(renderBorder)
+                .bypassMaxLineLength(bypassMaxLineLength)
                 .scaleFactor(scaleFactor)
                 .build();
         }
