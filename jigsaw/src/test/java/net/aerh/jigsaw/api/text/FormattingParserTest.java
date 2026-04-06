@@ -2,7 +2,6 @@ package net.aerh.jigsaw.api.text;
 
 import org.junit.jupiter.api.Test;
 
-import java.awt.Color;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -16,7 +15,7 @@ class FormattingParserTest {
 
         assertThat(segments).hasSize(1);
         assertThat(segments.get(0).text()).isEqualTo("Hello");
-        assertThat(segments.get(0).style().color()).isEqualTo(new Color(85, 255, 85)); // GREEN
+        assertThat(segments.get(0).style().color()).isEqualTo(ChatColor.GREEN.color()); // GREEN
     }
 
     // Test 2: Parse ampersand color
@@ -26,7 +25,7 @@ class FormattingParserTest {
 
         assertThat(segments).hasSize(1);
         assertThat(segments.get(0).text()).isEqualTo("Red text");
-        assertThat(segments.get(0).style().color()).isEqualTo(new Color(255, 85, 85)); // RED
+        assertThat(segments.get(0).style().color()).isEqualTo(ChatColor.RED.color()); // RED
     }
 
     // Test 3: Parse bold formatting
@@ -46,9 +45,9 @@ class FormattingParserTest {
 
         assertThat(segments).hasSize(2);
         assertThat(segments.get(0).text()).isEqualTo("Green");
-        assertThat(segments.get(0).style().color()).isEqualTo(new Color(85, 255, 85)); // GREEN
+        assertThat(segments.get(0).style().color()).isEqualTo(ChatColor.GREEN.color()); // GREEN
         assertThat(segments.get(1).text()).isEqualTo("Red");
-        assertThat(segments.get(1).style().color()).isEqualTo(new Color(255, 85, 85)); // RED
+        assertThat(segments.get(1).style().color()).isEqualTo(ChatColor.RED.color()); // RED
     }
 
     // Test 5: Parse reset clears formatting
@@ -59,8 +58,8 @@ class FormattingParserTest {
         assertThat(segments).hasSize(2);
         assertThat(segments.get(0).style().bold()).isTrue();
         assertThat(segments.get(1).style().bold()).isFalse();
-        // After reset, color should be back to default (white)
-        assertThat(segments.get(1).style().color()).isEqualTo(new Color(255, 255, 255));
+        // After reset, color should be back to default (gray)
+        assertThat(segments.get(1).style().color()).isEqualTo(ChatColor.GRAY.color());
     }
 
     // Test 6: stripColors removes all codes
@@ -98,7 +97,7 @@ class FormattingParserTest {
 
         assertThat(segments).hasSize(1);
         assertThat(segments.get(0).text()).isEqualTo("GreenBold");
-        assertThat(segments.get(0).style().color()).isEqualTo(new Color(85, 255, 85)); // GREEN
+        assertThat(segments.get(0).style().color()).isEqualTo(ChatColor.GREEN.color()); // GREEN
         assertThat(segments.get(0).style().bold()).isTrue();
     }
 
@@ -178,7 +177,7 @@ class FormattingParserTest {
 
         assertThat(segments).hasSize(1);
         assertThat(segments.get(0).text()).isEqualTo("Hello");
-        assertThat(segments.get(0).style().color()).isEqualTo(new Color(85, 255, 85));
+        assertThat(segments.get(0).style().color()).isEqualTo(ChatColor.GREEN.color());
     }
 
     @Test
@@ -187,7 +186,7 @@ class FormattingParserTest {
 
         assertThat(segments).hasSize(1);
         assertThat(segments.get(0).text()).isEqualTo("Hello");
-        assertThat(segments.get(0).style().color()).isEqualTo(new Color(85, 255, 85));
+        assertThat(segments.get(0).style().color()).isEqualTo(ChatColor.GREEN.color());
         assertThat(segments.get(0).style().bold()).isTrue();
     }
 
@@ -197,9 +196,9 @@ class FormattingParserTest {
 
         assertThat(segments).hasSize(2);
         assertThat(segments.get(0).text()).isEqualTo("3");
-        assertThat(segments.get(0).style().color()).isEqualTo(new Color(85, 255, 85));
+        assertThat(segments.get(0).style().color()).isEqualTo(ChatColor.GREEN.color());
         assertThat(segments.get(1).text()).isEqualTo("text");
-        assertThat(segments.get(1).style().color()).isEqualTo(new Color(170, 170, 170));
+        assertThat(segments.get(1).style().color()).isEqualTo(ChatColor.GRAY.color());
     }
 
     @Test

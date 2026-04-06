@@ -5,6 +5,7 @@ import net.aerh.jigsaw.api.generator.GenerationContext;
 import net.aerh.jigsaw.api.generator.Generator;
 import net.aerh.jigsaw.api.generator.GeneratorResult;
 import net.aerh.jigsaw.api.sprite.SpriteProvider;
+import net.aerh.jigsaw.api.text.ChatColor;
 import net.aerh.jigsaw.core.effect.EffectPipeline;
 import net.aerh.jigsaw.core.util.GraphicsUtil;
 import net.aerh.jigsaw.exception.RenderException;
@@ -46,7 +47,7 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
     private static final Color SLOT_OUTER_LIGHT = new Color(255, 255, 255);
     private static final Color SLOT_INNER = new Color(139, 139, 139);
 
-    private static final Color STACK_COUNT_COLOR = new Color(255, 255, 255);
+    private static final Color STACK_COUNT_COLOR = ChatColor.WHITE.color();
     private static final Color STACK_COUNT_SHADOW = new Color(63, 63, 63);
 
     private static final int BORDER_THICKNESS = 4;

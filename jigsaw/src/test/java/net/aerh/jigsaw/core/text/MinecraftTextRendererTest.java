@@ -1,6 +1,7 @@
 package net.aerh.jigsaw.core.text;
 
 import net.aerh.jigsaw.api.generator.GeneratorResult;
+import net.aerh.jigsaw.api.text.ChatColor;
 import net.aerh.jigsaw.api.text.TextRenderOptions;
 import net.aerh.jigsaw.api.text.TextSegment;
 import net.aerh.jigsaw.api.text.TextStyle;
@@ -129,7 +130,7 @@ class MinecraftTextRendererTest {
 
     @Test
     void renderLayout_coloredSegment_doesNotThrow() {
-        TextSegment red = colored("Red text", new Color(255, 85, 85));
+        TextSegment red = colored("Red text", ChatColor.RED.color());
         TextLine line = new TextLine(List.of(red), 8);
         TextLayout layout = new TextLayout(List.of(line), 8, 1);
 

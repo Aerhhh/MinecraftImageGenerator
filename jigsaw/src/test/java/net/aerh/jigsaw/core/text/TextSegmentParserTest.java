@@ -1,5 +1,6 @@
 package net.aerh.jigsaw.core.text;
 
+import net.aerh.jigsaw.api.text.ChatColor;
 import net.aerh.jigsaw.api.text.TextSegment;
 import net.aerh.jigsaw.api.text.TextStyle;
 import org.junit.jupiter.api.Test;
@@ -28,7 +29,7 @@ class TextSegmentParserTest {
 
         assertThat(segments).hasSize(1);
         assertThat(segments.get(0).text()).isEqualTo("Green");
-        assertThat(segments.get(0).style().color()).isEqualTo(new Color(85, 255, 85));
+        assertThat(segments.get(0).style().color()).isEqualTo(ChatColor.GREEN.color());
     }
 
     @Test
@@ -72,7 +73,7 @@ class TextSegmentParserTest {
 
         assertThat(segments).hasSize(1);
         assertThat(segments.get(0).text()).isEqualTo("Hi");
-        assertThat(segments.get(0).style().color()).isEqualTo(new Color(255, 85, 85));
+        assertThat(segments.get(0).style().color()).isEqualTo(ChatColor.RED.color());
     }
 
     @Test
@@ -157,7 +158,7 @@ class TextSegmentParserTest {
 
         assertThat(segments).hasSize(2);
         // Child has no explicit color; it should inherit from parent
-        assertThat(segments.get(1).style().color()).isEqualTo(new Color(85, 255, 85));
+        assertThat(segments.get(1).style().color()).isEqualTo(ChatColor.GREEN.color());
     }
 
     @Test
@@ -166,8 +167,8 @@ class TextSegmentParserTest {
         List<TextSegment> segments = TextSegmentParser.parseJson(json);
 
         assertThat(segments).hasSize(2);
-        assertThat(segments.get(0).style().color()).isEqualTo(new Color(85, 255, 85));
-        assertThat(segments.get(1).style().color()).isEqualTo(new Color(255, 85, 85));
+        assertThat(segments.get(0).style().color()).isEqualTo(ChatColor.GREEN.color());
+        assertThat(segments.get(1).style().color()).isEqualTo(ChatColor.RED.color());
     }
 
     @Test
@@ -196,14 +197,14 @@ class TextSegmentParserTest {
     void parseJson_colorName_darkRed_appliesCorrectColor() {
         List<TextSegment> segments = TextSegmentParser.parseJson("{\"text\":\"T\",\"color\":\"dark_red\"}");
 
-        assertThat(segments.get(0).style().color()).isEqualTo(new Color(170, 0, 0));
+        assertThat(segments.get(0).style().color()).isEqualTo(ChatColor.DARK_RED.color());
     }
 
     @Test
     void parseJson_colorName_gold_appliesCorrectColor() {
         List<TextSegment> segments = TextSegmentParser.parseJson("{\"text\":\"T\",\"color\":\"gold\"}");
 
-        assertThat(segments.get(0).style().color()).isEqualTo(new Color(255, 170, 0));
+        assertThat(segments.get(0).style().color()).isEqualTo(ChatColor.GOLD.color());
     }
 
     @Test

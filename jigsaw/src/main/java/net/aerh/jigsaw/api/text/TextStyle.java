@@ -6,7 +6,7 @@ import java.awt.Color;
  * Immutable text rendering style applied to a {@link TextSegment}.
  *
  * <p>Use the {@code with*} copy methods to derive a modified style without altering the original.
- * The shared {@link #DEFAULT} constant represents the baseline white, non-formatted style used
+ * The shared {@link #DEFAULT} constant represents the baseline gray, non-formatted style used
  * before any formatting codes are encountered.
  *
  * @param color         the text color
@@ -30,10 +30,10 @@ public record TextStyle(
 ) {
 
     /**
-     * The default text style: white, {@code minecraft:default} font, no formatting.
+     * The default text style: gray, {@code minecraft:default} font, no formatting.
      */
     public static final TextStyle DEFAULT = new TextStyle(
-            new Color(255, 255, 255),
+            ChatColor.GRAY.color(),
             "minecraft:default",
             false,
             false,
