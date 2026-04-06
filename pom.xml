@@ -11,8 +11,6 @@
     <packaging>pom</packaging>
 
     <modules>
-        <module>generator</module>
-        <module>tooling</module>
         <module>jigsaw</module>
         <module>skyblock</module>
     </modules>
