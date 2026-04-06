@@ -62,6 +62,15 @@ public record TooltipRequest(
         }
     }
 
+    @Override
+    public RenderRequest withInheritedScale(int scaleFactor) {
+        if (this.scaleFactor != 1) {
+            return this;
+        }
+        return new TooltipRequest(lines, alpha, padding, firstLinePadding, maxLineLength,
+                centeredText, renderBorder, scaleFactor, bypassMaxLineLength);
+    }
+
     /**
      * Returns a new {@link Builder} for constructing a {@link TooltipRequest}.
      *
