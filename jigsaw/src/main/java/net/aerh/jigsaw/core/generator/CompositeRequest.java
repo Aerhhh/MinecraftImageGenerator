@@ -14,17 +14,17 @@ import java.util.Objects;
  * according to the specified {@link Layout} and padding. Sub-requests may themselves be
  * {@code CompositeRequest}s, enabling naturally recursive composition.
  *
- * @param requests  the sub-requests to render and compose; must not be {@code null} or empty
- * @param layout    whether to stack images vertically or side by side horizontally
- * @param padding   pixel gap between adjacent results (and around the outer edge)
- * @param autoScale when {@code true}, all sub-results are scaled so their heights match the tallest
- *                  component before compositing
+ * @param requests    the sub-requests to render and compose; must not be {@code null} or empty
+ * @param layout      whether to stack images vertically or side by side horizontally
+ * @param padding     pixel gap between adjacent results (and around the outer edge)
+ * @param scaleFactor pixel scale multiplier applied to all sub-results before compositing;
+ *                    must be in {@code [1, 64]}
  */
 public record CompositeRequest(
         List<RenderRequest> requests,
         Layout layout,
         int padding,
-        boolean autoScale
+        int scaleFactor
 ) implements RenderRequest {
 
     /**
@@ -47,18 +47,38 @@ public record CompositeRequest(
         if (padding < 0) {
             throw new IllegalArgumentException("padding must be >= 0, got: " + padding);
         }
+        if (scaleFactor < 1) {
+            throw new IllegalArgumentException("scaleFactor must be >= 1, got: " + scaleFactor);
+        }
+        if (scaleFactor > 64) {
+            throw new IllegalArgumentException("scaleFactor must be <= 64, got: " + scaleFactor);
+        }
         requests = List.copyOf(requests);
     }
 
     /**
-     * Convenience constructor without {@code autoScale} (defaults to {@code false}).
+     * Convenience constructor without {@code scaleFactor} (defaults to {@code 1}).
      *
      * @param requests the sub-requests
      * @param layout   the layout direction
      * @param padding  pixel gap between results
      */
     public CompositeRequest(List<RenderRequest> requests, Layout layout, int padding) {
-        this(requests, layout, padding, false);
+        this(requests, layout, padding, 1);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>If this request already has an explicit {@code scaleFactor} (i.e. not the default of
+     * {@code 1}), the inherited value is ignored and this request is returned unchanged.
+     */
+    @Override
+    public RenderRequest withInheritedScale(int scaleFactor) {
+        if (this.scaleFactor != 1) {
+            return this;
+        }
+        return new CompositeRequest(requests, layout, padding, scaleFactor);
     }
 
     /**
@@ -78,7 +98,7 @@ public record CompositeRequest(
         private final List<RenderRequest> requests = new ArrayList<>();
         private Layout layout = Layout.HORIZONTAL;
         private int padding = 4;
-        private boolean autoScale = false;
+        private int scaleFactor = 1;
 
         private Builder() {
         }
@@ -149,14 +169,13 @@ public record CompositeRequest(
         }
 
         /**
-         * Sets whether sub-results should be automatically scaled so their heights all match
-         * the tallest component before compositing.
+         * Sets the pixel scale multiplier applied to all sub-results before compositing.
          *
-         * @param val {@code true} to enable auto-scaling
+         * @param val the scale factor; must be in {@code [1, 64]}
          * @return this builder for chaining
          */
-        public Builder autoScale(boolean val) {
-            this.autoScale = val;
+        public Builder scaleFactor(int val) {
+            this.scaleFactor = val;
             return this;
         }
 
@@ -166,7 +185,7 @@ public record CompositeRequest(
          * @return a new request
          */
         public CompositeRequest build() {
-            return new CompositeRequest(requests, layout, padding, autoScale);
+            return new CompositeRequest(requests, layout, padding, scaleFactor);
         }
     }
 }

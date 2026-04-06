@@ -238,7 +238,7 @@ public final class DefaultEngine implements Engine {
         for (RenderRequest sub : request.requests()) {
             results.add(render(sub, context));
         }
-        return ResultComposer.compose(results, request.layout(), request.padding(), request.autoScale());
+        return ResultComposer.compose(results, request.layout(), request.padding(), false); // TODO(Task 7): propagate scaleFactor
     }
 
     // -------------------------------------------------------------------------
