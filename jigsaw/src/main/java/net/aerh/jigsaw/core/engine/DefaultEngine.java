@@ -236,9 +236,10 @@ public final class DefaultEngine implements Engine {
             throws RenderException, ParseException {
         List<GeneratorResult> results = new ArrayList<>();
         for (RenderRequest sub : request.requests()) {
-            results.add(render(sub, context));
+            RenderRequest effective = sub.withInheritedScale(request.scaleFactor());
+            results.add(render(effective, context));
         }
-        return ResultComposer.compose(results, request.layout(), request.padding(), false); // TODO(Task 7): propagate scaleFactor
+        return ResultComposer.compose(results, request.layout(), request.padding());
     }
 
     // -------------------------------------------------------------------------
