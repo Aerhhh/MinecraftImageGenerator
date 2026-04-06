@@ -3,6 +3,7 @@ package net.aerh.jigsaw.core.generator;
 import net.aerh.jigsaw.api.generator.GenerationContext;
 import net.aerh.jigsaw.api.generator.Generator;
 import net.aerh.jigsaw.api.generator.GeneratorResult;
+import net.aerh.jigsaw.api.text.FormattingParser;
 import net.aerh.jigsaw.api.text.TextRenderOptions;
 import net.aerh.jigsaw.core.text.MinecraftTextRenderer;
 import net.aerh.jigsaw.core.text.TextWrapper;
@@ -51,10 +52,11 @@ public final class TooltipGenerator implements Generator<TooltipRequest, Generat
 
         List<String> wrappedLines = new ArrayList<>();
         for (String line : input.lines()) {
+            String resolved = FormattingParser.resolveNamedFormats(line);
             if (input.bypassMaxLineLength()) {
-                wrappedLines.addAll(splitOnNewlines(line));
+                wrappedLines.addAll(splitOnNewlines(resolved));
             } else {
-                wrappedLines.addAll(TextWrapper.wrapString(line, input.maxLineLength()));
+                wrappedLines.addAll(TextWrapper.wrapString(resolved, input.maxLineLength()));
             }
         }
 
