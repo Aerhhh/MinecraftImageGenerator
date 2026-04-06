@@ -3,6 +3,7 @@ package net.aerh.jigsaw.core.generator;
 import net.aerh.jigsaw.api.generator.GenerationContext;
 import net.aerh.jigsaw.api.generator.Generator;
 import net.aerh.jigsaw.api.generator.GeneratorResult;
+import net.aerh.jigsaw.core.util.GraphicsUtil;
 import net.aerh.jigsaw.exception.RenderException;
 import net.hypixel.nerdbot.marmalade.image.ImageUtil;
 
@@ -175,6 +176,7 @@ public final class PlayerHeadGenerator implements Generator<PlayerHeadRequest, G
         // Extract the face base layer
         BufferedImage face = new BufferedImage(FACE_SIZE, FACE_SIZE, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = face.createGraphics();
+        GraphicsUtil.disableAntialiasing(g);
         g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
 
         // Draw face layer

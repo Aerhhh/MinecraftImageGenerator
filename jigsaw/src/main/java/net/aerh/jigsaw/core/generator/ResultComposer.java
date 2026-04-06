@@ -1,6 +1,7 @@
 package net.aerh.jigsaw.core.generator;
 
 import net.aerh.jigsaw.api.generator.GeneratorResult;
+import net.aerh.jigsaw.core.util.GraphicsUtil;
 import net.hypixel.nerdbot.marmalade.image.ImageUtil;
 
 import java.awt.Graphics2D;
@@ -197,6 +198,7 @@ public final class ResultComposer {
                 Math.max(1, canvasW), Math.max(1, canvasH), BufferedImage.TYPE_INT_ARGB);
 
         Graphics2D g = canvas.createGraphics();
+        GraphicsUtil.disableAntialiasing(g);
         g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
                 RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
 

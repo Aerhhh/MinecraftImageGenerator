@@ -4,6 +4,7 @@ import net.aerh.jigsaw.api.generator.GeneratorResult;
 import net.aerh.jigsaw.api.text.TextSegment;
 import net.aerh.jigsaw.api.text.TextRenderOptions;
 import net.aerh.jigsaw.api.text.TextStyle;
+import net.aerh.jigsaw.core.util.GraphicsUtil;
 
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
@@ -105,6 +106,7 @@ public final class ObfuscationAnimator {
                 } else {
                     BufferedImage resized = new BufferedImage(targetWidth, targetHeight, BufferedImage.TYPE_INT_ARGB);
                     Graphics2D g = resized.createGraphics();
+                    GraphicsUtil.disableAntialiasing(g);
                     g.drawImage(frameImage, 0, 0, null);
                     g.dispose();
                     frames.add(resized);

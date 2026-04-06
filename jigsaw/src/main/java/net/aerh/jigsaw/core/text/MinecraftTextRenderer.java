@@ -191,10 +191,18 @@ public final class MinecraftTextRenderer {
         int framesToGenerate = hasObfuscated ? options.animationFrameCount() : 1;
         List<BufferedImage> frames = new ArrayList<>(framesToGenerate);
 
+        int canvasWidth = frameWidth + padding * 2;
+        int canvasHeight = frameHeight + padding * 2;
+
         for (int frameIdx = 0; frameIdx < framesToGenerate; frameIdx++) {
-            BufferedImage frameImage = new BufferedImage(frameWidth, frameHeight, BufferedImage.TYPE_INT_ARGB);
+            BufferedImage frameImage = new BufferedImage(canvasWidth, canvasHeight, BufferedImage.TYPE_INT_ARGB);
             Graphics2D graphics = frameImage.createGraphics();
             GraphicsUtil.disableAntialiasing(graphics);
+
+            // Offset all drawing by the padding amount so the content lands in the padded area
+            if (padding > 0) {
+                graphics.translate(padding, padding);
+            }
 
             // Draw background
             graphics.setColor(new Color(18, 3, 18, hasObfuscated ? 255 : alpha));
@@ -214,11 +222,9 @@ public final class MinecraftTextRenderer {
                 drawBorders(graphics, frameWidth, frameHeight, pixelSize, hasObfuscated ? 255 : alpha);
             }
 
-            // Add padding
-            BufferedImage processedFrame = addPadding(frameImage, padding);
             graphics.dispose();
 
-            frames.add(processedFrame);
+            frames.add(frameImage);
         }
 
         if (hasObfuscated && frames.size() > 1) {
@@ -603,26 +609,6 @@ public final class MinecraftTextRenderer {
         graphics.fillRect(inset, inset + thickness, thickness, verticalHeight);
         // Right edge
         graphics.fillRect(width - inset - thickness, inset + thickness, thickness, verticalHeight);
-    }
-
-    // --- Padding ---
-
-    private static BufferedImage addPadding(BufferedImage frame, int padding) {
-        if (padding <= 0) {
-            return frame;
-        }
-
-        BufferedImage paddedFrame = new BufferedImage(
-            frame.getWidth() + padding * 2,
-            frame.getHeight() + padding * 2,
-            BufferedImage.TYPE_INT_ARGB
-        );
-
-        Graphics2D graphics2D = paddedFrame.createGraphics();
-        graphics2D.drawImage(frame, padding, padding, frame.getWidth(), frame.getHeight(), null);
-        graphics2D.dispose();
-
-        return paddedFrame;
     }
 
     // --- Color resolution ---

@@ -4,6 +4,7 @@ import net.aerh.jigsaw.api.overlay.ColorMode;
 import net.aerh.jigsaw.api.overlay.Overlay;
 import net.aerh.jigsaw.api.overlay.OverlayRenderer;
 import net.aerh.jigsaw.core.util.ColorUtil;
+import net.aerh.jigsaw.core.util.GraphicsUtil;
 
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
@@ -90,6 +91,7 @@ final class NormalOverlayRenderer implements OverlayRenderer {
                                                  int w, int h) {
         BufferedImage result = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = result.createGraphics();
+        GraphicsUtil.disableAntialiasing(g);
         try {
             g.drawImage(finalBase, 0, 0, w, h, null);
             g.drawImage(finalOverlay, 0, 0, w, h, null);

@@ -2,6 +2,7 @@ package net.aerh.jigsaw.core.overlay;
 
 import net.aerh.jigsaw.api.overlay.Overlay;
 import net.aerh.jigsaw.api.overlay.OverlayRenderer;
+import net.aerh.jigsaw.core.util.GraphicsUtil;
 
 import java.awt.AlphaComposite;
 import java.awt.Graphics2D;
@@ -29,6 +30,7 @@ final class MappedOverlayRenderer implements OverlayRenderer {
 
         BufferedImage result = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = result.createGraphics();
+        GraphicsUtil.disableAntialiasing(g);
         try {
             g.setComposite(AlphaComposite.SrcOver);
             g.drawImage(base, 0, 0, null);
