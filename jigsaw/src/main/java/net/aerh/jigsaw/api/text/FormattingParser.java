@@ -2,6 +2,7 @@ package net.aerh.jigsaw.api.text;
 
 import net.aerh.jigsaw.core.font.MinecraftFontId;
 
+import java.awt.Color;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -51,6 +52,34 @@ public final class FormattingParser {
 
             if ((c == '\u00a7' || c == '&') && i + 1 < text.length()) {
                 char code = text.charAt(i + 1);
+
+                // Try &#RRGGBB hex color (8 chars total: & # R R G G B B)
+                if (code == '#' && i + 7 < text.length()) {
+                    Color hexColor = tryParseHex(text, i + 2, 6);
+                    if (hexColor != null) {
+                        if (!currentText.isEmpty()) {
+                            segments.add(new TextSegment(currentText.toString(), currentStyle));
+                            currentText.setLength(0);
+                        }
+                        currentStyle = TextStyle.DEFAULT.withColor(hexColor);
+                        i += 8;
+                        continue;
+                    }
+                }
+
+                // Try §x§R§R§G§G§B§B Spigot hex color (14 chars total)
+                if ((code == 'x' || code == 'X') && i + 13 < text.length()) {
+                    Color hexColor = tryParseSpigotHex(text, i + 2);
+                    if (hexColor != null) {
+                        if (!currentText.isEmpty()) {
+                            segments.add(new TextSegment(currentText.toString(), currentStyle));
+                            currentText.setLength(0);
+                        }
+                        currentStyle = TextStyle.DEFAULT.withColor(hexColor);
+                        i += 14;
+                        continue;
+                    }
+                }
 
                 // Flush current buffer before applying the new style
                 if (!currentText.isEmpty()) {
@@ -111,7 +140,21 @@ public final class FormattingParser {
         while (i < text.length()) {
             char c = text.charAt(i);
             if ((c == '\u00a7' || c == '&') && i + 1 < text.length()) {
-                // Skip both the marker and the code character
+                char code = text.charAt(i + 1);
+
+                // Skip &#RRGGBB hex color (8 chars)
+                if (code == '#' && i + 7 < text.length() && tryParseHex(text, i + 2, 6) != null) {
+                    i += 8;
+                    continue;
+                }
+
+                // Skip §x§R§R§G§G§B§B Spigot hex color (14 chars)
+                if ((code == 'x' || code == 'X') && i + 13 < text.length() && tryParseSpigotHex(text, i + 2) != null) {
+                    i += 14;
+                    continue;
+                }
+
+                // Skip standard 2-char code
                 i += 2;
             } else {
                 result.append(c);
@@ -164,6 +207,51 @@ public final class FormattingParser {
 
         matcher.appendTail(result);
         return result.toString();
+    }
+
+    /**
+     * Attempts to parse {@code count} hex digits starting at {@code offset} in the given string.
+     *
+     * @return the parsed {@link Color}, or {@code null} if any character is not a valid hex digit
+     */
+    private static Color tryParseHex(String text, int offset, int count) {
+        if (offset + count > text.length()) {
+            return null;
+        }
+        for (int j = 0; j < count; j++) {
+            if (Character.digit(text.charAt(offset + j), 16) == -1) {
+                return null;
+            }
+        }
+        int rgb = Integer.parseInt(text.substring(offset, offset + count), 16);
+        return new Color(rgb);
+    }
+
+    /**
+     * Attempts to parse the Spigot hex format: 6 pairs of {@code §R} (or {@code &R}) after
+     * the initial {@code §x}. The 12 characters starting at {@code offset} must each be
+     * a format marker followed by a hex digit.
+     *
+     * @return the parsed {@link Color}, or {@code null} if the format doesn't match
+     */
+    private static Color tryParseSpigotHex(String text, int offset) {
+        if (offset + 12 > text.length()) {
+            return null;
+        }
+        StringBuilder hex = new StringBuilder(6);
+        for (int j = 0; j < 6; j++) {
+            char marker = text.charAt(offset + j * 2);
+            if (marker != '\u00a7' && marker != '&') {
+                return null;
+            }
+            char digit = text.charAt(offset + j * 2 + 1);
+            if (Character.digit(digit, 16) == -1) {
+                return null;
+            }
+            hex.append(digit);
+        }
+        int rgb = Integer.parseInt(hex.toString(), 16);
+        return new Color(rgb);
     }
 
     private static TextStyle applyFormatting(TextStyle style, ChatFormatting formatting) {

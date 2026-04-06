@@ -11,7 +11,8 @@ import java.util.regex.Pattern;
  */
 public final class TextWrapper {
 
-    private static final Pattern STRIP_COLOR_PATTERN = Pattern.compile("[&§][0-9a-fA-FK-ORk-or]");
+    private static final Pattern STRIP_COLOR_PATTERN = Pattern.compile(
+            "[&§]#[0-9a-fA-F]{6}|[&§][xX](?:[&§][0-9a-fA-F]){6}|[&§][0-9a-fA-FK-ORk-or]");
     private static final Pattern NEWLINE_PATTERN = Pattern.compile("(?:\n|\\\\n)");
     private static final Pattern TOKEN_PATTERN = Pattern.compile("\\S+|\\s+");
 

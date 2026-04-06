@@ -206,4 +206,91 @@ class FormattingParserTest {
         String stripped = FormattingParser.stripColors("%%GREEN%%Hello %%BOLD%%World");
         assertThat(stripped).isEqualTo("Hello World");
     }
+
+    // --- hex color tests ---
+
+    @Test
+    void parse_ampersandHex_appliesColor() {
+        List<TextSegment> segments = FormattingParser.parse("&#FF5555Hello");
+
+        assertThat(segments).hasSize(1);
+        assertThat(segments.get(0).text()).isEqualTo("Hello");
+        assertThat(segments.get(0).style().color()).isEqualTo(new java.awt.Color(0xFF, 0x55, 0x55));
+    }
+
+    @Test
+    void parse_sectionHex_appliesColor() {
+        List<TextSegment> segments = FormattingParser.parse("\u00a7#FF5555Hello");
+
+        assertThat(segments).hasSize(1);
+        assertThat(segments.get(0).text()).isEqualTo("Hello");
+        assertThat(segments.get(0).style().color()).isEqualTo(new java.awt.Color(0xFF, 0x55, 0x55));
+    }
+
+    @Test
+    void parse_spigotHex_appliesColor() {
+        // §x§F§F§5§5§5§5
+        List<TextSegment> segments = FormattingParser.parse(
+                "\u00a7x\u00a7F\u00a7F\u00a75\u00a75\u00a75\u00a75Hello");
+
+        assertThat(segments).hasSize(1);
+        assertThat(segments.get(0).text()).isEqualTo("Hello");
+        assertThat(segments.get(0).style().color()).isEqualTo(new java.awt.Color(0xFF, 0x55, 0x55));
+    }
+
+    @Test
+    void parse_spigotHex_withAmpersands_appliesColor() {
+        // &x&F&F&5&5&5&5
+        List<TextSegment> segments = FormattingParser.parse("&x&F&F&5&5&5&5Hello");
+
+        assertThat(segments).hasSize(1);
+        assertThat(segments.get(0).text()).isEqualTo("Hello");
+        assertThat(segments.get(0).style().color()).isEqualTo(new java.awt.Color(0xFF, 0x55, 0x55));
+    }
+
+    @Test
+    void parse_hexColor_resetsFormatting() {
+        List<TextSegment> segments = FormattingParser.parse("&lBold&#FF0000Red");
+
+        assertThat(segments).hasSize(2);
+        assertThat(segments.get(0).style().bold()).isTrue();
+        assertThat(segments.get(1).style().bold()).isFalse();
+        assertThat(segments.get(1).style().color()).isEqualTo(new java.awt.Color(0xFF, 0x00, 0x00));
+    }
+
+    @Test
+    void parse_hexColor_lowercaseDigits() {
+        List<TextSegment> segments = FormattingParser.parse("&#ff5555Hello");
+
+        assertThat(segments).hasSize(1);
+        assertThat(segments.get(0).style().color()).isEqualTo(new java.awt.Color(0xFF, 0x55, 0x55));
+    }
+
+    @Test
+    void parse_hexColor_mixedWithStandardCodes() {
+        List<TextSegment> segments = FormattingParser.parse("&#FF0000Red&aGreen");
+
+        assertThat(segments).hasSize(2);
+        assertThat(segments.get(0).text()).isEqualTo("Red");
+        assertThat(segments.get(0).style().color()).isEqualTo(new java.awt.Color(0xFF, 0x00, 0x00));
+        assertThat(segments.get(1).text()).isEqualTo("Green");
+        assertThat(segments.get(1).style().color()).isEqualTo(ChatColor.GREEN.color());
+    }
+
+    @Test
+    void parse_invalidHex_treatedAsLiteral() {
+        // &#ZZZZZZ is not valid hex
+        List<TextSegment> segments = FormattingParser.parse("&#ZZZZZZHello");
+
+        assertThat(segments).hasSize(1);
+        // Should contain the literal text since hex parsing fails
+        assertThat(segments.get(0).text()).contains("ZZZZZZ");
+    }
+
+    @Test
+    void stripColors_hexColors_areStripped() {
+        assertThat(FormattingParser.stripColors("&#FF5555Hello")).isEqualTo("Hello");
+        assertThat(FormattingParser.stripColors("\u00a7x\u00a7F\u00a7F\u00a75\u00a75\u00a75\u00a75Hello"))
+                .isEqualTo("Hello");
+    }
 }
