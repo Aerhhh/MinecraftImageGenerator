@@ -101,4 +101,110 @@ class FormattingParserTest {
         assertThat(segments.get(0).style().color()).isEqualTo(new Color(85, 255, 85)); // GREEN
         assertThat(segments.get(0).style().bold()).isTrue();
     }
+
+    // --- resolveNamedFormats tests ---
+
+    @Test
+    void resolveNamedFormats_colorName_resolvesToSectionCode() {
+        String result = FormattingParser.resolveNamedFormats("%%GREEN%%Hello");
+        assertThat(result).isEqualTo("\u00a7aHello");
+    }
+
+    @Test
+    void resolveNamedFormats_allColorNames_resolve() {
+        assertThat(FormattingParser.resolveNamedFormats("%%BLACK%%")).isEqualTo("\u00a70");
+        assertThat(FormattingParser.resolveNamedFormats("%%DARK_BLUE%%")).isEqualTo("\u00a71");
+        assertThat(FormattingParser.resolveNamedFormats("%%DARK_GREEN%%")).isEqualTo("\u00a72");
+        assertThat(FormattingParser.resolveNamedFormats("%%DARK_AQUA%%")).isEqualTo("\u00a73");
+        assertThat(FormattingParser.resolveNamedFormats("%%DARK_RED%%")).isEqualTo("\u00a74");
+        assertThat(FormattingParser.resolveNamedFormats("%%DARK_PURPLE%%")).isEqualTo("\u00a75");
+        assertThat(FormattingParser.resolveNamedFormats("%%GOLD%%")).isEqualTo("\u00a76");
+        assertThat(FormattingParser.resolveNamedFormats("%%GRAY%%")).isEqualTo("\u00a77");
+        assertThat(FormattingParser.resolveNamedFormats("%%DARK_GRAY%%")).isEqualTo("\u00a78");
+        assertThat(FormattingParser.resolveNamedFormats("%%BLUE%%")).isEqualTo("\u00a79");
+        assertThat(FormattingParser.resolveNamedFormats("%%GREEN%%")).isEqualTo("\u00a7a");
+        assertThat(FormattingParser.resolveNamedFormats("%%AQUA%%")).isEqualTo("\u00a7b");
+        assertThat(FormattingParser.resolveNamedFormats("%%RED%%")).isEqualTo("\u00a7c");
+        assertThat(FormattingParser.resolveNamedFormats("%%LIGHT_PURPLE%%")).isEqualTo("\u00a7d");
+        assertThat(FormattingParser.resolveNamedFormats("%%YELLOW%%")).isEqualTo("\u00a7e");
+        assertThat(FormattingParser.resolveNamedFormats("%%WHITE%%")).isEqualTo("\u00a7f");
+    }
+
+    @Test
+    void resolveNamedFormats_formattingName_resolvesToSectionCode() {
+        assertThat(FormattingParser.resolveNamedFormats("%%BOLD%%")).isEqualTo("\u00a7l");
+        assertThat(FormattingParser.resolveNamedFormats("%%ITALIC%%")).isEqualTo("\u00a7o");
+        assertThat(FormattingParser.resolveNamedFormats("%%UNDERLINE%%")).isEqualTo("\u00a7n");
+        assertThat(FormattingParser.resolveNamedFormats("%%STRIKETHROUGH%%")).isEqualTo("\u00a7m");
+        assertThat(FormattingParser.resolveNamedFormats("%%OBFUSCATED%%")).isEqualTo("\u00a7k");
+        assertThat(FormattingParser.resolveNamedFormats("%%RESET%%")).isEqualTo("\u00a7r");
+    }
+
+    @Test
+    void resolveNamedFormats_caseInsensitive() {
+        assertThat(FormattingParser.resolveNamedFormats("%%green%%")).isEqualTo("\u00a7a");
+        assertThat(FormattingParser.resolveNamedFormats("%%Green%%")).isEqualTo("\u00a7a");
+        assertThat(FormattingParser.resolveNamedFormats("%%dark_gray%%")).isEqualTo("\u00a78");
+        assertThat(FormattingParser.resolveNamedFormats("%%bold%%")).isEqualTo("\u00a7l");
+    }
+
+    @Test
+    void resolveNamedFormats_unrecognizedName_leftUnchanged() {
+        String input = "%%UNKNOWN%%Hello";
+        assertThat(FormattingParser.resolveNamedFormats(input)).isEqualTo(input);
+    }
+
+    @Test
+    void resolveNamedFormats_mixedWithExistingCodes() {
+        String result = FormattingParser.resolveNamedFormats("&b%%GREEN%%Hello%%GRAY%%World");
+        assertThat(result).isEqualTo("&b\u00a7aHello\u00a77World");
+    }
+
+    @Test
+    void resolveNamedFormats_nullAndEmpty() {
+        assertThat(FormattingParser.resolveNamedFormats(null)).isNull();
+        assertThat(FormattingParser.resolveNamedFormats("")).isEmpty();
+    }
+
+    @Test
+    void resolveNamedFormats_noPlaceholders_returnsUnchanged() {
+        String input = "Just plain text with &a codes";
+        assertThat(FormattingParser.resolveNamedFormats(input)).isEqualTo(input);
+    }
+
+    @Test
+    void parse_namedColor_producesCorrectSegment() {
+        List<TextSegment> segments = FormattingParser.parse("%%GREEN%%Hello");
+
+        assertThat(segments).hasSize(1);
+        assertThat(segments.get(0).text()).isEqualTo("Hello");
+        assertThat(segments.get(0).style().color()).isEqualTo(new Color(85, 255, 85));
+    }
+
+    @Test
+    void parse_namedColorAndFormatting_combined() {
+        List<TextSegment> segments = FormattingParser.parse("%%GREEN%%%%BOLD%%Hello");
+
+        assertThat(segments).hasSize(1);
+        assertThat(segments.get(0).text()).isEqualTo("Hello");
+        assertThat(segments.get(0).style().color()).isEqualTo(new Color(85, 255, 85));
+        assertThat(segments.get(0).style().bold()).isTrue();
+    }
+
+    @Test
+    void parse_multipleNamedSegments() {
+        List<TextSegment> segments = FormattingParser.parse("%%GREEN%%3%%GRAY%%text");
+
+        assertThat(segments).hasSize(2);
+        assertThat(segments.get(0).text()).isEqualTo("3");
+        assertThat(segments.get(0).style().color()).isEqualTo(new Color(85, 255, 85));
+        assertThat(segments.get(1).text()).isEqualTo("text");
+        assertThat(segments.get(1).style().color()).isEqualTo(new Color(170, 170, 170));
+    }
+
+    @Test
+    void stripColors_namedFormats_areStripped() {
+        String stripped = FormattingParser.stripColors("%%GREEN%%Hello %%BOLD%%World");
+        assertThat(stripped).isEqualTo("Hello World");
+    }
 }

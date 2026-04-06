@@ -4,6 +4,8 @@ import net.aerh.jigsaw.core.font.MinecraftFontId;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Parses Minecraft-formatted text strings (using {@code §} or {@code &} as format markers)
@@ -15,6 +17,8 @@ import java.util.List;
  * @see ChatFormatting
  */
 public final class FormattingParser {
+
+    private static final Pattern NAMED_FORMAT_PATTERN = Pattern.compile("%%([^%]+)%%");
 
     private FormattingParser() {}
 
@@ -34,6 +38,8 @@ public final class FormattingParser {
         if (text == null || text.isEmpty()) {
             return List.of();
         }
+
+        text = resolveNamedFormats(text);
 
         List<TextSegment> segments = new ArrayList<>();
         TextStyle currentStyle = TextStyle.DEFAULT;
@@ -98,6 +104,8 @@ public final class FormattingParser {
             return text;
         }
 
+        text = resolveNamedFormats(text);
+
         StringBuilder result = new StringBuilder(text.length());
         int i = 0;
         while (i < text.length()) {
@@ -110,6 +118,51 @@ public final class FormattingParser {
                 i++;
             }
         }
+        return result.toString();
+    }
+
+    /**
+     * Resolves named format placeholders (e.g. {@code %%GREEN%%}, {@code %%BOLD%%}) into their
+     * equivalent {@code §code} sequences.
+     *
+     * <p>Both {@link ChatColor} names and {@link ChatFormatting} names are supported.
+     * Lookup is case-insensitive. Unrecognized names are left unchanged.
+     *
+     * @param text the raw text potentially containing {@code %%NAME%%} placeholders
+     * @return the text with recognized placeholders replaced by section-sign format codes
+     */
+    public static String resolveNamedFormats(String text) {
+        if (text == null || text.isEmpty()) {
+            return text;
+        }
+
+        Matcher matcher = NAMED_FORMAT_PATTERN.matcher(text);
+        if (!matcher.find()) {
+            return text;
+        }
+
+        StringBuilder result = new StringBuilder();
+        matcher.reset();
+
+        while (matcher.find()) {
+            String name = matcher.group(1);
+
+            ChatColor color = ChatColor.byName(name);
+            if (color != null) {
+                matcher.appendReplacement(result, "\u00a7" + color.code());
+                continue;
+            }
+
+            ChatFormatting formatting = ChatFormatting.byName(name);
+            if (formatting != null) {
+                matcher.appendReplacement(result, "\u00a7" + formatting.code());
+                continue;
+            }
+
+            matcher.appendReplacement(result, Matcher.quoteReplacement(matcher.group(0)));
+        }
+
+        matcher.appendTail(result);
         return result.toString();
     }
 

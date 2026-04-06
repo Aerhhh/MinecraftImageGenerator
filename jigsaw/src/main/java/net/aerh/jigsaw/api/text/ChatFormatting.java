@@ -43,10 +43,12 @@ public enum ChatFormatting {
     RESET('r');
 
     private static final Map<Character, ChatFormatting> BY_CODE = new HashMap<>();
+    private static final Map<String, ChatFormatting> BY_NAME = new HashMap<>();
 
     static {
         for (ChatFormatting fmt : values()) {
             BY_CODE.put(fmt.code, fmt);
+            BY_NAME.put(fmt.name().toLowerCase(), fmt);
         }
     }
 
@@ -71,5 +73,16 @@ public enum ChatFormatting {
      */
     public static ChatFormatting byCode(char code) {
         return BY_CODE.get(code);
+    }
+
+    /**
+     * Returns the {@code ChatFormatting} for the given name (case-insensitive, e.g. {@code "bold"}),
+     * or {@code null} if no formatting has that name.
+     */
+    public static ChatFormatting byName(String name) {
+        if (name == null) {
+            return null;
+        }
+        return BY_NAME.get(name.toLowerCase());
     }
 }
