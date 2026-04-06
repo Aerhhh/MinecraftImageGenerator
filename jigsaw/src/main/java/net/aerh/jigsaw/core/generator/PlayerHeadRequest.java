@@ -40,6 +40,14 @@ public record PlayerHeadRequest(
         }
     }
 
+    @Override
+    public RenderRequest withInheritedScale(int scaleFactor) {
+        if (this.scale != 1) {
+            return this;
+        }
+        return new PlayerHeadRequest(base64Texture, textureUrl, playerName, scaleFactor);
+    }
+
     /**
      * Returns a builder for constructing a {@link PlayerHeadRequest} from a Base64 texture value.
      */

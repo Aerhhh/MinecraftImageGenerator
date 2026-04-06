@@ -47,6 +47,14 @@ public record InventoryRequest(
         items = List.copyOf(items);
     }
 
+    @Override
+    public RenderRequest withInheritedScale(int scaleFactor) {
+        if (this.scale != 1) {
+            return this;
+        }
+        return new InventoryRequest(rows, slotsPerRow, title, drawTitle, drawBorder, drawBackground, items, scaleFactor);
+    }
+
     /** Returns a builder with default values applied. */
     public static Builder builder() {
         return new Builder();
