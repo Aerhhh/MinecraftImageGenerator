@@ -37,6 +37,14 @@ public record ItemRequest(
         }
     }
 
+    @Override
+    public RenderRequest withInheritedScale(int scaleFactor) {
+        if (this.scale != 1) {
+            return this;
+        }
+        return new ItemRequest(itemId, enchanted, hovered, scaleFactor, durabilityPercent, dyeColor);
+    }
+
     /**
      * Returns a builder for constructing an {@link ItemRequest}.
      * Call {@link Builder#itemId(String)} to set the required item ID before building.
