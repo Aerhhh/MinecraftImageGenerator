@@ -267,7 +267,10 @@ public final class TextWrapper {
             return input;
         }
 
-        return input.replace("\r\n", " ").replace("\r", " ").replace("\n", " ");
+        // Replace actual newlines (from Discord multiline input) and any surrounding
+        // whitespace with nothing. Users use literal \n for intended line breaks, so
+        // real newlines are just formatting artifacts from their text editor.
+        return input.replaceAll("\\s*\\r?\\n\\s*", "");
     }
 
     // -----------------------------------------------------------------------

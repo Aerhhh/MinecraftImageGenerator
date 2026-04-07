@@ -13,18 +13,19 @@ class TextWrapperTest {
     // -----------------------------------------------------------------------
 
     @Test
-    void stripActualNewlines_replacesNewlinesWithSpaces() {
-        assertThat(TextWrapper.stripActualNewlines("hello\nworld")).isEqualTo("hello world");
+    void stripActualNewlines_removesNewlines() {
+        assertThat(TextWrapper.stripActualNewlines("hello\nworld")).isEqualTo("helloworld");
     }
 
     @Test
-    void stripActualNewlines_replacesCarriageReturnNewline() {
-        assertThat(TextWrapper.stripActualNewlines("hello\r\nworld")).isEqualTo("hello world");
+    void stripActualNewlines_removesCarriageReturnNewline() {
+        assertThat(TextWrapper.stripActualNewlines("hello\r\nworld")).isEqualTo("helloworld");
     }
 
     @Test
-    void stripActualNewlines_replacesCarriageReturn() {
-        assertThat(TextWrapper.stripActualNewlines("hello\rworld")).isEqualTo("hello world");
+    void stripActualNewlines_removesNewlineAndSurroundingWhitespace() {
+        // Discord multiline input: user has \n at end of line, then real newline + leading spaces
+        assertThat(TextWrapper.stripActualNewlines("damage\\n\n  &7Strength")).isEqualTo("damage\\n&7Strength");
     }
 
     @Test
@@ -49,7 +50,7 @@ class TextWrapperTest {
 
     @Test
     void stripActualNewlines_multipleNewlines() {
-        assertThat(TextWrapper.stripActualNewlines("a\nb\nc")).isEqualTo("a b c");
+        assertThat(TextWrapper.stripActualNewlines("a\nb\nc")).isEqualTo("abc");
     }
 
     // -----------------------------------------------------------------------
