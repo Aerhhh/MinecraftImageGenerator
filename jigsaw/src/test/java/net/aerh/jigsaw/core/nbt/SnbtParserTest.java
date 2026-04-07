@@ -206,6 +206,30 @@ class SnbtParserTest {
         assertThat(obj.get("Count").getAsInt()).isEqualTo(5);
     }
 
+    // --- non-breaking spaces (common when copying from Discord/web) ---
+
+    @Test
+    void parse_nonBreakingSpaces_treatedAsWhitespace() throws ParseException {
+        // U+00A0 non-breaking spaces used as indentation (common from web/Discord copy-paste)
+        String snbt = "{\u00A0\u00A0id:\u00A0\"test\",\u00A0Count:\u00A01b\u00A0}";
+        JsonElement result = SnbtParser.parse(snbt);
+
+        JsonObject obj = result.getAsJsonObject();
+        assertThat(obj.get("id").getAsString()).isEqualTo("test");
+        assertThat(obj.get("Count").getAsInt()).isEqualTo(1);
+    }
+
+    @Test
+    void parse_mixedWhitespace_parsesCorrectly() throws ParseException {
+        // Mix of regular spaces, tabs, and non-breaking spaces
+        String snbt = "{\t\u00A0id: \"value\" ,\u00A0 nested:\u00A0{\u00A0key: 42\u00A0}\u00A0}";
+        JsonElement result = SnbtParser.parse(snbt);
+
+        JsonObject obj = result.getAsJsonObject();
+        assertThat(obj.get("id").getAsString()).isEqualTo("value");
+        assertThat(obj.getAsJsonObject("nested").get("key").getAsInt()).isEqualTo(42);
+    }
+
     // --- error cases ---
 
     @Test

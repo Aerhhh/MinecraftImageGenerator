@@ -248,7 +248,7 @@ public final class SnbtParser {
                 }
                 break; // key-value separator
             }
-            if (ch == '}' || ch == '{' || ch == '[' || ch == ']' || ch == ',' || Character.isWhitespace(ch)) {
+            if (ch == '}' || ch == '{' || ch == '[' || ch == ']' || ch == ',' || isWhitespace(ch)) {
                 break;
             }
             pos++;
@@ -381,9 +381,18 @@ public final class SnbtParser {
     // --- helpers ---
 
     private void skipWhitespace() {
-        while (pos < input.length() && Character.isWhitespace(input.charAt(pos))) {
+        while (pos < input.length() && isWhitespace(input.charAt(pos))) {
             pos++;
         }
+    }
+
+    /**
+     * Returns whether the given character is whitespace, including non-breaking spaces
+     * (U+00A0) and other Unicode whitespace that {@link Character#isWhitespace(char)}
+     * does not cover. NBT data copied from web UIs or Discord often contains these.
+     */
+    private static boolean isWhitespace(char c) {
+        return Character.isWhitespace(c) || c == '\u00A0' || Character.isSpaceChar(c);
     }
 
     private char peek() {
@@ -405,6 +414,6 @@ public final class SnbtParser {
     }
 
     private static boolean isBarewordChar(char c) {
-        return c != ',' && c != '}' && c != ']' && c != ':' && !Character.isWhitespace(c);
+        return c != ',' && c != '}' && c != ']' && c != ':' && !isWhitespace(c);
     }
 }
