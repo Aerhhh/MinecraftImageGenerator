@@ -111,26 +111,19 @@ public final class PlayerHeadGenerator implements Generator<PlayerHeadRequest, G
             byte[] decoded = Base64.getDecoder().decode(base64Texture);
             String json = new String(decoded, StandardCharsets.UTF_8);
 
-            // Extract the URL from the JSON using a simple string search to avoid a Gson dependency
-            // in this class. Pattern: "url":"<url>"
-            String urlMarker = "\"url\":\"";
-            int urlStart = json.indexOf(urlMarker);
-            if (urlStart < 0) {
+            // Extract the URL from the JSON. Mojang's texture JSON may be compact
+            // ("url":"...") or pretty-printed ("url" : "..."), so we use a regex
+            // to handle any whitespace around the colon.
+            java.util.regex.Matcher urlMatcher = java.util.regex.Pattern
+                    .compile("\"url\"\\s*:\\s*\"([^\"]+)\"")
+                    .matcher(json);
+            if (!urlMatcher.find()) {
                 throw new RenderException(
                         "Could not find texture URL in decoded Base64 profile texture",
                         Map.of("json", json)
                 );
             }
-            urlStart += urlMarker.length();
-            int urlEnd = json.indexOf('"', urlStart);
-            if (urlEnd < 0) {
-                throw new RenderException(
-                        "Malformed texture URL in decoded Base64 profile texture",
-                        Map.of("json", json)
-                );
-            }
-
-            String skinUrl = json.substring(urlStart, urlEnd);
+            String skinUrl = urlMatcher.group(1);
             return loadFromUrl(skinUrl);
         } catch (IllegalArgumentException e) {
             throw new RenderException(
