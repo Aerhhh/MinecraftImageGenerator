@@ -86,6 +86,21 @@ class SkyBlockTooltipBuilderTest {
     }
 
     @Test
+    void resolvesAbilityFlavorPlaceholderWithNameAndType() {
+        TooltipRequest request = SkyBlockTooltipBuilder.builder()
+            .name("Wand")
+            .lore("%%ability:Wither Impact:RIGHT CLICK%%")
+            .build();
+
+        String loreText = String.join(" ", request.lines());
+        assertThat(loreText).contains("Ability");
+        assertThat(loreText).contains("Wither Impact");
+        assertThat(loreText).contains("RIGHT CLICK");
+        assertThat(loreText).doesNotContain("{abilityName}");
+        assertThat(loreText).doesNotContain("{abilityType}");
+    }
+
+    @Test
     void unknownPlaceholderIsLeftUnchanged() {
         String unknownPlaceholder = "%%not_a_real_key:99%%";
         TooltipRequest request = SkyBlockTooltipBuilder.builder()

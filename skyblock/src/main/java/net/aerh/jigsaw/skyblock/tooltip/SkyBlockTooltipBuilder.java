@@ -47,6 +47,9 @@ public final class SkyBlockTooltipBuilder {
     /** Pattern that matches {@code %%key%%} or {@code %%key:value%%} placeholders in lore strings. */
     private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("%%([^%:]+)(?::([^%]*))?%%");
 
+    /** Pattern that matches remaining {@code {tokenName}} tokens in a format string. */
+    private static final Pattern TOKEN_PATTERN = Pattern.compile("\\{([a-zA-Z]+)}");
+
     private SkyBlockTooltipBuilder() {}
 
     /**
@@ -123,6 +126,7 @@ public final class SkyBlockTooltipBuilder {
         if (extraDetails != null && !extraDetails.isBlank()) {
             String numericDetail = formatNumericDetail(extraDetails);
             result = result.replace("{extraDetails}", numericDetail);
+            result = resolveRemainingTokens(result, extraDetails);
         }
 
         return result;
@@ -147,6 +151,34 @@ public final class SkyBlockTooltipBuilder {
 
         if (extraDetails != null && !extraDetails.isBlank()) {
             result = result.replace("{extraDetails}", extraDetails);
+            result = resolveRemainingTokens(result, extraDetails);
+        }
+
+        return result;
+    }
+
+    /**
+     * Resolves any remaining {@code {token}} placeholders in the result by positionally
+     * mapping them to colon-delimited segments of {@code extraDetails}.
+     *
+     * <p>For example, if the format still contains {@code {abilityName}} and {@code {abilityType}}
+     * and extraDetails is {@code "Wither Impact:RIGHT CLICK"}, the first unresolved token gets
+     * "Wither Impact" and the second gets "RIGHT CLICK".
+     */
+    private static String resolveRemainingTokens(String result, String extraDetails) {
+        Matcher tokenMatcher = TOKEN_PATTERN.matcher(result);
+        List<String> unresolvedTokens = new ArrayList<>();
+        while (tokenMatcher.find()) {
+            unresolvedTokens.add(tokenMatcher.group(0));
+        }
+
+        if (unresolvedTokens.isEmpty()) {
+            return result;
+        }
+
+        String[] parts = extraDetails.split(":");
+        for (int i = 0; i < unresolvedTokens.size() && i < parts.length; i++) {
+            result = result.replace(unresolvedTokens.get(i), parts[i].trim());
         }
 
         return result;
