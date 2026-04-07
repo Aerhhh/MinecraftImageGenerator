@@ -1,8 +1,5 @@
 package net.aerh.jigsaw.core.resource;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -17,8 +14,6 @@ import java.util.stream.Stream;
  * A {@link ResourcePack} backed by a directory on the filesystem.
  */
 public class FolderResourcePack implements ResourcePack {
-
-    private static final Gson GSON = new Gson();
 
     private final Path root;
     private final PackMetadata metadata;
@@ -82,14 +77,7 @@ public class FolderResourcePack implements ResourcePack {
         }
         try {
             String json = Files.readString(mcmetaPath);
-            JsonObject root = GSON.fromJson(json, JsonObject.class);
-            JsonObject pack = root.getAsJsonObject("pack");
-            if (pack == null) {
-                throw new IllegalArgumentException("pack.mcmeta missing 'pack' object");
-            }
-            int format = pack.get("pack_format").getAsInt();
-            String desc = pack.has("description") ? pack.get("description").getAsString() : "";
-            return new PackMetadata(format, desc);
+            return PackMetadata.fromJson(json);
         } catch (IOException e) {
             throw new IllegalArgumentException("Failed to read pack.mcmeta: " + mcmetaPath, e);
         }

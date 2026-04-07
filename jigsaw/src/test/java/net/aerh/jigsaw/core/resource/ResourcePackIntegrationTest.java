@@ -39,10 +39,6 @@ class ResourcePackIntegrationTest {
         Files.writeString(modelDir.resolve("custom_item.json"), """
                 {"parent":"minecraft:item/generated","textures":{"layer0":"minecraft:item/custom_item"}}
                 """);
-        Files.writeString(modelDir.resolve("generated.json"), """
-                {"parent":"builtin/generated"}
-                """);
-
         Path texDir = packDir.resolve("assets/minecraft/textures/item");
         Files.createDirectories(texDir);
         BufferedImage img = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);

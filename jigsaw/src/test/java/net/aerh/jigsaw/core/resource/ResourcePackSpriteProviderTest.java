@@ -43,14 +43,6 @@ class ResourcePackSpriteProviderTest {
                 }
                 """);
 
-        // --- generated base model (required by item/generated parent chain) ---
-        writeModel(packDir, "item/generated",
-                """
-                {
-                  "parent": "builtin/generated"
-                }
-                """);
-
         // --- sword: single-layer item, layer0 -> solid red 16x16 PNG ---
         writePng(packDir, "assets/minecraft/textures/item/test_sword.png",
                 solidColor(16, 16, Color.RED));

@@ -41,6 +41,7 @@ import java.util.stream.Collectors;
 public class ResourcePackSpriteProvider implements SpriteProvider {
 
     private static final String MODEL_PREFIX = "assets/minecraft/models/item/";
+    private static final String ITEMS_PREFIX = "assets/minecraft/items/";
     private static final String TEXTURE_PREFIX = "assets/minecraft/textures/";
     private static final String MINECRAFT_NAMESPACE = "minecraft:";
 
@@ -58,6 +59,20 @@ public class ResourcePackSpriteProvider implements SpriteProvider {
      */
     public ResourcePackSpriteProvider(ResourcePack pack) {
         this(pack, new ModelResolver());
+    }
+
+    /**
+     * Creates a {@link ResourcePackSpriteProvider} backed by multiple resource packs layered
+     * with first-match-wins semantics. This matches Minecraft's own pack layering behavior:
+     * resource lookups try each pack in order and use the first one that has the requested file.
+     *
+     * <p>This allows texture-only packs to override textures while models are resolved from a
+     * lower-priority pack (e.g. vanilla).
+     *
+     * @param packs ordered list of packs, index 0 = highest priority; must not be null or empty
+     */
+    public ResourcePackSpriteProvider(List<ResourcePack> packs) {
+        this(new LayeredResourcePack(packs), new ModelResolver());
     }
 
     /**
@@ -93,15 +108,28 @@ public class ResourcePackSpriteProvider implements SpriteProvider {
      */
     @Override
     public Collection<String> availableSprites() {
-        Set<String> paths = pack.listResources(MODEL_PREFIX);
-        return paths.stream()
-                .filter(p -> p.endsWith(".json"))
-                .map(p -> {
-                    String filename = p.substring(p.lastIndexOf('/') + 1);
-                    return filename.substring(0, filename.length() - ".json".length());
-                })
-                .filter(id -> !id.equals("generated"))
-                .collect(Collectors.toUnmodifiableSet());
+        Set<String> ids = new java.util.HashSet<>();
+
+        // Scan pre-1.21.4 models/item/*.json
+        for (String path : pack.listResources(MODEL_PREFIX)) {
+            if (path.endsWith(".json")) {
+                String filename = path.substring(path.lastIndexOf('/') + 1);
+                String id = filename.substring(0, filename.length() - ".json".length());
+                if (!id.equals("generated")) {
+                    ids.add(id);
+                }
+            }
+        }
+
+        // Scan 1.21.4+ items/*.json
+        for (String path : pack.listResources(ITEMS_PREFIX)) {
+            if (path.endsWith(".json")) {
+                String filename = path.substring(path.lastIndexOf('/') + 1);
+                ids.add(filename.substring(0, filename.length() - ".json".length()));
+            }
+        }
+
+        return Collections.unmodifiableSet(ids);
     }
 
     /**

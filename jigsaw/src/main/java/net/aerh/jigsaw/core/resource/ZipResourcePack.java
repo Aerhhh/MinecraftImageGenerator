@@ -1,8 +1,5 @@
 package net.aerh.jigsaw.core.resource;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
-
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -20,8 +17,6 @@ import java.util.zip.ZipFile;
  * A {@link ResourcePack} backed by a zip file.
  */
 public class ZipResourcePack implements ResourcePack {
-
-    private static final Gson GSON = new Gson();
 
     private final ZipFile zipFile;
     private final PackMetadata metadata;
@@ -98,14 +93,7 @@ public class ZipResourcePack implements ResourcePack {
         }
         try (InputStream is = zipFile.getInputStream(mcmeta)) {
             String json = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-            JsonObject root = GSON.fromJson(json, JsonObject.class);
-            JsonObject pack = root.getAsJsonObject("pack");
-            if (pack == null) {
-                throw new IllegalArgumentException("pack.mcmeta missing 'pack' object");
-            }
-            int format = pack.get("pack_format").getAsInt();
-            String desc = pack.has("description") ? pack.get("description").getAsString() : "";
-            return new PackMetadata(format, desc);
+            return PackMetadata.fromJson(json);
         } catch (IOException e) {
             throw new IllegalArgumentException("Failed to read pack.mcmeta from zip", e);
         }
