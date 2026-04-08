@@ -89,7 +89,7 @@ class OverlayRendererTest {
         OverlayRenderer renderer = registry.getRenderer("normal").orElseThrow();
         BufferedImage base = solidRedImage(32, 32);
         BufferedImage overlayTex = solidWhiteImage(32, 32);
-        Overlay overlay = new Overlay("minecraft:leather_helmet", overlayTex, ColorMode.OVERLAY, "normal");
+        Overlay overlay = new Overlay("minecraft:leather_helmet", overlayTex, ColorMode.OVERLAY, "normal", null);
 
         BufferedImage result = renderer.render(base, overlay, 0xFF00FF00);
 
@@ -103,7 +103,7 @@ class OverlayRendererTest {
         OverlayRenderer renderer = registry.getRenderer("normal").orElseThrow();
         BufferedImage base = solidWhiteImage(4, 4);
         BufferedImage overlayTex = solidWhiteImage(4, 4); // white overlay: multiply by tint = tint color
-        Overlay overlay = new Overlay("minecraft:leather_helmet", overlayTex, ColorMode.OVERLAY, "normal");
+        Overlay overlay = new Overlay("minecraft:leather_helmet", overlayTex, ColorMode.OVERLAY, "normal", null);
 
         int blueTint = 0xFF0000FF; // fully opaque blue
         BufferedImage result = renderer.render(base, overlay, blueTint);
@@ -120,7 +120,7 @@ class OverlayRendererTest {
         OverlayRenderer renderer = registry.getRenderer("mapped").orElseThrow();
         BufferedImage base = solidRedImage(16, 16);
         BufferedImage overlayTex = solidWhiteImage(16, 16);
-        Overlay overlay = new Overlay("minecraft:bow", overlayTex, ColorMode.BASE, "mapped");
+        Overlay overlay = new Overlay("minecraft:bow", overlayTex, ColorMode.BASE, "mapped", null);
 
         BufferedImage result = renderer.render(base, overlay, 0xFFFFFFFF);
 
@@ -134,7 +134,7 @@ class OverlayRendererTest {
         OverlayRenderer renderer = registry.getRenderer("dual_layer").orElseThrow();
         BufferedImage base = solidRedImage(16, 16);
         BufferedImage overlayTex = solidWhiteImage(16, 16);
-        Overlay overlay = new Overlay("minecraft:leather_chestplate", overlayTex, ColorMode.OVERLAY, "dual_layer");
+        Overlay overlay = new Overlay("minecraft:leather_chestplate", overlayTex, ColorMode.OVERLAY, "dual_layer", null);
 
         BufferedImage result = renderer.render(base, overlay, 0xFF00AA00);
 
@@ -175,7 +175,7 @@ class OverlayRendererTest {
                 overlayTex.setRGB(x, y, 0xFF0000FF); // blue
             }
         }
-        Overlay overlay = new Overlay("minecraft:bow", overlayTex, ColorMode.BASE, "mapped");
+        Overlay overlay = new Overlay("minecraft:bow", overlayTex, ColorMode.BASE, "mapped", null);
 
         BufferedImage result = renderer.render(base, overlay, 0xFFFFFFFF);
 

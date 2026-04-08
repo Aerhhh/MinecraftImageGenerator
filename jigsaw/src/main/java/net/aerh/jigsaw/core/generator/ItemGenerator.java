@@ -106,7 +106,8 @@ public final class ItemGenerator implements Generator<ItemRequest, GeneratorResu
                         input.itemId(),
                         data.overlayTexture(),
                         data.colorMode(),
-                        data.rendererType()
+                        data.rendererType(),
+                        data.defaultColors()
                 );
                 metadata.put(MetadataKeys.OVERLAY_DATA, overlay);
 

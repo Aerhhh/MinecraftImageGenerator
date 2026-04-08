@@ -38,10 +38,20 @@ final class NormalOverlayRenderer implements OverlayRenderer {
         BufferedImage overlayTex = overlay.texture();
         boolean isOverlayMode = overlay.colorMode() == ColorMode.OVERLAY;
 
-        float[] tint = ColorUtil.extractTintRgb(color);
-        float tintR = tint[0];
-        float tintG = tint[1];
-        float tintB = tint[2];
+        int tintR = (color >> 16) & 0xFF;
+        int tintG = (color >> 8) & 0xFF;
+        int tintB = color & 0xFF;
+
+        // Extract default colors for de-tinting if available (e.g. leather armor's brown base)
+        int[] defaultColors = overlay.defaultColors();
+        int defR = 255, defG = 255, defB = 255;
+        boolean deTint = defaultColors != null && defaultColors.length > 0;
+        if (deTint) {
+            int dc = defaultColors[0];
+            defR = (dc >> 16) & 0xFF;
+            defG = (dc >> 8) & 0xFF;
+            defB = dc & 0xFF;
+        }
 
         BufferedImage finalBase;
         BufferedImage finalOverlay;
@@ -49,10 +59,10 @@ final class NormalOverlayRenderer implements OverlayRenderer {
         if (isOverlayMode) {
             // OVERLAY mode: tint the overlay texture, draw on top of unchanged base
             finalBase = base;
-            finalOverlay = tintImage(overlayTex, tintR, tintG, tintB, w, h);
+            finalOverlay = tintImage(overlayTex, tintR, tintG, tintB, defR, defG, defB, deTint, w, h);
         } else {
             // BASE mode: tint the base texture, draw untinted overlay on top
-            finalBase = tintImage(base, tintR, tintG, tintB, w, h);
+            finalBase = tintImage(base, tintR, tintG, tintB, defR, defG, defB, deTint, w, h);
             finalOverlay = overlayTex;
         }
 
@@ -60,10 +70,15 @@ final class NormalOverlayRenderer implements OverlayRenderer {
     }
 
     /**
-     * Tints an image by multiplying each pixel's RGB channels by the given tint factors.
-     * Simple multiplicative: {@code (src / 255.0) * (tint * 255)} = {@code src * tint}.
+     * Tints an image pixel-by-pixel. When de-tinting is enabled, divides out the default
+     * color before applying the desired color: {@code (src / default) * desired}. This is
+     * necessary for textures like leather armor where the base texture has a baked-in color.
+     * When de-tinting is disabled, uses simple multiplicative: {@code (src / 255) * desired}.
      */
-    private static BufferedImage tintImage(BufferedImage src, float tintR, float tintG, float tintB,
+    private static BufferedImage tintImage(BufferedImage src,
+                                           int tintR, int tintG, int tintB,
+                                           int defR, int defG, int defB,
+                                           boolean deTint,
                                            int targetW, int targetH) {
         BufferedImage out = new BufferedImage(targetW, targetH, BufferedImage.TYPE_INT_ARGB);
         for (int y = 0; y < targetH; y++) {
@@ -74,9 +89,28 @@ final class NormalOverlayRenderer implements OverlayRenderer {
                     continue;
                 }
 
-                int r = ColorUtil.clamp(Math.round(((pixel >> 16) & 0xFF) * tintR));
-                int g = ColorUtil.clamp(Math.round(((pixel >> 8) & 0xFF) * tintG));
-                int b = ColorUtil.clamp(Math.round((pixel & 0xFF) * tintB));
+                int srcR = (pixel >> 16) & 0xFF;
+                int srcG = (pixel >> 8) & 0xFF;
+                int srcB = pixel & 0xFF;
+
+                int r, g, b;
+                if (deTint) {
+                    // De-tint then re-tint: (source / default) * desired
+                    r = defR > 0
+                        ? ColorUtil.clamp((int) Math.round((srcR * tintR) / (double) defR))
+                        : (int) Math.round((srcR / 255.0) * tintR);
+                    g = defG > 0
+                        ? ColorUtil.clamp((int) Math.round((srcG * tintG) / (double) defG))
+                        : (int) Math.round((srcG / 255.0) * tintG);
+                    b = defB > 0
+                        ? ColorUtil.clamp((int) Math.round((srcB * tintB) / (double) defB))
+                        : (int) Math.round((srcB / 255.0) * tintB);
+                } else {
+                    // Simple multiplicative: (source / 255) * desired
+                    r = (int) Math.round((srcR / 255.0) * tintR);
+                    g = (int) Math.round((srcG / 255.0) * tintG);
+                    b = (int) Math.round((srcB / 255.0) * tintB);
+                }
 
                 out.setRGB(x, y, (a << 24) | (r << 16) | (g << 8) | b);
             }

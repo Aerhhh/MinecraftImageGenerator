@@ -23,7 +23,7 @@ class OverlayEffectTest {
     }
 
     private static Overlay makeOverlay(String rendererType) {
-        return new Overlay("test:item", blankImage(), ColorMode.BASE, rendererType);
+        return new Overlay("test:item", blankImage(), ColorMode.BASE, rendererType, null);
     }
 
     @BeforeEach
@@ -114,7 +114,7 @@ class OverlayEffectTest {
     @Test
     void apply_defaultsToWhiteTintWhenColorMetadataAbsent() {
         // Using ColorMode.OVERLAY means tint is applied; without metadata it should default to white
-        Overlay overlay = new Overlay("test:item", blankImage(), ColorMode.OVERLAY, "normal");
+        Overlay overlay = new Overlay("test:item", blankImage(), ColorMode.OVERLAY, "normal", null);
         EffectContext ctx = EffectContext.builder()
                 .image(blankImage())
                 .metadata(Map.of(OverlayEffect.META_OVERLAY_DATA, overlay))
