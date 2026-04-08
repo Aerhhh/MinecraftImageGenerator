@@ -178,8 +178,7 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
             }
         }
 
-        // Place item sprites
-        boolean hasEnchanted = false;
+        // Place item sprites (apply enchantment glint per-item, not to the whole canvas)
         for (InventoryItem item : input.items()) {
             int slot = item.slot();
             int row = slot / input.slotsPerRow();
@@ -195,12 +194,24 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
             int itemX = sx + itemPadding;
             int itemY = sy + itemPadding;
 
-            spriteProvider.getSprite(item.itemId()).ifPresent(sprite ->
-                    g.drawImage(sprite, itemX, itemY, itemSize, itemSize, null));
+            spriteProvider.getSprite(item.itemId()).ifPresent(sprite -> {
+                BufferedImage itemImage = sprite;
 
-            if (item.enchanted()) {
-                hasEnchanted = true;
-            }
+                // Apply enchantment glint to this item only
+                if (item.enchanted()) {
+                    EffectContext effectCtx = EffectContext.builder()
+                            .image(sprite)
+                            .itemId(item.itemId())
+                            .enchanted(true)
+                            .build();
+                    EffectContext result = effectPipeline.execute(effectCtx);
+                    if (result.image() != null) {
+                        itemImage = result.image();
+                    }
+                }
+
+                g.drawImage(itemImage, itemX, itemY, itemSize, itemSize, null);
+            });
 
             placed.add(new PlacedItem(item, sx, sy, slotSize, itemSize));
         }
@@ -213,18 +224,6 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
         }
 
         g.dispose();
-
-        // Enchantment glint animation
-        if (hasEnchanted) {
-            EffectContext effectCtx = EffectContext.builder()
-                    .image(canvas)
-                    .enchanted(true)
-                    .build();
-            EffectContext result = effectPipeline.execute(effectCtx);
-            if (!result.animationFrames().isEmpty()) {
-                return new GeneratorResult.AnimatedImage(result.animationFrames(), result.frameDelayMs());
-            }
-        }
 
         return new GeneratorResult.StaticImage(canvas);
     }

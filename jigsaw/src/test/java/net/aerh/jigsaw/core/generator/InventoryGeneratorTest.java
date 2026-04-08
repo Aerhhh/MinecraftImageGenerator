@@ -151,8 +151,8 @@ class InventoryGeneratorTest {
 
         GeneratorResult result = glintGen.render(request, GenerationContext.defaults());
 
-        assertThat(result.isAnimated()).isTrue();
-        assertThat(result).isInstanceOf(GeneratorResult.AnimatedImage.class);
+        // Glint is applied per-item, so the inventory result is static
+        assertThat(result).isInstanceOf(GeneratorResult.StaticImage.class);
     }
 
     @Test
