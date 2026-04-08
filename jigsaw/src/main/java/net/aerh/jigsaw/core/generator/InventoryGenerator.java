@@ -5,182 +5,158 @@ import net.aerh.jigsaw.api.generator.GenerationContext;
 import net.aerh.jigsaw.api.generator.Generator;
 import net.aerh.jigsaw.api.generator.GeneratorResult;
 import net.aerh.jigsaw.api.sprite.SpriteProvider;
-import net.aerh.jigsaw.api.text.ChatColor;
 import net.aerh.jigsaw.core.effect.EffectPipeline;
 import net.aerh.jigsaw.core.util.GraphicsUtil;
 import net.aerh.jigsaw.exception.RenderException;
+import net.hypixel.nerdbot.marmalade.image.ImageUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.imageio.ImageIO;
 import java.awt.Color;
 import java.awt.Font;
+import java.awt.FontFormatException;
 import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 /**
- * Renders a Minecraft-style inventory container image.
+ * Renders a Minecraft-style inventory container image using the authentic GUI textures and colors.
  *
- * <p>The rendering steps are:
- * <ol>
- *   <li>Compute canvas dimensions from rows, slotsPerRow, and the slot texture size.</li>
- *   <li>Optionally draw a gray background, outer/inner borders, and a title.</li>
- *   <li>Draw each slot background using the slot texture.</li>
- *   <li>Place item sprites inside each occupied slot.</li>
- *   <li>Draw stack count labels (bottom-right, white text with dark shadow) when count &gt; 1.</li>
- *   <li>If any items are enchanted the pipeline is run per-item and frames are merged into an animation.</li>
- * </ol>
+ * <p>Uses the bundled {@code slot.png} texture for slot backgrounds and draws pixel-perfect
+ * Minecraft GUI borders with proper highlight/shadow colors. Title and stack counts use the
+ * Minecraft font with drop shadow rendering.
  */
 public final class InventoryGenerator implements Generator<InventoryRequest, GeneratorResult> {
 
-    // Minecraft inventory colors
-    private static final Color BG_COLOR = new Color(198, 198, 198);
-    private static final Color BORDER_OUTER_DARK = new Color(55, 55, 55);
-    private static final Color BORDER_OUTER_LIGHT = new Color(255, 255, 255);
-    private static final Color BORDER_INNER_DARK = new Color(139, 139, 139);
-    private static final Color BORDER_INNER_LIGHT = new Color(198, 198, 198);
-    private static final Color SLOT_OUTER_DARK = new Color(55, 55, 55);
-    private static final Color SLOT_OUTER_LIGHT = new Color(255, 255, 255);
-    private static final Color SLOT_INNER = new Color(139, 139, 139);
+    private static final Logger log = LoggerFactory.getLogger(InventoryGenerator.class);
 
-    private static final Color STACK_COUNT_COLOR = ChatColor.WHITE.color();
-    private static final Color STACK_COUNT_SHADOW = new Color(63, 63, 63);
+    // Minecraft GUI colors (from the old NerdBot MinecraftInventoryGenerator)
+    private static final Color INVENTORY_BACKGROUND = new Color(198, 198, 198);
+    private static final Color DARK_BORDER_COLOR = new Color(85, 85, 85);
+    private static final Color NORMAL_TEXT_COLOR = new Color(255, 255, 255);
+    private static final Color DROP_SHADOW_COLOR = new Color(63, 63, 63);
 
-    private static final int BORDER_THICKNESS = 4;
-    private static final int TITLE_HEIGHT = 14;
-    private static final int SLOT_PADDING = 2;
-
-    private static final String SLOT_TEXTURE_PATH = "minecraft/assets/textures/slot.png";
+    private static final String SLOT_TEXTURE_PATH = "/minecraft/assets/textures/slot.png";
+    private static final String FONT_PATH = "/minecraft/assets/fonts/Minecraft-Regular.otf";
 
     private final SpriteProvider spriteProvider;
     private final EffectPipeline effectPipeline;
 
-    /**
-     * Creates a new {@link InventoryGenerator}.
-     *
-     * @param spriteProvider the sprite provider to load item textures from; must not be {@code null}
-     * @param effectPipeline the pipeline of effects to apply per item; must not be {@code null}
-     */
     public InventoryGenerator(SpriteProvider spriteProvider, EffectPipeline effectPipeline) {
         this.spriteProvider = Objects.requireNonNull(spriteProvider, "spriteProvider must not be null");
         this.effectPipeline = Objects.requireNonNull(effectPipeline, "effectPipeline must not be null");
     }
 
-    /**
-     * Renders the inventory described by the request into a static or animated image.
-     *
-     * @param input   the inventory request; must not be {@code null}
-     * @param context the generation context; must not be {@code null}
-     *
-     * @return a static image, or an animated image if any item is enchanted
-     *
-     * @throws RenderException if rendering fails
-     */
     @Override
     public GeneratorResult render(InventoryRequest input, GenerationContext context) throws RenderException {
         Objects.requireNonNull(input, "input must not be null");
         Objects.requireNonNull(context, "context must not be null");
 
-        // Determine sprite size from the first available sprite (or default 16x16), then apply scale
-        int baseSprite = detectSpriteSize();
-        int spriteSize = baseSprite * input.scale();
-        int slotSize = spriteSize + SLOT_PADDING * 2 * input.scale();
+        // Derive scale factor from sprite size (sprites are double-size in atlas)
+        int baseSpriteSize = detectSpriteSize();
+        int baseScaleFactor = Math.max(1, baseSpriteSize / 2 / 16);
 
-        int titleHeight = input.drawTitle() ? TITLE_HEIGHT * input.scale() : 0;
-        int border = input.drawBorder() ? BORDER_THICKNESS * input.scale() : 0;
+        // Apply request scale on top
+        int scaleFactor = baseScaleFactor * input.scale();
+        int slotSize = 18 * scaleFactor;
+        int itemSize = 16 * scaleFactor;
 
-        int contentWidth = input.slotsPerRow() * slotSize;
-        int contentHeight = input.rows() * slotSize;
-        int imageWidth = contentWidth + border * 2;
-        int imageHeight = contentHeight + titleHeight + border * 2;
+        // Layout calculations (matching old MinecraftInventoryGenerator)
+        int borderSize = input.drawBorder() ? 7 * scaleFactor : 0;
+        boolean drawTitle = input.drawTitle() && !input.title().isBlank();
+        int titleHeight = borderSize + (drawTitle ? 13 * scaleFactor : 0)
+                - (input.drawBorder() && drawTitle ? 3 * scaleFactor : 0);
+
+        int imageWidth = (input.slotsPerRow() * slotSize) + (borderSize * 2);
+        int imageHeight = (input.rows() * slotSize) + titleHeight + borderSize;
 
         BufferedImage canvas = new BufferedImage(imageWidth, imageHeight, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = canvas.createGraphics();
-        GraphicsUtil.disableAntialiasing(g);
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
 
-        // Background
-        if (input.drawBackground()) {
-            g.setColor(BG_COLOR);
-            g.fillRect(0, 0, imageWidth, imageHeight);
-        }
+        // Load Minecraft font
+        Font mcFont = loadMinecraftFont(scaleFactor * 8f);
+        g.setFont(mcFont);
 
-        // Outer border (Minecraft bevel style)
+        // Draw border
         if (input.drawBorder()) {
-            drawBorder(g, imageWidth, imageHeight, border);
+            drawMinecraftBorder(g, imageWidth, imageHeight, scaleFactor);
         }
 
-        // Title
-        if (input.drawTitle() && !input.title().isBlank()) {
-            drawTitle(g, input.title(), border, border, imageWidth - border * 2, input.scale());
+        // Draw title
+        if (drawTitle) {
+            int titleX = 8 * scaleFactor;
+            int titleY = titleHeight - scaleFactor * 4;
+            g.setColor(DROP_SHADOW_COLOR);
+            g.drawString(input.title(), titleX, titleY);
         }
 
-        // Slot backgrounds
-        int slotsOriginX = border;
-        int slotsOriginY = border + titleHeight;
+        // Load and resize slot texture
+        BufferedImage slotTexture = loadSlotTexture(slotSize);
+
+        // Draw slots and place items
+        List<PlacedItem> placed = new ArrayList<>();
+        int slotsOriginY = titleHeight;
 
         for (int row = 0; row < input.rows(); row++) {
             for (int col = 0; col < input.slotsPerRow(); col++) {
-                int sx = slotsOriginX + col * slotSize;
-                int sy = slotsOriginY + row * slotSize;
-                drawSlot(g, sx, sy, slotSize);
+                int sx = borderSize + (col * slotSize);
+                int sy = slotsOriginY + (row * slotSize);
+
+                if (input.drawBackground()) {
+                    if (slotTexture != null) {
+                        g.drawImage(slotTexture, sx, sy, null);
+                    } else {
+                        drawSlotFallback(g, sx, sy, slotSize, scaleFactor);
+                    }
+                }
             }
         }
 
-        // Place item sprites and collect enchanted items
+        // Place item sprites
         boolean hasEnchanted = false;
-        List<PlacedItem> placed = new ArrayList<>();
-
         for (InventoryItem item : input.items()) {
             int slot = item.slot();
             int row = slot / input.slotsPerRow();
             int col = slot % input.slotsPerRow();
 
             if (row >= input.rows() || col >= input.slotsPerRow()) {
-                continue; // Slot out of range
+                continue;
             }
 
-            int scaledPadding = SLOT_PADDING * input.scale();
-            int sx = slotsOriginX + col * slotSize + scaledPadding;
-            int sy = slotsOriginY + row * slotSize + scaledPadding;
+            int sx = borderSize + (col * slotSize);
+            int sy = slotsOriginY + (row * slotSize);
+            int itemPadding = (slotSize - itemSize) / 2;
+            int itemX = sx + itemPadding;
+            int itemY = sy + itemPadding;
 
-            spriteProvider.getSprite(item.itemId()).ifPresent(sprite -> {
-                g.drawImage(sprite, sx, sy, spriteSize, spriteSize, null);
-            });
+            spriteProvider.getSprite(item.itemId()).ifPresent(sprite ->
+                    g.drawImage(sprite, itemX, itemY, itemSize, itemSize, null));
 
             if (item.enchanted()) {
                 hasEnchanted = true;
             }
 
-            placed.add(new PlacedItem(item, sx, sy, slotSize, spriteSize));
+            placed.add(new PlacedItem(item, sx, sy, slotSize, itemSize));
         }
 
         // Draw stack counts
-        Font stackFont = new Font(Font.MONOSPACED, Font.PLAIN, Math.max(6, baseSprite / 2 * input.scale()));
-        g.setFont(stackFont);
-
-        int scaledSlotPadding = SLOT_PADDING * input.scale();
         for (PlacedItem pi : placed) {
             if (pi.item().stackCount() > 1) {
-                String label = String.valueOf(pi.item().stackCount());
-                int textX = pi.slotX() + pi.slotSize() - scaledSlotPadding - label.length() * (stackFont.getSize() / 2);
-                int textY = pi.slotY() + pi.slotSize() - scaledSlotPadding;
-
-                // Shadow
-                g.setColor(STACK_COUNT_SHADOW);
-                g.drawString(label, textX + 1, textY + 1);
-                // Foreground
-                g.setColor(STACK_COUNT_COLOR);
-                g.drawString(label, textX, textY);
+                drawStackCount(g, pi, scaleFactor, mcFont);
             }
         }
 
         g.dispose();
 
-        // If enchanted items are present run the effect pipeline (glint = animated)
+        // Enchantment glint animation
         if (hasEnchanted) {
             EffectContext effectCtx = EffectContext.builder()
                     .image(canvas)
@@ -195,39 +171,22 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
         return new GeneratorResult.StaticImage(canvas);
     }
 
-    /**
-     * Returns the input type accepted by this generator.
-     *
-     * @return {@link InventoryRequest}
-     */
     @Override
     public Class<InventoryRequest> inputType() {
         return InventoryRequest.class;
     }
 
-    /**
-     * Returns the output type produced by this generator.
-     *
-     * @return {@link GeneratorResult}
-     */
     @Override
     public Class<GeneratorResult> outputType() {
         return GeneratorResult.class;
     }
 
     /**
-     * Returns the scale factor derived from the sprite provider's actual sprite size relative to
-     * the standard 16x16 Minecraft texture resolution.
-     *
-     * <p>For example, a sprite provider that returns 32x32 sprites yields a scale factor of 2;
-     * a provider returning 128x128 sprites yields 8. If no sprites are available the value
-     * defaults to 1 (no scaling).
-     *
-     * @return the integer scale factor; always {@code >= 1}
+     * Returns the scale factor derived from the sprite provider's actual sprite size.
      */
     public int getScaleFactor() {
         int spriteSize = detectSpriteSize();
-        return Math.max(1, spriteSize / 16);
+        return Math.max(1, spriteSize / 2 / 16);
     }
 
     private int detectSpriteSize() {
@@ -235,56 +194,115 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
                 .findFirst()
                 .flatMap(spriteProvider::getSprite)
                 .map(BufferedImage::getWidth)
-                .orElse(16);
+                .orElse(32); // Default to 32 (16 * 2) if no sprites available
     }
 
-    /** Draws a Minecraft-style raised/sunken bevel border around the canvas. */
-    private static void drawBorder(Graphics2D g, int w, int h, int border) {
-        // Top and left edges (light)
-        g.setColor(BORDER_OUTER_LIGHT);
-        g.fillRect(0, 0, w, border);
-        g.fillRect(0, 0, border, h);
+    // -------------------------------------------------------------------------
+    // Minecraft GUI border (pixel-perfect port from old MinecraftInventoryGenerator)
+    // -------------------------------------------------------------------------
 
-        // Bottom and right edges (dark)
-        g.setColor(BORDER_OUTER_DARK);
-        g.fillRect(0, h - border, w, border);
-        g.fillRect(w - border, 0, border, h);
+    private static void drawMinecraftBorder(Graphics2D g, int imageWidth, int imageHeight, int s) {
+        // Background fill
+        g.setColor(INVENTORY_BACKGROUND);
+        g.fillRect(s * 3, s * 3, imageWidth - s * 6, imageHeight - s * 6);
+        g.fillRect(imageWidth - s * 3, s * 2, s, s); // top right corner fill
+        g.fillRect(s * 2, imageHeight - s * 3, s, s); // bottom left corner fill
 
-        // Inner top-left (dark, inset by 2px)
-        int inset = border / 2;
-        g.setColor(BORDER_INNER_DARK);
-        g.fillRect(inset, inset, w - inset * 2, inset);
-        g.fillRect(inset, inset, inset, h - inset * 2);
+        // Dark gray shadow (right and bottom edges)
+        g.setColor(DARK_BORDER_COLOR);
+        g.fillRect(imageWidth - s * 3, s * 3, s * 2, imageHeight - s * 4);
+        g.fillRect(s * 3, imageHeight - s * 3, imageWidth - s * 6, s * 2);
+        g.fillRect(imageWidth - s * 4, imageHeight - s * 4, s, s);
 
-        // Inner bottom-right (light, inset by 2px)
-        g.setColor(BORDER_INNER_LIGHT);
-        g.fillRect(inset, h - inset * 2, w - inset * 2, inset);
-        g.fillRect(w - inset * 2, inset, inset, h - inset * 2);
+        // White highlight (left and top edges)
+        g.setColor(Color.WHITE);
+        g.fillRect(s, s, s * 2, imageHeight - s * 4);
+        g.fillRect(s * 3, s, imageWidth - s * 6, s * 2);
+        g.fillRect(s * 3, s * 3, s, s);
+
+        // Black outline
+        g.setColor(Color.BLACK);
+        g.fillRect(0, s * 2, s, imageHeight - s * 5);           // left
+        g.fillRect(imageWidth - s, s * 3, s, imageHeight - s * 5); // right
+        g.fillRect(s * 2, 0, imageWidth - s * 5, s);            // top
+        g.fillRect(s * 3, imageHeight - s, imageWidth - s * 5, s); // bottom
+        // Corner pixels
+        g.fillRect(s, s, s, s);                                   // top-left
+        g.fillRect(imageWidth - s * 3, s, s, s);                  // top-right upper
+        g.fillRect(imageWidth - s * 2, s * 2, s, s);              // top-right lower
+        g.fillRect(imageWidth - s * 2, imageHeight - s * 2, s, s); // bottom-right
+        g.fillRect(s, imageHeight - s * 3, s, s);                 // bottom-left upper
+        g.fillRect(s * 2, imageHeight - s * 2, s, s);             // bottom-left lower
     }
 
-    /** Draws a slot at the given position using a sunken bevel. */
-    private static void drawSlot(Graphics2D g, int x, int y, int size) {
-        // Slot outer (dark top-left, light bottom-right) - sunken look
-        g.setColor(SLOT_OUTER_DARK);
-        g.fillRect(x, y, size, 1);
-        g.fillRect(x, y, 1, size);
+    // -------------------------------------------------------------------------
+    // Slot rendering
+    // -------------------------------------------------------------------------
 
-        g.setColor(SLOT_OUTER_LIGHT);
-        g.fillRect(x, y + size - 1, size, 1);
-        g.fillRect(x + size - 1, y, 1, size);
-
-        // Slot inner fill (slightly darker than bg)
-        g.setColor(SLOT_INNER);
-        g.fillRect(x + 1, y + 1, size - 2, size - 2);
+    private static BufferedImage loadSlotTexture(int slotSize) {
+        try (InputStream stream = InventoryGenerator.class.getResourceAsStream(SLOT_TEXTURE_PATH)) {
+            if (stream != null) {
+                BufferedImage original = ImageIO.read(stream);
+                return ImageUtil.resizeImage(original, slotSize, slotSize, BufferedImage.TYPE_INT_ARGB);
+            }
+        } catch (IOException e) {
+            log.warn("Failed to load slot texture, using fallback: {}", e.getMessage());
+        }
+        return null;
     }
 
-    private static void drawTitle(Graphics2D g, String title, int x, int y, int width, int scale) {
-        g.setColor(new Color(64, 64, 64));
-        Font titleFont = new Font(Font.SANS_SERIF, Font.PLAIN, 9 * scale);
-        g.setFont(titleFont);
-        g.drawString(title, x + 4 * scale, y + TITLE_HEIGHT * scale - 4 * scale);
+    private static void drawSlotFallback(Graphics2D g, int x, int y, int slotSize, int scaleFactor) {
+        // Background
+        g.setColor(INVENTORY_BACKGROUND);
+        g.fillRect(x + scaleFactor, y + scaleFactor, slotSize - 2 * scaleFactor, slotSize - 2 * scaleFactor);
+
+        // Dark border (top-left)
+        g.setColor(DARK_BORDER_COLOR);
+        g.drawRect(x, y, slotSize - 1, slotSize - 1);
+        g.drawRect(x + 1, y + 1, slotSize - 3, slotSize - 3);
+
+        // White highlight (bottom-right)
+        g.setColor(Color.WHITE);
+        g.drawLine(x + slotSize - 1, y, x + slotSize - 1, y + slotSize - 1);
+        g.drawLine(x, y + slotSize - 1, x + slotSize - 1, y + slotSize - 1);
     }
 
-    /** Internal record bundling a placed item with its draw coordinates. */
+    // -------------------------------------------------------------------------
+    // Stack count rendering
+    // -------------------------------------------------------------------------
+
+    private static void drawStackCount(Graphics2D g, PlacedItem pi, int scaleFactor, Font font) {
+        String text = String.valueOf(pi.item().stackCount());
+        g.setFont(font);
+
+        int textWidth = g.getFontMetrics().stringWidth(text);
+        int textX = pi.slotX() + pi.slotSize() - textWidth + 1;
+        int textY = pi.slotY() + pi.slotSize() - scaleFactor + 1;
+
+        // Drop shadow
+        g.setColor(DROP_SHADOW_COLOR);
+        g.drawString(text, textX + scaleFactor - 1, textY + scaleFactor - 1);
+
+        // Foreground
+        g.setColor(NORMAL_TEXT_COLOR);
+        g.drawString(text, textX - 1, textY - 1);
+    }
+
+    // -------------------------------------------------------------------------
+    // Font loading
+    // -------------------------------------------------------------------------
+
+    private static Font loadMinecraftFont(float size) {
+        try (InputStream stream = InventoryGenerator.class.getResourceAsStream(FONT_PATH)) {
+            if (stream != null) {
+                Font base = Font.createFont(Font.TRUETYPE_FONT, stream);
+                return base.deriveFont(size);
+            }
+        } catch (IOException | FontFormatException e) {
+            log.warn("Failed to load Minecraft font, using fallback: {}", e.getMessage());
+        }
+        return new Font(Font.MONOSPACED, Font.PLAIN, Math.round(size));
+    }
+
     private record PlacedItem(InventoryItem item, int slotX, int slotY, int slotSize, int spriteSize) {}
 }
