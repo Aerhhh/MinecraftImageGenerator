@@ -178,7 +178,10 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
             }
         }
 
-        // Place item sprites (apply enchantment glint per-item, not to the whole canvas)
+        // Place item sprites and collect per-item glint frames for enchanted items
+        int maxGlintFrames = 0;
+        int glintFrameDelay = 33;
+
         for (InventoryItem item : input.items()) {
             int slot = item.slot();
             int row = slot / input.slotsPerRow();
@@ -194,32 +197,33 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
             int itemX = sx + itemPadding;
             int itemY = sy + itemPadding;
 
-            spriteProvider.getSprite(item.itemId()).ifPresent(sprite -> {
-                BufferedImage itemImage = sprite;
+            BufferedImage staticSprite = spriteProvider.getSprite(item.itemId()).orElse(null);
+            List<BufferedImage> itemGlintFrames = null;
 
-                // Apply enchantment glint to this item only
-                if (item.enchanted()) {
-                    EffectContext effectCtx = EffectContext.builder()
-                            .image(sprite)
-                            .itemId(item.itemId())
-                            .enchanted(true)
-                            .build();
-                    EffectContext result = effectPipeline.execute(effectCtx);
-                    // GlintEffect produces animation frames; use the first frame as the static glint
-                    if (!result.animationFrames().isEmpty()) {
-                        itemImage = result.animationFrames().getFirst();
-                    } else if (result.image() != null) {
-                        itemImage = result.image();
-                    }
+            if (staticSprite != null && item.enchanted()) {
+                EffectContext effectCtx = EffectContext.builder()
+                        .image(staticSprite)
+                        .itemId(item.itemId())
+                        .enchanted(true)
+                        .build();
+                EffectContext result = effectPipeline.execute(effectCtx);
+                if (!result.animationFrames().isEmpty()) {
+                    itemGlintFrames = result.animationFrames();
+                    maxGlintFrames = Math.max(maxGlintFrames, itemGlintFrames.size());
+                    glintFrameDelay = result.frameDelayMs();
                 }
+            }
 
-                g.drawImage(itemImage, itemX, itemY, itemSize, itemSize, null);
-            });
+            // Draw the static (or first glint frame) onto the base canvas
+            if (staticSprite != null) {
+                BufferedImage toDraw = itemGlintFrames != null ? itemGlintFrames.getFirst() : staticSprite;
+                g.drawImage(toDraw, itemX, itemY, itemSize, itemSize, null);
+            }
 
-            placed.add(new PlacedItem(item, sx, sy, slotSize, itemSize));
+            placed.add(new PlacedItem(item, sx, sy, slotSize, itemSize, staticSprite, itemGlintFrames));
         }
 
-        // Draw stack counts
+        // Draw stack counts on the base canvas
         for (PlacedItem pi : placed) {
             if (pi.item().stackCount() > 1) {
                 drawStackCount(g, pi, scaleFactor, mcFont);
@@ -227,6 +231,13 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
         }
 
         g.dispose();
+
+        // If any items are enchanted, build animated frames for the whole inventory
+        if (maxGlintFrames > 0) {
+            List<BufferedImage> inventoryFrames = buildAnimationFrames(
+                    canvas, placed, itemSize, scaleFactor, mcFont, maxGlintFrames);
+            return new GeneratorResult.AnimatedImage(inventoryFrames, glintFrameDelay);
+        }
 
         return new GeneratorResult.StaticImage(canvas);
     }
@@ -376,5 +387,46 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
         return new Font(Font.MONOSPACED, Font.PLAIN, Math.round(size));
     }
 
-    private record PlacedItem(InventoryItem item, int slotX, int slotY, int slotSize, int spriteSize) {}
+    private record PlacedItem(
+            InventoryItem item, int slotX, int slotY, int slotSize, int spriteSize,
+            BufferedImage staticSprite, List<BufferedImage> glintFrames
+    ) {}
+
+    /**
+     * Builds full inventory animation frames by compositing the base canvas with each
+     * enchanted item's glint frame cycling. Non-enchanted items and stack counts are
+     * drawn identically on every frame.
+     */
+    private static List<BufferedImage> buildAnimationFrames(
+            BufferedImage baseCanvas, List<PlacedItem> placed, int itemSize,
+            int scaleFactor, Font mcFont, int frameCount) {
+        List<BufferedImage> frames = new ArrayList<>(frameCount);
+
+        for (int frameIndex = 0; frameIndex < frameCount; frameIndex++) {
+            BufferedImage frame = new BufferedImage(
+                    baseCanvas.getWidth(), baseCanvas.getHeight(), BufferedImage.TYPE_INT_ARGB);
+            Graphics2D fg = frame.createGraphics();
+            fg.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
+            fg.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+
+            // Draw the base canvas (background, border, slots, non-enchanted items, stack counts)
+            fg.drawImage(baseCanvas, 0, 0, null);
+
+            // Overdraw enchanted items with their current glint frame
+            for (PlacedItem pi : placed) {
+                if (pi.glintFrames() != null && !pi.glintFrames().isEmpty()) {
+                    int itemPadding = (pi.slotSize() - itemSize) / 2;
+                    int itemX = pi.slotX() + itemPadding;
+                    int itemY = pi.slotY() + itemPadding;
+                    BufferedImage glintFrame = pi.glintFrames().get(frameIndex % pi.glintFrames().size());
+                    fg.drawImage(glintFrame, itemX, itemY, itemSize, itemSize, null);
+                }
+            }
+
+            fg.dispose();
+            frames.add(frame);
+        }
+
+        return frames;
+    }
 }
