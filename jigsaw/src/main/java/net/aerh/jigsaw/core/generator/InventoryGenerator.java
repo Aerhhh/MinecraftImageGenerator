@@ -205,7 +205,10 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
                             .enchanted(true)
                             .build();
                     EffectContext result = effectPipeline.execute(effectCtx);
-                    if (result.image() != null) {
+                    // GlintEffect produces animation frames; use the first frame as the static glint
+                    if (!result.animationFrames().isEmpty()) {
+                        itemImage = result.animationFrames().getFirst();
+                    } else if (result.image() != null) {
                         itemImage = result.image();
                     }
                 }
