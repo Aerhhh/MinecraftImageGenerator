@@ -67,8 +67,8 @@ public record InventoryRequest(
 
         private int rows = 6;
         private int slotsPerRow = 9;
-        private String title = "Chest";
-        private boolean drawTitle = true;
+        private String title = "";
+        private boolean drawTitle = false;
         private boolean drawBorder = true;
         private boolean drawBackground = true;
         private final List<InventoryItem> items = new ArrayList<>();
@@ -107,6 +107,7 @@ public record InventoryRequest(
          */
         public Builder title(String val) {
             this.title = Objects.requireNonNull(val, "title must not be null");
+            this.drawTitle = !val.isBlank();
             return this;
         }
 
