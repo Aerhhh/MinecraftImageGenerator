@@ -45,12 +45,64 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
     private static final String SLOT_TEXTURE_PATH = "/minecraft/assets/textures/slot.png";
     private static final String FONT_PATH = "/minecraft/assets/fonts/Minecraft-Regular.otf";
 
+    /** UV coordinates for extracting a single slot tile from the Minecraft chest GUI texture. */
+    private static final int GUI_SLOT_X = 7;
+    private static final int GUI_SLOT_Y = 17;
+    private static final int GUI_SLOT_SIZE = 18;
+    private static final String GUI_TEXTURE_PATH = "assets/minecraft/textures/gui/container/generic_54.png";
+
     private final SpriteProvider spriteProvider;
     private final EffectPipeline effectPipeline;
+    private final BufferedImage baseSlotTexture;
 
-    public InventoryGenerator(SpriteProvider spriteProvider, EffectPipeline effectPipeline) {
+    /**
+     * Creates a new {@link InventoryGenerator} with a custom slot texture.
+     *
+     * @param spriteProvider the sprite provider to load item textures from; must not be {@code null}
+     * @param effectPipeline the pipeline of effects to apply per item; must not be {@code null}
+     * @param slotTexture    the base slot texture to use, or {@code null} to use the bundled default
+     */
+    public InventoryGenerator(SpriteProvider spriteProvider, EffectPipeline effectPipeline, BufferedImage slotTexture) {
         this.spriteProvider = Objects.requireNonNull(spriteProvider, "spriteProvider must not be null");
         this.effectPipeline = Objects.requireNonNull(effectPipeline, "effectPipeline must not be null");
+        this.baseSlotTexture = slotTexture != null ? slotTexture : loadDefaultSlotTexture();
+    }
+
+    /**
+     * Creates a new {@link InventoryGenerator} using the bundled default slot texture.
+     *
+     * @param spriteProvider the sprite provider to load item textures from; must not be {@code null}
+     * @param effectPipeline the pipeline of effects to apply per item; must not be {@code null}
+     */
+    public InventoryGenerator(SpriteProvider spriteProvider, EffectPipeline effectPipeline) {
+        this(spriteProvider, effectPipeline, null);
+    }
+
+    /**
+     * Extracts a slot texture from a resource pack's GUI container texture.
+     * Returns {@code null} if the pack doesn't contain the texture.
+     *
+     * @param pack the resource pack to extract from
+     * @return the 18x18 slot texture, or {@code null} if not found
+     */
+    public static BufferedImage extractSlotTextureFromPack(net.aerh.jigsaw.core.resource.ResourcePack pack) {
+        try {
+            var streamOpt = pack.getResource(GUI_TEXTURE_PATH);
+            if (streamOpt.isEmpty()) {
+                return null;
+            }
+            try (InputStream stream = streamOpt.get()) {
+                BufferedImage guiTexture = ImageIO.read(stream);
+                if (guiTexture == null || guiTexture.getWidth() < GUI_SLOT_X + GUI_SLOT_SIZE
+                        || guiTexture.getHeight() < GUI_SLOT_Y + GUI_SLOT_SIZE) {
+                    return null;
+                }
+                return guiTexture.getSubimage(GUI_SLOT_X, GUI_SLOT_Y, GUI_SLOT_SIZE, GUI_SLOT_SIZE);
+            }
+        } catch (IOException e) {
+            log.warn("Failed to extract slot texture from resource pack: {}", e.getMessage());
+            return null;
+        }
     }
 
     @Override
@@ -99,7 +151,7 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
         }
 
         // Load and resize slot texture
-        BufferedImage slotTexture = loadSlotTexture(slotSize);
+        BufferedImage slotTexture = resizeSlotTexture(slotSize);
 
         // Draw slots and place items
         List<PlacedItem> placed = new ArrayList<>();
@@ -239,14 +291,26 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
     // Slot rendering
     // -------------------------------------------------------------------------
 
-    private static BufferedImage loadSlotTexture(int slotSize) {
+    /**
+     * Resizes the base slot texture to the target slot size for rendering.
+     */
+    private BufferedImage resizeSlotTexture(int slotSize) {
+        if (baseSlotTexture == null) {
+            return null;
+        }
+        return ImageUtil.resizeImage(baseSlotTexture, slotSize, slotSize, BufferedImage.TYPE_INT_ARGB);
+    }
+
+    /**
+     * Loads the bundled default slot texture from the classpath.
+     */
+    private static BufferedImage loadDefaultSlotTexture() {
         try (InputStream stream = InventoryGenerator.class.getResourceAsStream(SLOT_TEXTURE_PATH)) {
             if (stream != null) {
-                BufferedImage original = ImageIO.read(stream);
-                return ImageUtil.resizeImage(original, slotSize, slotSize, BufferedImage.TYPE_INT_ARGB);
+                return ImageIO.read(stream);
             }
         } catch (IOException e) {
-            log.warn("Failed to load slot texture, using fallback: {}", e.getMessage());
+            log.warn("Failed to load default slot texture: {}", e.getMessage());
         }
         return null;
     }

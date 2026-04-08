@@ -66,6 +66,15 @@ public interface EngineBuilder {
     EngineBuilder spriteProvider(SpriteProvider provider);
 
     /**
+     * Sets a custom slot texture for inventory rendering.
+     * If not called, the engine uses the bundled default slot texture.
+     *
+     * @param slotTexture the slot texture image; must not be {@code null}
+     * @return this builder
+     */
+    EngineBuilder slotTexture(java.awt.image.BufferedImage slotTexture);
+
+    /**
      * Builds and returns the configured {@link Engine}.
      *
      * @return a new {@link Engine} instance

@@ -270,6 +270,7 @@ public final class DefaultEngine implements Engine {
         private final List<OverlayRenderer> overlayRenderers = new ArrayList<>();
         private final List<FontProvider> fontProviders = new ArrayList<>();
         private SpriteProvider customSpriteProvider;
+        private java.awt.image.BufferedImage customSlotTexture;
 
         /** Creates a new builder with all defaults enabled. */
         public Builder() {
@@ -350,6 +351,12 @@ public final class DefaultEngine implements Engine {
             return this;
         }
 
+        @Override
+        public Builder slotTexture(java.awt.image.BufferedImage slotTexture) {
+            this.customSlotTexture = Objects.requireNonNull(slotTexture, "slotTexture must not be null");
+            return this;
+        }
+
         /**
          * Builds and returns the configured {@link Engine}.
          *
@@ -408,7 +415,7 @@ public final class DefaultEngine implements Engine {
             // Generators
             ItemGenerator itemGenerator = new ItemGenerator(spriteProvider, effectPipeline, overlayLoader);
             TooltipGenerator tooltipGenerator = new TooltipGenerator();
-            InventoryGenerator inventoryGenerator = new InventoryGenerator(spriteProvider, effectPipeline);
+            InventoryGenerator inventoryGenerator = new InventoryGenerator(spriteProvider, effectPipeline, customSlotTexture);
             PlayerHeadGenerator playerHeadGenerator = new PlayerHeadGenerator();
 
             return new DefaultEngine(

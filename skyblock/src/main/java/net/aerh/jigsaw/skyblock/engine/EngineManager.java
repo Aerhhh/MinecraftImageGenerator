@@ -87,7 +87,15 @@ public class EngineManager implements Closeable {
                 try {
                     pack = new ZipResourcePack(zipPath);
                     SpriteProvider spriteProvider = buildSpriteProvider(pack);
-                    Engine engine = Engine.builder().spriteProvider(spriteProvider).build();
+                    // Extract slot texture from pack's GUI texture if available
+                    java.awt.image.BufferedImage slotTexture =
+                            net.aerh.jigsaw.core.generator.InventoryGenerator.extractSlotTextureFromPack(pack);
+
+                    var engineBuilder = Engine.builder().spriteProvider(spriteProvider);
+                    if (slotTexture != null) {
+                        engineBuilder.slotTexture(slotTexture);
+                    }
+                    Engine engine = engineBuilder.build();
                     engines.put(packName, engine);
                     metadata.put(packName, pack.metadata());
                     packs.add(pack);
