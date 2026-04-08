@@ -137,6 +137,12 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
         Font mcFont = loadMinecraftFont(scaleFactor * 8f);
         g.setFont(mcFont);
 
+        // Fill background with inventory gray
+        if (input.drawBackground()) {
+            g.setColor(INVENTORY_BACKGROUND);
+            g.fillRect(0, 0, imageWidth, imageHeight);
+        }
+
         // Draw border
         if (input.drawBorder()) {
             drawMinecraftBorder(g, imageWidth, imageHeight, scaleFactor);
