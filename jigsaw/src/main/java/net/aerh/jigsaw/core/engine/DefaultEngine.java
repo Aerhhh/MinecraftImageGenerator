@@ -26,6 +26,8 @@ import net.aerh.jigsaw.core.generator.ItemGenerator;
 import net.aerh.jigsaw.core.generator.ItemRequest;
 import net.aerh.jigsaw.core.generator.PlayerBodyGenerator;
 import net.aerh.jigsaw.core.generator.PlayerBodyRequest;
+import net.aerh.jigsaw.core.generator.body.ArmorTextureProvider;
+import net.aerh.jigsaw.core.resource.ResourcePack;
 import net.aerh.jigsaw.core.generator.PlayerHeadGenerator;
 import net.aerh.jigsaw.core.generator.PlayerHeadRequest;
 import net.aerh.jigsaw.core.generator.ResultComposer;
@@ -303,6 +305,7 @@ public final class DefaultEngine implements Engine {
         private final Map<String, DataRegistry<?>> customRegistries = new HashMap<>();
         private SpriteProvider customSpriteProvider;
         private java.awt.image.BufferedImage customSlotTexture;
+        private ResourcePack customResourcePack;
 
         /** Creates a new builder with all defaults enabled. */
         public Builder() {
@@ -404,6 +407,12 @@ public final class DefaultEngine implements Engine {
             return this;
         }
 
+        @Override
+        public Builder resourcePack(ResourcePack resourcePack) {
+            this.customResourcePack = Objects.requireNonNull(resourcePack, "resourcePack must not be null");
+            return this;
+        }
+
         /**
          * Builds and returns the configured {@link Engine}.
          *
@@ -467,7 +476,12 @@ public final class DefaultEngine implements Engine {
             TooltipGenerator tooltipGenerator = new TooltipGenerator(textRenderer);
             InventoryGenerator inventoryGenerator = new InventoryGenerator(spriteProvider, effectPipeline, customSlotTexture, fontRegistry);
             PlayerHeadGenerator playerHeadGenerator = PlayerHeadGenerator.withDefaults();
-            PlayerBodyGenerator playerBodyGenerator = PlayerBodyGenerator.withDefaults();
+
+            // Armor texture provider (only available if a resource pack was configured)
+            ArmorTextureProvider armorTextureProvider = customResourcePack != null
+                    ? new ArmorTextureProvider(customResourcePack)
+                    : null;
+            PlayerBodyGenerator playerBodyGenerator = PlayerBodyGenerator.withDefaults(armorTextureProvider);
 
             return new DefaultEngine(
                     spriteProvider,

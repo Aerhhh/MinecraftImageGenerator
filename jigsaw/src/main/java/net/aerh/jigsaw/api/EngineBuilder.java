@@ -6,6 +6,7 @@ import net.aerh.jigsaw.api.effect.ImageEffect;
 import net.aerh.jigsaw.api.font.FontProvider;
 import net.aerh.jigsaw.api.overlay.OverlayRenderer;
 import net.aerh.jigsaw.api.sprite.SpriteProvider;
+import net.aerh.jigsaw.core.resource.ResourcePack;
 import net.aerh.jigsaw.spi.NbtFormatHandler;
 
 /**
@@ -85,6 +86,18 @@ public interface EngineBuilder {
      * @return this builder
      */
     EngineBuilder slotTexture(java.awt.image.BufferedImage slotTexture);
+
+    /**
+     * Sets a {@link ResourcePack} to use for loading armor textures by material name.
+     * This enables the {@code armor(ArmorSlot, String)} API on
+     * {@link net.aerh.jigsaw.core.generator.PlayerBodyRequest.Builder}.
+     *
+     * <p>If not called, armor can still be provided via pre-loaded {@code ArmorPiece} images.
+     *
+     * @param resourcePack the resource pack; must not be {@code null}
+     * @return this builder
+     */
+    EngineBuilder resourcePack(ResourcePack resourcePack);
 
     /**
      * Builds and returns the configured {@link Engine}.

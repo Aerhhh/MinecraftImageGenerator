@@ -1,5 +1,6 @@
 package net.aerh.jigsaw.core.generator;
 
+import net.aerh.jigsaw.core.generator.body.ArmorSlot;
 import net.aerh.jigsaw.core.generator.body.SkinModel;
 import org.junit.jupiter.api.Test;
 
@@ -31,7 +32,7 @@ class PlayerBodyRequestTest {
     void requiresAtLeastOneSource() {
         assertThatThrownBy(() -> new PlayerBodyRequest(
                 Optional.empty(), Optional.empty(), Optional.empty(),
-                SkinModel.CLASSIC, 0, 0, 0, List.of(), 1
+                SkinModel.CLASSIC, 0, 0, 0, List.of(), List.of(), 1
         )).isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("At least one");
     }
@@ -110,7 +111,36 @@ class PlayerBodyRequestTest {
     void nullSkinModelThrows() {
         assertThatThrownBy(() -> new PlayerBodyRequest(
                 Optional.empty(), Optional.of("http://example.com/skin.png"), Optional.empty(),
-                null, 0, 0, 0, List.of(), 1
+                null, 0, 0, 0, List.of(), List.of(), 1
         )).isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void armorByMaterial_addsToArmorMaterials() {
+        PlayerBodyRequest request = PlayerBodyRequest.fromUrl("http://example.com/skin.png")
+                .armor(ArmorSlot.HELMET, "iron")
+                .armor(ArmorSlot.LEGGINGS, "iron")
+                .build();
+        assertThat(request.armorMaterials()).hasSize(2);
+        assertThat(request.armorMaterials().get(0).slot()).isEqualTo(ArmorSlot.HELMET);
+        assertThat(request.armorMaterials().get(0).material()).isEqualTo("iron");
+    }
+
+    @Test
+    void armorByMaterialDyed_preservesDyeColor() {
+        PlayerBodyRequest request = PlayerBodyRequest.fromUrl("http://example.com/skin.png")
+                .armor(ArmorSlot.CHESTPLATE, "leather", 0xFFA06540)
+                .build();
+        assertThat(request.armorMaterials()).hasSize(1);
+        assertThat(request.armorMaterials().get(0).dyeColor()).contains(0xFFA06540);
+    }
+
+    @Test
+    void armorMaterialsList_isImmutable() {
+        PlayerBodyRequest request = PlayerBodyRequest.fromUrl("http://example.com/skin.png")
+                .armor(ArmorSlot.HELMET, "iron")
+                .build();
+        assertThatThrownBy(() -> request.armorMaterials().add(null))
+                .isInstanceOf(UnsupportedOperationException.class);
     }
 }
