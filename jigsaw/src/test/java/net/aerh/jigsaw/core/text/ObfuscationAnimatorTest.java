@@ -4,6 +4,8 @@ import net.aerh.jigsaw.api.generator.GeneratorResult;
 import net.aerh.jigsaw.api.text.TextRenderOptions;
 import net.aerh.jigsaw.api.text.TextSegment;
 import net.aerh.jigsaw.api.text.TextStyle;
+import net.aerh.jigsaw.core.font.DefaultFontRegistry;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.awt.Color;
@@ -14,6 +16,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ObfuscationAnimatorTest {
+
+    private static MinecraftTextRenderer renderer;
+
+    @BeforeAll
+    static void initRenderer() {
+        renderer = new MinecraftTextRenderer(DefaultFontRegistry.withBuiltins());
+    }
 
     private static TextStyle obfuscatedStyle() {
         return TextStyle.DEFAULT.withObfuscated(true);
@@ -35,7 +44,7 @@ class ObfuscationAnimatorTest {
     void animate_producesCorrectNumberOfFrames() {
         TextLayout layout = layoutWithSegment("Hello", obfuscatedStyle());
         ObfuscationAnimator animator = new ObfuscationAnimator(
-                layout, TextRenderOptions.defaults(), 10, 100);
+                renderer, layout, TextRenderOptions.defaults(),10, 100);
 
         GeneratorResult.AnimatedImage result = animator.animate();
 
@@ -45,7 +54,7 @@ class ObfuscationAnimatorTest {
     @Test
     void animate_defaultFrameCountIs10() {
         TextLayout layout = layoutWithSegment("Hi", obfuscatedStyle());
-        ObfuscationAnimator animator = new ObfuscationAnimator(layout, TextRenderOptions.defaults());
+        ObfuscationAnimator animator = new ObfuscationAnimator(renderer, layout, TextRenderOptions.defaults());
 
         GeneratorResult.AnimatedImage result = animator.animate();
 
@@ -59,7 +68,7 @@ class ObfuscationAnimatorTest {
         TextLayout layout = layoutWithSegment("Test", obfuscatedStyle());
         int expectedDelay = 150;
         ObfuscationAnimator animator = new ObfuscationAnimator(
-                layout, TextRenderOptions.defaults(), 5, expectedDelay);
+                renderer, layout, TextRenderOptions.defaults(),5, expectedDelay);
 
         GeneratorResult.AnimatedImage result = animator.animate();
 
@@ -72,7 +81,7 @@ class ObfuscationAnimatorTest {
     void animate_allFramesHaveSameDimensions() {
         TextLayout layout = layoutWithSegment("ABCDE", obfuscatedStyle());
         ObfuscationAnimator animator = new ObfuscationAnimator(
-                layout, TextRenderOptions.defaults(), 5, 100);
+                renderer, layout, TextRenderOptions.defaults(),5, 100);
 
         GeneratorResult.AnimatedImage result = animator.animate();
 
@@ -94,7 +103,7 @@ class ObfuscationAnimatorTest {
         TextLayout layout = new TextLayout(List.of(line), 10, 1);
 
         ObfuscationAnimator animator = new ObfuscationAnimator(
-                layout, TextRenderOptions.defaults(), 5, 100);
+                renderer, layout, TextRenderOptions.defaults(),5, 100);
 
         GeneratorResult.AnimatedImage result = animator.animate();
 
@@ -112,7 +121,7 @@ class ObfuscationAnimatorTest {
     void animate_returnsAnimatedImage() {
         TextLayout layout = layoutWithSegment("ABC", obfuscatedStyle());
         ObfuscationAnimator animator = new ObfuscationAnimator(
-                layout, TextRenderOptions.defaults(), 3, 100);
+                renderer, layout, TextRenderOptions.defaults(),3, 100);
 
         GeneratorResult.AnimatedImage result = animator.animate();
 
@@ -126,7 +135,7 @@ class ObfuscationAnimatorTest {
     void animate_emptyLayoutProducesFrames() {
         TextLayout empty = new TextLayout(List.of(), 0, 0);
         ObfuscationAnimator animator = new ObfuscationAnimator(
-                empty, TextRenderOptions.defaults(), 3, 100);
+                renderer, empty, TextRenderOptions.defaults(), 3, 100);
 
         GeneratorResult.AnimatedImage result = animator.animate();
 
@@ -136,15 +145,22 @@ class ObfuscationAnimatorTest {
     // --- Null guards ---
 
     @Test
+    void constructor_nullRendererThrows() {
+        TextLayout layout = layoutWithSegment("X", obfuscatedStyle());
+        assertThatThrownBy(() -> new ObfuscationAnimator(null, layout, TextRenderOptions.defaults()))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
     void constructor_nullLayoutThrows() {
-        assertThatThrownBy(() -> new ObfuscationAnimator(null, TextRenderOptions.defaults()))
+        assertThatThrownBy(() -> new ObfuscationAnimator(renderer, null, TextRenderOptions.defaults()))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_nullOptionsThrows() {
         TextLayout layout = layoutWithSegment("X", obfuscatedStyle());
-        assertThatThrownBy(() -> new ObfuscationAnimator(layout, null))
+        assertThatThrownBy(() -> new ObfuscationAnimator(renderer, layout, null))
                 .isInstanceOf(NullPointerException.class);
     }
 
@@ -152,7 +168,7 @@ class ObfuscationAnimatorTest {
     void constructor_zeroFrameCountThrows() {
         TextLayout layout = layoutWithSegment("X", obfuscatedStyle());
         assertThatThrownBy(() -> new ObfuscationAnimator(
-                layout, TextRenderOptions.defaults(), 0, 100))
+                renderer, layout, TextRenderOptions.defaults(),0, 100))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -160,7 +176,7 @@ class ObfuscationAnimatorTest {
     void constructor_zeroFrameDelayThrows() {
         TextLayout layout = layoutWithSegment("X", obfuscatedStyle());
         assertThatThrownBy(() -> new ObfuscationAnimator(
-                layout, TextRenderOptions.defaults(), 5, 0))
+                renderer, layout, TextRenderOptions.defaults(),5, 0))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

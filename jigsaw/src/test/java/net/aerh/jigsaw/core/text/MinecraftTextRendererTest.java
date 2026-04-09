@@ -5,6 +5,8 @@ import net.aerh.jigsaw.api.text.ChatColor;
 import net.aerh.jigsaw.api.text.TextRenderOptions;
 import net.aerh.jigsaw.api.text.TextSegment;
 import net.aerh.jigsaw.api.text.TextStyle;
+import net.aerh.jigsaw.core.font.DefaultFontRegistry;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.awt.Color;
@@ -14,6 +16,13 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class MinecraftTextRendererTest {
+
+    private static MinecraftTextRenderer renderer;
+
+    @BeforeAll
+    static void initRenderer() {
+        renderer = new MinecraftTextRenderer(DefaultFontRegistry.withBuiltins());
+    }
 
     private static TextSegment seg(String text) {
         return new TextSegment(text, TextStyle.DEFAULT);
@@ -35,7 +44,7 @@ class MinecraftTextRendererTest {
         TextLayout empty = new TextLayout(List.of(), 0, 0);
         TextRenderOptions opts = TextRenderOptions.defaults();
 
-        GeneratorResult result = MinecraftTextRenderer.renderLayout(empty, opts);
+        GeneratorResult result = renderer.renderLayout(empty, opts);
 
         assertThat(result).isInstanceOf(GeneratorResult.StaticImage.class);
         BufferedImage image = result.firstFrame();
@@ -46,7 +55,7 @@ class MinecraftTextRendererTest {
     @Test
     void renderLayout_returnsStaticImage() {
         TextLayout layout = oneLineLayout("Hello");
-        GeneratorResult result = MinecraftTextRenderer.renderLayout(layout, TextRenderOptions.defaults());
+        GeneratorResult result = renderer.renderLayout(layout, TextRenderOptions.defaults());
 
         assertThat(result.isAnimated()).isFalse();
         assertThat(result).isInstanceOf(GeneratorResult.StaticImage.class);
@@ -55,7 +64,7 @@ class MinecraftTextRendererTest {
     @Test
     void renderLayout_nonEmpty_producesNonZeroImage() {
         TextLayout layout = oneLineLayout("Hello");
-        GeneratorResult result = MinecraftTextRenderer.renderLayout(layout, TextRenderOptions.defaults());
+        GeneratorResult result = renderer.renderLayout(layout, TextRenderOptions.defaults());
 
         BufferedImage image = result.firstFrame();
         assertThat(image.getWidth()).isGreaterThan(0);
@@ -70,8 +79,8 @@ class MinecraftTextRendererTest {
         TextRenderOptions opts1 = new TextRenderOptions(false, false, false, 1, 255, 7, 13, 200);
         TextRenderOptions opts2 = new TextRenderOptions(false, false, false, 2, 255, 7, 13, 200);
 
-        BufferedImage img1 = MinecraftTextRenderer.renderLayout(layout, opts1).firstFrame();
-        BufferedImage img2 = MinecraftTextRenderer.renderLayout(layout, opts2).firstFrame();
+        BufferedImage img1 = renderer.renderLayout(layout, opts1).firstFrame();
+        BufferedImage img2 = renderer.renderLayout(layout, opts2).firstFrame();
 
         assertThat(img2.getWidth()).isGreaterThan(img1.getWidth());
         assertThat(img2.getHeight()).isGreaterThan(img1.getHeight());
@@ -88,8 +97,8 @@ class MinecraftTextRendererTest {
         TextLayout oneLine = oneLineLayout("Line 1");
         TextRenderOptions opts = new TextRenderOptions(false, false, false, 1, 255, 0, 0, 200);
 
-        int h1 = MinecraftTextRenderer.renderLayout(oneLine, opts).firstFrame().getHeight();
-        int h2 = MinecraftTextRenderer.renderLayout(twoLines, opts).firstFrame().getHeight();
+        int h1 = renderer.renderLayout(oneLine, opts).firstFrame().getHeight();
+        int h2 = renderer.renderLayout(twoLines, opts).firstFrame().getHeight();
 
         assertThat(h2).isGreaterThan(h1);
     }
@@ -99,7 +108,7 @@ class MinecraftTextRendererTest {
     @Test
     void renderLayout_imageType_isArgb() {
         TextLayout layout = oneLineLayout("Test");
-        BufferedImage image = MinecraftTextRenderer.renderLayout(layout, TextRenderOptions.defaults()).firstFrame();
+        BufferedImage image = renderer.renderLayout(layout, TextRenderOptions.defaults()).firstFrame();
 
         assertThat(image.getType()).isEqualTo(BufferedImage.TYPE_INT_ARGB);
     }
@@ -111,7 +120,7 @@ class MinecraftTextRendererTest {
         TextLayout layout = oneLineLayout("Bordered");
         TextRenderOptions opts = new TextRenderOptions(false, true, false, 1, 255, 7, 13, 200);
 
-        GeneratorResult result = MinecraftTextRenderer.renderLayout(layout, opts);
+        GeneratorResult result = renderer.renderLayout(layout, opts);
         assertThat(result).isNotNull();
     }
 
@@ -122,7 +131,7 @@ class MinecraftTextRendererTest {
         TextLayout layout = oneLineLayout("Shadow");
         TextRenderOptions opts = new TextRenderOptions(true, false, false, 1, 255, 7, 13, 200);
 
-        GeneratorResult result = MinecraftTextRenderer.renderLayout(layout, opts);
+        GeneratorResult result = renderer.renderLayout(layout, opts);
         assertThat(result).isNotNull();
     }
 
@@ -134,7 +143,7 @@ class MinecraftTextRendererTest {
         TextLine line = new TextLine(List.of(red), 8);
         TextLayout layout = new TextLayout(List.of(line), 8, 1);
 
-        GeneratorResult result = MinecraftTextRenderer.renderLayout(layout, TextRenderOptions.defaults());
+        GeneratorResult result = renderer.renderLayout(layout, TextRenderOptions.defaults());
         assertThat(result).isNotNull();
     }
 
@@ -145,7 +154,7 @@ class MinecraftTextRendererTest {
         TextLayout layout = oneLineLayout("Invisible");
         TextRenderOptions opts = new TextRenderOptions(false, false, false, 1, 0, 7, 13, 200);
 
-        GeneratorResult result = MinecraftTextRenderer.renderLayout(layout, opts);
+        GeneratorResult result = renderer.renderLayout(layout, opts);
         assertThat(result).isNotNull();
     }
 }

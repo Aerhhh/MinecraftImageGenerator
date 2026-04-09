@@ -1,10 +1,12 @@
 package net.aerh.jigsaw.core.generator;
 
+import net.aerh.jigsaw.api.font.FontRegistry;
 import net.aerh.jigsaw.api.generator.GenerationContext;
 import net.aerh.jigsaw.api.generator.GeneratorResult;
 import net.aerh.jigsaw.api.sprite.SpriteProvider;
 import net.aerh.jigsaw.core.effect.EffectPipeline;
 import net.aerh.jigsaw.core.effect.GlintEffect;
+import net.aerh.jigsaw.core.font.DefaultFontRegistry;
 import net.aerh.jigsaw.core.sprite.AtlasSpriteProvider;
 import net.aerh.jigsaw.exception.RenderException;
 import org.junit.jupiter.api.BeforeAll;
@@ -19,18 +21,20 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class InventoryGeneratorTest {
 
     private static SpriteProvider spriteProvider;
+    private static FontRegistry fontRegistry;
     private EffectPipeline emptyPipeline;
     private InventoryGenerator generator;
 
     @BeforeAll
     static void initSpriteProvider() {
         spriteProvider = AtlasSpriteProvider.fromDefaults();
+        fontRegistry = DefaultFontRegistry.withBuiltins();
     }
 
     @BeforeEach
     void setUp() {
         emptyPipeline = EffectPipeline.builder().build();
-        generator = new InventoryGenerator(spriteProvider, emptyPipeline);
+        generator = new InventoryGenerator(spriteProvider, emptyPipeline, fontRegistry);
     }
 
     // --- Empty inventory ---
@@ -140,7 +144,7 @@ class InventoryGeneratorTest {
     @Test
     void render_enchantedItemWithGlintPipelineReturnsAnimated() throws RenderException {
         EffectPipeline glintPipeline = EffectPipeline.builder().add(new GlintEffect()).build();
-        InventoryGenerator glintGen = new InventoryGenerator(spriteProvider, glintPipeline);
+        InventoryGenerator glintGen = new InventoryGenerator(spriteProvider, glintPipeline, fontRegistry);
 
         InventoryItem item = InventoryItem.builder(0, "diamond_sword").enchanted(true).build();
         InventoryRequest request = InventoryRequest.builder()
@@ -158,7 +162,7 @@ class InventoryGeneratorTest {
     @Test
     void render_noEnchantedItemsWithGlintPipelineStayStatic() throws RenderException {
         EffectPipeline glintPipeline = EffectPipeline.builder().add(new GlintEffect()).build();
-        InventoryGenerator glintGen = new InventoryGenerator(spriteProvider, glintPipeline);
+        InventoryGenerator glintGen = new InventoryGenerator(spriteProvider, glintPipeline, fontRegistry);
 
         InventoryItem item = InventoryItem.builder(0, "diamond_sword").enchanted(false).build();
         InventoryRequest request = InventoryRequest.builder()
@@ -203,13 +207,19 @@ class InventoryGeneratorTest {
 
     @Test
     void constructor_nullSpriteProviderThrows() {
-        assertThatThrownBy(() -> new InventoryGenerator(null, emptyPipeline))
+        assertThatThrownBy(() -> new InventoryGenerator(null, emptyPipeline, fontRegistry))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_nullEffectPipelineThrows() {
-        assertThatThrownBy(() -> new InventoryGenerator(spriteProvider, null))
+        assertThatThrownBy(() -> new InventoryGenerator(spriteProvider, null, fontRegistry))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void constructor_nullFontRegistryThrows() {
+        assertThatThrownBy(() -> new InventoryGenerator(spriteProvider, emptyPipeline, null))
                 .isInstanceOf(NullPointerException.class);
     }
 }

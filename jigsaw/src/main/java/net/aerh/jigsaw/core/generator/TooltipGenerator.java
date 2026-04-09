@@ -31,10 +31,15 @@ import java.util.Objects;
  */
 public final class TooltipGenerator implements Generator<TooltipRequest, GeneratorResult> {
 
+    private final MinecraftTextRenderer textRenderer;
+
     /**
      * Creates a new {@link TooltipGenerator}.
+     *
+     * @param textRenderer the text renderer to use for tooltip rendering; must not be {@code null}
      */
-    public TooltipGenerator() {
+    public TooltipGenerator(MinecraftTextRenderer textRenderer) {
+        this.textRenderer = java.util.Objects.requireNonNull(textRenderer, "textRenderer must not be null");
     }
 
     /**
@@ -73,7 +78,7 @@ public final class TooltipGenerator implements Generator<TooltipRequest, Generat
                 input.maxLineLength()
         );
 
-        return MinecraftTextRenderer.renderLines(wrappedLines, renderOptions);
+        return textRenderer.renderLines(wrappedLines, renderOptions);
     }
 
     @Override

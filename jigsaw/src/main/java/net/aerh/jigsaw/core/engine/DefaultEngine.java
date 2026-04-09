@@ -89,10 +89,6 @@ public final class DefaultEngine implements Engine {
         this.nbtParser = nbtParser;
         this.registries = Map.copyOf(registries);
         this.overlayColorProvider = overlayColorProvider;
-
-        // Eagerly initialize the text renderer so the first render call is not blocked
-        // by font loading and obfuscation character width precomputation.
-        MinecraftTextRenderer.init();
     }
 
     /**
@@ -412,10 +408,13 @@ public final class DefaultEngine implements Engine {
             // Overlay color provider
             OverlayColorProvider overlayColorProvider = OverlayColorProvider.fromDefaults();
 
+            // Text renderer (uses the shared font registry)
+            MinecraftTextRenderer textRenderer = new MinecraftTextRenderer(fontRegistry);
+
             // Generators
             ItemGenerator itemGenerator = new ItemGenerator(spriteProvider, effectPipeline, overlayLoader);
-            TooltipGenerator tooltipGenerator = new TooltipGenerator();
-            InventoryGenerator inventoryGenerator = new InventoryGenerator(spriteProvider, effectPipeline, customSlotTexture);
+            TooltipGenerator tooltipGenerator = new TooltipGenerator(textRenderer);
+            InventoryGenerator inventoryGenerator = new InventoryGenerator(spriteProvider, effectPipeline, customSlotTexture, fontRegistry);
             PlayerHeadGenerator playerHeadGenerator = new PlayerHeadGenerator();
 
             return new DefaultEngine(

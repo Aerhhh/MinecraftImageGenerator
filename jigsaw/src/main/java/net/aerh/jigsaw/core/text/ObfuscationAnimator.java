@@ -38,6 +38,7 @@ public final class ObfuscationAnimator {
     private static final char OBFUSCATED_CHAR_MIN = '!';
     private static final char OBFUSCATED_CHAR_MAX = '~';
 
+    private final MinecraftTextRenderer textRenderer;
     private final TextLayout layout;
     private final TextRenderOptions options;
     private final int frameCount;
@@ -47,22 +48,25 @@ public final class ObfuscationAnimator {
     /**
      * Creates an animator with the default frame count and frame rate.
      *
-     * @param layout  the laid-out text to animate; must not be {@code null}
-     * @param options the render options for each frame; must not be {@code null}
+     * @param textRenderer the text renderer to use; must not be {@code null}
+     * @param layout       the laid-out text to animate; must not be {@code null}
+     * @param options      the render options for each frame; must not be {@code null}
      */
-    public ObfuscationAnimator(TextLayout layout, TextRenderOptions options) {
-        this(layout, options, DEFAULT_FRAME_COUNT, FRAME_DELAY_MS_AT_DEFAULT_FPS);
+    public ObfuscationAnimator(MinecraftTextRenderer textRenderer, TextLayout layout, TextRenderOptions options) {
+        this(textRenderer, layout, options, DEFAULT_FRAME_COUNT, FRAME_DELAY_MS_AT_DEFAULT_FPS);
     }
 
     /**
      * Creates an animator with a custom frame count and delay.
      *
+     * @param textRenderer the text renderer to use; must not be {@code null}
      * @param layout       the laid-out text to animate; must not be {@code null}
      * @param options      the render options for each frame; must not be {@code null}
      * @param frameCount   the number of animation frames to generate; must be >= 1
      * @param frameDelayMs the delay between frames in milliseconds; must be > 0
      */
-    public ObfuscationAnimator(TextLayout layout, TextRenderOptions options, int frameCount, int frameDelayMs) {
+    public ObfuscationAnimator(MinecraftTextRenderer textRenderer, TextLayout layout, TextRenderOptions options, int frameCount, int frameDelayMs) {
+        this.textRenderer = Objects.requireNonNull(textRenderer, "textRenderer must not be null");
         this.layout = Objects.requireNonNull(layout, "layout must not be null");
         this.options = Objects.requireNonNull(options, "options must not be null");
         if (frameCount < 1) {
@@ -92,7 +96,7 @@ public final class ObfuscationAnimator {
 
         for (int i = 0; i < frameCount; i++) {
             TextLayout frameLayout = buildFrameLayout();
-            GeneratorResult rendered = MinecraftTextRenderer.renderLayout(frameLayout, options);
+            GeneratorResult rendered = textRenderer.renderLayout(frameLayout, options);
             BufferedImage frameImage = rendered.firstFrame();
 
             if (i == 0) {

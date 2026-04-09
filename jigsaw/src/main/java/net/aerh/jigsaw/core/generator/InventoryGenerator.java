@@ -6,6 +6,7 @@ import net.aerh.jigsaw.api.generator.Generator;
 import net.aerh.jigsaw.api.generator.GeneratorResult;
 import net.aerh.jigsaw.api.sprite.SpriteProvider;
 import net.aerh.jigsaw.core.effect.EffectPipeline;
+import net.aerh.jigsaw.core.font.MinecraftFontId;
 import net.aerh.jigsaw.core.util.GraphicsUtil;
 import net.aerh.jigsaw.exception.RenderException;
 import net.hypixel.nerdbot.marmalade.image.ImageUtil;
@@ -15,7 +16,6 @@ import org.slf4j.LoggerFactory;
 import javax.imageio.ImageIO;
 import java.awt.Color;
 import java.awt.Font;
-import java.awt.FontFormatException;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
@@ -43,7 +43,6 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
     private static final Color DROP_SHADOW_COLOR = new Color(63, 63, 63);
 
     private static final String SLOT_TEXTURE_PATH = "/minecraft/assets/textures/slot.png";
-    private static final String FONT_PATH = "/minecraft/assets/fonts/Minecraft-Regular.otf";
 
     /** UV coordinates for extracting a single slot tile from the Minecraft chest GUI texture. */
     private static final int GUI_SLOT_X = 7;
@@ -53,6 +52,7 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
 
     private final SpriteProvider spriteProvider;
     private final EffectPipeline effectPipeline;
+    private final net.aerh.jigsaw.api.font.FontRegistry fontRegistry;
     private final BufferedImage baseSlotTexture;
 
     /**
@@ -61,10 +61,12 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
      * @param spriteProvider the sprite provider to load item textures from; must not be {@code null}
      * @param effectPipeline the pipeline of effects to apply per item; must not be {@code null}
      * @param slotTexture    the base slot texture to use, or {@code null} to use the bundled default
+     * @param fontRegistry   the font registry to resolve fonts from; must not be {@code null}
      */
-    public InventoryGenerator(SpriteProvider spriteProvider, EffectPipeline effectPipeline, BufferedImage slotTexture) {
+    public InventoryGenerator(SpriteProvider spriteProvider, EffectPipeline effectPipeline, BufferedImage slotTexture, net.aerh.jigsaw.api.font.FontRegistry fontRegistry) {
         this.spriteProvider = Objects.requireNonNull(spriteProvider, "spriteProvider must not be null");
         this.effectPipeline = Objects.requireNonNull(effectPipeline, "effectPipeline must not be null");
+        this.fontRegistry = Objects.requireNonNull(fontRegistry, "fontRegistry must not be null");
         this.baseSlotTexture = slotTexture != null ? slotTexture : loadDefaultSlotTexture();
     }
 
@@ -73,9 +75,10 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
      *
      * @param spriteProvider the sprite provider to load item textures from; must not be {@code null}
      * @param effectPipeline the pipeline of effects to apply per item; must not be {@code null}
+     * @param fontRegistry   the font registry to resolve fonts from; must not be {@code null}
      */
-    public InventoryGenerator(SpriteProvider spriteProvider, EffectPipeline effectPipeline) {
-        this(spriteProvider, effectPipeline, null);
+    public InventoryGenerator(SpriteProvider spriteProvider, EffectPipeline effectPipeline, net.aerh.jigsaw.api.font.FontRegistry fontRegistry) {
+        this(spriteProvider, effectPipeline, null, fontRegistry);
     }
 
     /**
@@ -134,7 +137,7 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
         g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
 
         // Load Minecraft font
-        Font mcFont = loadMinecraftFont(scaleFactor * 8f);
+        Font mcFont = fontRegistry.getStyledFont(MinecraftFontId.DEFAULT, false, false, scaleFactor * 8f);
         g.setFont(mcFont);
 
         // Fill background with inventory gray
@@ -375,30 +378,6 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
         // Foreground
         g.setColor(NORMAL_TEXT_COLOR);
         g.drawString(text, textX - 1, textY - 1);
-    }
-
-    // -------------------------------------------------------------------------
-    // Font loading
-    // -------------------------------------------------------------------------
-
-    private static final Font BASE_MINECRAFT_FONT = loadBaseMinecraftFont();
-
-    private static Font loadBaseMinecraftFont() {
-        try (InputStream stream = InventoryGenerator.class.getResourceAsStream(FONT_PATH)) {
-            if (stream != null) {
-                return Font.createFont(Font.TRUETYPE_FONT, stream);
-            }
-        } catch (IOException | FontFormatException e) {
-            log.warn("Failed to load Minecraft font, using fallback: {}", e.getMessage());
-        }
-        return null;
-    }
-
-    private static Font loadMinecraftFont(float size) {
-        if (BASE_MINECRAFT_FONT != null) {
-            return BASE_MINECRAFT_FONT.deriveFont(size);
-        }
-        return new Font(Font.MONOSPACED, Font.PLAIN, Math.round(size));
     }
 
     private record PlacedItem(

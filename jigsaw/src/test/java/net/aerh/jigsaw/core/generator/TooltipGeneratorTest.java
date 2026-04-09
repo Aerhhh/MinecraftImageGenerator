@@ -2,6 +2,8 @@ package net.aerh.jigsaw.core.generator;
 
 import net.aerh.jigsaw.api.generator.GenerationContext;
 import net.aerh.jigsaw.api.generator.GeneratorResult;
+import net.aerh.jigsaw.core.font.DefaultFontRegistry;
+import net.aerh.jigsaw.core.text.MinecraftTextRenderer;
 import net.aerh.jigsaw.exception.RenderException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,7 +19,8 @@ class TooltipGeneratorTest {
 
     @BeforeEach
     void setUp() {
-        generator = new TooltipGenerator();
+        MinecraftTextRenderer textRenderer = new MinecraftTextRenderer(DefaultFontRegistry.withBuiltins());
+        generator = new TooltipGenerator(textRenderer);
     }
 
     // --- Basic rendering ---

@@ -7,7 +7,6 @@ import net.aerh.jigsaw.api.text.FormattingParser;
 import net.aerh.jigsaw.api.text.TextRenderOptions;
 import net.aerh.jigsaw.api.text.TextSegment;
 import net.aerh.jigsaw.api.text.TextStyle;
-import net.aerh.jigsaw.core.font.DefaultFontRegistry;
 import net.aerh.jigsaw.core.font.MinecraftFontId;
 import net.aerh.jigsaw.core.util.GraphicsUtil;
 import org.slf4j.Logger;
@@ -23,6 +22,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -46,7 +46,6 @@ public final class MinecraftTextRenderer {
     /** Base font size matching the original MinecraftTooltip rendering. */
     private static final float BASE_FONT_SIZE = 15.5f;
 
-    private static final Map<Integer, Map<Integer, List<Character>>> OBFUSCATION_WIDTH_MAPS = new HashMap<>();
     private static final int[] UNICODE_BLOCK_RANGES = {
         0x0020, 0x007E, // Basic Latin
         0x00A0, 0x00FF, // Latin-1 Supplement
@@ -54,23 +53,19 @@ public final class MinecraftTextRenderer {
         0x2580, 0x259F  // Block Elements
     };
 
-    private static final FontRegistry FONT_REGISTRY;
-
-    static {
-        FONT_REGISTRY = DefaultFontRegistry.withBuiltins();
-        precomputeCharacterWidths();
-    }
-
-    private MinecraftTextRenderer() {
-    }
+    private final FontRegistry fontRegistry;
+    private final Map<Integer, Map<Integer, List<Character>>> obfuscationWidthMaps = new HashMap<>();
 
     /**
-     * Forces eager initialization of fonts and obfuscation character width tables.
-     * Call this during application startup to avoid blocking the first render call.
+     * Creates a new renderer backed by the given font registry.
+     *
+     * <p>Eagerly precomputes obfuscation character width tables for all style variants.
+     *
+     * @param fontRegistry the font registry to resolve fonts from; must not be {@code null}
      */
-    public static void init() {
-        // Touching any static field triggers the static initializer block above.
-        // This method exists so callers can trigger initialization explicitly.
+    public MinecraftTextRenderer(FontRegistry fontRegistry) {
+        this.fontRegistry = Objects.requireNonNull(fontRegistry, "fontRegistry must not be null");
+        precomputeCharacterWidths();
     }
 
     /**
@@ -79,17 +74,17 @@ public final class MinecraftTextRenderer {
      * <p>The four style variants (regular, bold, italic, bold+italic) are indexed 0-3 matching
      * the bit pattern: bold=bit0, italic=bit1.
      */
-    private static void precomputeCharacterWidths() {
+    private void precomputeCharacterWidths() {
         // Index 0=regular, 1=bold, 2=italic, 3=bold+italic
         List<Font> fonts = List.of(
-            FONT_REGISTRY.getStyledFont(MinecraftFontId.DEFAULT, false, false, BASE_FONT_SIZE),
-            FONT_REGISTRY.getStyledFont(MinecraftFontId.DEFAULT, true,  false, BASE_FONT_SIZE),
-            FONT_REGISTRY.getStyledFont(MinecraftFontId.DEFAULT, false, true,  BASE_FONT_SIZE),
-            FONT_REGISTRY.getStyledFont(MinecraftFontId.DEFAULT, true,  true,  BASE_FONT_SIZE)
+            fontRegistry.getStyledFont(MinecraftFontId.DEFAULT, false, false, BASE_FONT_SIZE),
+            fontRegistry.getStyledFont(MinecraftFontId.DEFAULT, true,  false, BASE_FONT_SIZE),
+            fontRegistry.getStyledFont(MinecraftFontId.DEFAULT, false, true,  BASE_FONT_SIZE),
+            fontRegistry.getStyledFont(MinecraftFontId.DEFAULT, true,  true,  BASE_FONT_SIZE)
         );
 
         for (int i = 0; i < fonts.size(); i++) {
-            OBFUSCATION_WIDTH_MAPS.put(i, new HashMap<>());
+            obfuscationWidthMaps.put(i, new HashMap<>());
         }
 
         BufferedImage tempImg = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
@@ -105,7 +100,7 @@ public final class MinecraftTextRenderer {
             Font font = fonts.get(fontIndex);
             FontMetrics fontMetrics = metrics[fontIndex];
 
-            Map<Integer, List<Character>> map = OBFUSCATION_WIDTH_MAPS.get(fontIndex);
+            Map<Integer, List<Character>> map = obfuscationWidthMaps.get(fontIndex);
 
             for (int range = 0; range < UNICODE_BLOCK_RANGES.length; range += 2) {
                 for (int codePoint = UNICODE_BLOCK_RANGES[range]; codePoint <= UNICODE_BLOCK_RANGES[range + 1]; codePoint++) {
@@ -124,10 +119,10 @@ public final class MinecraftTextRenderer {
         tempG2d.dispose();
 
         log.info("Precomputed obfuscation character widths. Regular: {} chars, Bold: {} chars, Italic: {} chars, BoldItalic: {} chars.",
-            OBFUSCATION_WIDTH_MAPS.get(0).values().stream().mapToInt(List::size).sum(),
-            OBFUSCATION_WIDTH_MAPS.get(1).values().stream().mapToInt(List::size).sum(),
-            OBFUSCATION_WIDTH_MAPS.get(2).values().stream().mapToInt(List::size).sum(),
-            OBFUSCATION_WIDTH_MAPS.get(3).values().stream().mapToInt(List::size).sum()
+            obfuscationWidthMaps.get(0).values().stream().mapToInt(List::size).sum(),
+            obfuscationWidthMaps.get(1).values().stream().mapToInt(List::size).sum(),
+            obfuscationWidthMaps.get(2).values().stream().mapToInt(List::size).sum(),
+            obfuscationWidthMaps.get(3).values().stream().mapToInt(List::size).sum()
         );
     }
 
@@ -138,7 +133,7 @@ public final class MinecraftTextRenderer {
      * @param options Rendering configuration.
      * @return A {@link GeneratorResult} containing the rendered tooltip.
      */
-    public static GeneratorResult renderLines(List<String> lines, TextRenderOptions options) {
+    public GeneratorResult renderLines(List<String> lines, TextRenderOptions options) {
         int scaleFactor = options.scaleFactor();
         int pixelSize = DEFAULT_PIXEL_SIZE * scaleFactor;
         int startXY = pixelSize * 5;
@@ -245,7 +240,7 @@ public final class MinecraftTextRenderer {
      * @param options Rendering configuration.
      * @return A {@link GeneratorResult} containing the rendered tooltip.
      */
-    public static GeneratorResult renderLayout(TextLayout layout, TextRenderOptions options) {
+    public GeneratorResult renderLayout(TextLayout layout, TextRenderOptions options) {
         // Convert TextLayout lines back to formatted strings for rendering
         List<String> formattedLines = new ArrayList<>();
         for (TextLine line : layout.lines()) {
@@ -301,12 +296,12 @@ public final class MinecraftTextRenderer {
 
     // --- Line width calculation ---
 
-    private static int calculateLineWidth(Graphics2D graphics, List<TextSegment> segments, int scaleFactor) {
+    private int calculateLineWidth(Graphics2D graphics, List<TextSegment> segments, int scaleFactor) {
         int lineWidth = 0;
         for (TextSegment segment : segments) {
             TextStyle style = segment.style();
             float scaledSize = BASE_FONT_SIZE * scaleFactor;
-            Font baseFont = FONT_REGISTRY.getStyledFont(style.fontId(), style.bold(), style.italic(), scaledSize);
+            Font baseFont = fontRegistry.getStyledFont(style.fontId(), style.bold(), style.italic(), scaledSize);
             graphics.setFont(baseFont);
             FontMetrics metrics = graphics.getFontMetrics(baseFont);
             String segmentText = segment.text();
@@ -325,7 +320,7 @@ public final class MinecraftTextRenderer {
                 if (baseFont.canDisplayUpTo(charStr) == -1) {
                     lineWidth += metrics.stringWidth(charStr);
                 } else {
-                    Font fallbackFont = FONT_REGISTRY.getFallbackFont(codePoint, baseFont.getSize2D());
+                    Font fallbackFont = fontRegistry.getFallbackFont(codePoint, baseFont.getSize2D());
                     if (fallbackFont != null) {
                         graphics.setFont(fallbackFont);
                         FontMetrics fallbackMetrics = graphics.getFontMetrics(fallbackFont);
@@ -343,7 +338,7 @@ public final class MinecraftTextRenderer {
 
     // --- Line drawing ---
 
-    private static void drawLinesInternal(Graphics2D frameGraphics, List<List<TextSegment>> parsedLines,
+    private void drawLinesInternal(Graphics2D frameGraphics, List<List<TextSegment>> parsedLines,
                                           Map<Integer, Integer> lineWidths, int largestWidth,
                                           int scaleFactor, int pixelSize, int startXY, int yIncrement,
                                           boolean firstLinePadding, boolean centeredText, boolean isAnimated) {
@@ -373,11 +368,11 @@ public final class MinecraftTextRenderer {
 
     // --- String drawing ---
 
-    private static int drawString(Graphics2D graphics, TextSegment segment, int locationX, int locationY,
+    private int drawString(Graphics2D graphics, TextSegment segment, int locationX, int locationY,
                                   int scaleFactor, int pixelSize) {
         TextStyle style = segment.style();
         float scaledSize = BASE_FONT_SIZE * scaleFactor;
-        Font currentFont = FONT_REGISTRY.getStyledFont(style.fontId(), style.bold(), style.italic(), scaledSize);
+        Font currentFont = fontRegistry.getStyledFont(style.fontId(), style.bold(), style.italic(), scaledSize);
         graphics.setFont(currentFont);
         FontMetrics metrics = graphics.getFontMetrics(currentFont);
 
@@ -457,11 +452,11 @@ public final class MinecraftTextRenderer {
     /**
      * Draws a symbol using a fallback font when the Minecraft font cannot render it.
      */
-    private static int drawSymbolAndAdvance(Graphics2D graphics, int codePoint, String charStr,
+    private int drawSymbolAndAdvance(Graphics2D graphics, int codePoint, String charStr,
                                             TextStyle style, Color fgColor, Color bgColor,
                                             Font currentFont, int locationX, int locationY,
                                             int pixelSize, int scaleFactor) {
-        Font fallbackFont = FONT_REGISTRY.getFallbackFont(codePoint, currentFont.getSize2D());
+        Font fallbackFont = fontRegistry.getFallbackFont(codePoint, currentFont.getSize2D());
         Font fontToUse = fallbackFont != null ? fallbackFont : currentFont;
 
         graphics.setFont(fontToUse);
@@ -479,7 +474,7 @@ public final class MinecraftTextRenderer {
     /**
      * Draw an obfuscated character with a random character of the same width.
      */
-    private static int drawObfuscatedChar(Graphics2D graphics, char originalChar, TextStyle style,
+    private int drawObfuscatedChar(Graphics2D graphics, char originalChar, TextStyle style,
                                           Color fgColor, Color bgColor, Font currentFont,
                                           FontMetrics metrics, int locationX, int locationY,
                                           int pixelSize, int scaleFactor) {
@@ -487,7 +482,7 @@ public final class MinecraftTextRenderer {
         String charToDrawStr = String.valueOf(originalChar);
 
         int fontStyleIndex = (style.bold() ? 1 : 0) + (style.italic() ? 2 : 0);
-        Map<Integer, List<Character>> widthMap = OBFUSCATION_WIDTH_MAPS.get(fontStyleIndex);
+        Map<Integer, List<Character>> widthMap = obfuscationWidthMaps.get(fontStyleIndex);
         List<Character> matchingWidthChars = (widthMap != null) ? widthMap.get(originalWidth) : null;
 
         if (matchingWidthChars != null && !matchingWidthChars.isEmpty()) {
