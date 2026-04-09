@@ -6,8 +6,8 @@ import net.aerh.jigsaw.core.util.GraphicsUtil;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.IntStream;
 
 /**
  * Utility class that composes multiple {@link GeneratorResult}s into a single image.
@@ -84,17 +84,16 @@ public final class ResultComposer {
             }
         }
 
-        List<BufferedImage> outputFrames = new ArrayList<>(maxFrames);
+        BufferedImage[] outputArray = new BufferedImage[maxFrames];
 
-        for (int f = 0; f < maxFrames; f++) {
-            final int frameIndex = f;
+        IntStream.range(0, maxFrames).parallel().forEach(f -> {
             List<BufferedImage> slice = results.stream()
-                    .map(r -> frameAt(r, frameIndex))
+                    .map(r -> frameAt(r, f))
                     .toList();
-            outputFrames.add(compositeFrames(slice, vertical, padding));
-        }
+            outputArray[f] = compositeFrames(slice, vertical, padding);
+        });
 
-        return new GeneratorResult.AnimatedImage(outputFrames, frameDelayMs);
+        return new GeneratorResult.AnimatedImage(List.of(outputArray), frameDelayMs);
     }
 
     /**
