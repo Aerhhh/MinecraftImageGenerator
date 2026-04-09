@@ -21,9 +21,12 @@ import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.StructuredTaskScope;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 /**
  * Renders a Minecraft-style inventory container image using the authentic GUI textures and colors.
@@ -90,7 +93,7 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
      */
     public static BufferedImage extractSlotTextureFromPack(net.aerh.jigsaw.core.resource.ResourcePack pack) {
         try {
-            var streamOpt = pack.getResource(GUI_TEXTURE_PATH);
+            Optional<InputStream> streamOpt = pack.getResource(GUI_TEXTURE_PATH);
             if (streamOpt.isEmpty()) {
                 return null;
             }
@@ -168,8 +171,7 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
         // Load and resize slot texture
         BufferedImage slotTexture = resizeSlotTexture(slotSize);
 
-        // Draw slots and place items
-        List<PlacedItem> placed = new ArrayList<>();
+        // Draw slots
         int slotsOriginY = titleHeight;
 
         for (int row = 0; row < input.rows(); row++) {
@@ -187,49 +189,22 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
             }
         }
 
-        // Place item sprites and collect per-item glint frames for enchanted items
+        // Parallel phase: compute all PlacedItem data (sprite loading + effect pipeline)
+        List<PlacedItem> placed = computePlacedItems(input, borderSize, slotsOriginY, slotSize, itemSize);
+
+        // Sequential phase: draw items onto the shared canvas
         int maxGlintFrames = 0;
         int glintFrameDelay = 33;
 
-        for (InventoryItem item : input.items()) {
-            int slot = item.slot();
-            int row = slot / input.slotsPerRow();
-            int col = slot % input.slotsPerRow();
-
-            if (row >= input.rows() || col >= input.slotsPerRow()) {
-                continue;
+        for (PlacedItem pi : placed) {
+            if (pi.staticSprite() != null) {
+                BufferedImage toDraw = pi.glintFrames() != null ? pi.glintFrames().getFirst() : pi.staticSprite();
+                g.drawImage(toDraw, pi.itemX(), pi.itemY(), itemSize, itemSize, null);
             }
-
-            int sx = borderSize + (col * slotSize);
-            int sy = slotsOriginY + (row * slotSize);
-            int itemPadding = (slotSize - itemSize) / 2;
-            int itemX = sx + itemPadding;
-            int itemY = sy + itemPadding;
-
-            BufferedImage staticSprite = spriteProvider.getSprite(item.itemId()).orElse(null);
-            List<BufferedImage> itemGlintFrames = null;
-
-            if (staticSprite != null && item.enchanted()) {
-                EffectContext effectCtx = EffectContext.builder()
-                        .image(staticSprite)
-                        .itemId(item.itemId())
-                        .enchanted(true)
-                        .build();
-                EffectContext result = effectPipeline.execute(effectCtx);
-                if (!result.animationFrames().isEmpty()) {
-                    itemGlintFrames = result.animationFrames();
-                    maxGlintFrames = Math.max(maxGlintFrames, itemGlintFrames.size());
-                    glintFrameDelay = result.frameDelayMs();
-                }
+            if (pi.glintFrames() != null && !pi.glintFrames().isEmpty()) {
+                maxGlintFrames = Math.max(maxGlintFrames, pi.glintFrames().size());
+                glintFrameDelay = pi.glintFrameDelay();
             }
-
-            // Draw the static (or first glint frame) onto the base canvas
-            if (staticSprite != null) {
-                BufferedImage toDraw = itemGlintFrames != null ? itemGlintFrames.getFirst() : staticSprite;
-                g.drawImage(toDraw, itemX, itemY, itemSize, itemSize, null);
-            }
-
-            placed.add(new PlacedItem(item, sx, sy, slotSize, itemSize, staticSprite, itemGlintFrames));
         }
 
         // Draw stack counts on the base canvas
@@ -382,20 +357,106 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
 
     private record PlacedItem(
             InventoryItem item, int slotX, int slotY, int slotSize, int spriteSize,
-            BufferedImage staticSprite, List<BufferedImage> glintFrames
+            int itemX, int itemY,
+            BufferedImage staticSprite, List<BufferedImage> glintFrames, int glintFrameDelay
     ) {}
+
+    // -------------------------------------------------------------------------
+    // Parallel item computation
+    // -------------------------------------------------------------------------
+
+    /**
+     * Computes all {@link PlacedItem} data in parallel using structured concurrency.
+     * Each item's sprite loading and effect pipeline execution runs concurrently.
+     * Items outside the visible grid are filtered out.
+     */
+    private List<PlacedItem> computePlacedItems(InventoryRequest input, int borderSize,
+                                                 int slotsOriginY, int slotSize, int itemSize)
+            throws RenderException {
+        List<InventoryItem> items = input.items();
+        if (items.isEmpty()) {
+            return List.of();
+        }
+
+        try (StructuredTaskScope<PlacedItem, Stream<StructuredTaskScope.Subtask<PlacedItem>>> scope =
+                     StructuredTaskScope.open(StructuredTaskScope.Joiner.allSuccessfulOrThrow())) {
+
+            for (InventoryItem item : items) {
+                scope.fork(() -> computeSingleItem(item, input, borderSize,
+                        slotsOriginY, slotSize, itemSize));
+            }
+
+            Stream<StructuredTaskScope.Subtask<PlacedItem>> completed = scope.join();
+            return completed
+                    .map(StructuredTaskScope.Subtask::get)
+                    .filter(Objects::nonNull)
+                    .toList();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RenderException("Inventory item computation interrupted", java.util.Map.of(), e);
+        } catch (StructuredTaskScope.FailedException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RenderException re) throw re;
+            throw new RenderException("Inventory item computation failed",
+                    java.util.Map.of("cause", String.valueOf(cause != null ? cause.getMessage() : e.getMessage())),
+                    cause != null ? cause : e);
+        }
+    }
+
+    /**
+     * Computes a single {@link PlacedItem} including sprite loading and effect pipeline execution.
+     * Returns {@code null} if the item's slot is outside the visible grid.
+     */
+    private PlacedItem computeSingleItem(InventoryItem item, InventoryRequest input,
+                                          int borderSize, int slotsOriginY,
+                                          int slotSize, int itemSize) {
+        int slot = item.slot();
+        int row = slot / input.slotsPerRow();
+        int col = slot % input.slotsPerRow();
+
+        if (row >= input.rows() || col >= input.slotsPerRow()) {
+            return null;
+        }
+
+        int sx = borderSize + (col * slotSize);
+        int sy = slotsOriginY + (row * slotSize);
+        int itemPadding = (slotSize - itemSize) / 2;
+        int itemX = sx + itemPadding;
+        int itemY = sy + itemPadding;
+
+        BufferedImage staticSprite = spriteProvider.getSprite(item.itemId()).orElse(null);
+        List<BufferedImage> itemGlintFrames = null;
+        int glintFrameDelay = 33;
+
+        if (staticSprite != null && item.enchanted()) {
+            EffectContext effectCtx = EffectContext.builder()
+                    .image(staticSprite)
+                    .itemId(item.itemId())
+                    .enchanted(true)
+                    .build();
+            EffectContext result = effectPipeline.execute(effectCtx);
+            if (!result.animationFrames().isEmpty()) {
+                itemGlintFrames = result.animationFrames();
+                glintFrameDelay = result.frameDelayMs();
+            }
+        }
+
+        return new PlacedItem(item, sx, sy, slotSize, itemSize, itemX, itemY,
+                staticSprite, itemGlintFrames, glintFrameDelay);
+    }
 
     /**
      * Builds full inventory animation frames by compositing the base canvas with each
      * enchanted item's glint frame cycling. Non-enchanted items and stack counts are
-     * drawn identically on every frame.
+     * drawn identically on every frame. Frames are generated in parallel.
      */
     private static List<BufferedImage> buildAnimationFrames(
             BufferedImage baseCanvas, List<PlacedItem> placed, int itemSize,
             int scaleFactor, Font mcFont, int frameCount) {
-        List<BufferedImage> frames = new ArrayList<>(frameCount);
 
-        for (int frameIndex = 0; frameIndex < frameCount; frameIndex++) {
+        BufferedImage[] frameArray = new BufferedImage[frameCount];
+
+        IntStream.range(0, frameCount).parallel().forEach(frameIndex -> {
             BufferedImage frame = new BufferedImage(
                     baseCanvas.getWidth(), baseCanvas.getHeight(), BufferedImage.TYPE_INT_ARGB);
             Graphics2D fg = frame.createGraphics();
@@ -408,18 +469,15 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
             // Overdraw enchanted items with their current glint frame
             for (PlacedItem pi : placed) {
                 if (pi.glintFrames() != null && !pi.glintFrames().isEmpty()) {
-                    int itemPadding = (pi.slotSize() - itemSize) / 2;
-                    int itemX = pi.slotX() + itemPadding;
-                    int itemY = pi.slotY() + itemPadding;
                     BufferedImage glintFrame = pi.glintFrames().get(frameIndex % pi.glintFrames().size());
-                    fg.drawImage(glintFrame, itemX, itemY, itemSize, itemSize, null);
+                    fg.drawImage(glintFrame, pi.itemX(), pi.itemY(), itemSize, itemSize, null);
                 }
             }
 
             fg.dispose();
-            frames.add(frame);
-        }
+            frameArray[frameIndex] = frame;
+        });
 
-        return frames;
+        return List.of(frameArray);
     }
 }

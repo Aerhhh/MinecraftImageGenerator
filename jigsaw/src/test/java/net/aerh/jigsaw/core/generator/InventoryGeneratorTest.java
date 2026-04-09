@@ -222,4 +222,33 @@ class InventoryGeneratorTest {
         assertThatThrownBy(() -> new InventoryGenerator(spriteProvider, emptyPipeline, null))
                 .isInstanceOf(NullPointerException.class);
     }
+
+    // --- Parallel rendering determinism ---
+
+    @Test
+    void render_parallelItemComputationIsDeterministic() throws RenderException {
+        InventoryItem item1 = InventoryItem.builder(0, "diamond_sword").build();
+        InventoryItem item2 = InventoryItem.builder(1, "diamond_sword").build();
+        InventoryItem item3 = InventoryItem.builder(2, "diamond_sword").build();
+        InventoryRequest request = InventoryRequest.builder()
+                .rows(1)
+                .slotsPerRow(9)
+                .item(item1)
+                .item(item2)
+                .item(item3)
+                .build();
+
+        GeneratorResult result1 = generator.render(request, GenerationContext.defaults());
+        GeneratorResult result2 = generator.render(request, GenerationContext.defaults());
+
+        BufferedImage img1 = result1.firstFrame();
+        BufferedImage img2 = result2.firstFrame();
+
+        assertThat(img1.getWidth()).isEqualTo(img2.getWidth());
+        assertThat(img1.getHeight()).isEqualTo(img2.getHeight());
+
+        int[] pixels1 = img1.getRGB(0, 0, img1.getWidth(), img1.getHeight(), null, 0, img1.getWidth());
+        int[] pixels2 = img2.getRGB(0, 0, img2.getWidth(), img2.getHeight(), null, 0, img2.getWidth());
+        assertThat(pixels1).isEqualTo(pixels2);
+    }
 }
