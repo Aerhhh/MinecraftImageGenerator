@@ -276,7 +276,6 @@ public final class SkyBlockTooltipBuilder {
         private int maxLineLength = TooltipRequest.DEFAULT_MAX_LINE_LENGTH;
         private boolean centered = false;
         private boolean renderBorder = true;
-        private boolean bypassMaxLineLength = false;
         private transient int scaleFactor = 1;
 
         private Builder() {}
@@ -363,12 +362,11 @@ public final class SkyBlockTooltipBuilder {
         /**
          * Sets the maximum visible character count per line.
          *
-         * @param maxLineLength the max line length; clamped to [1, 128]
+         * @param maxLineLength the max line length; values less than 1 are treated as 1
          * @return this builder
          */
         public Builder maxLineLength(int maxLineLength) {
-            this.maxLineLength = Math.max(TooltipRequest.MIN_LINE_LENGTH,
-                Math.min(TooltipRequest.MAX_LINE_LENGTH, maxLineLength));
+            this.maxLineLength = Math.max(TooltipRequest.MIN_LINE_LENGTH, maxLineLength);
             return this;
         }
 
@@ -391,18 +389,6 @@ public final class SkyBlockTooltipBuilder {
          */
         public Builder renderBorder(boolean renderBorder) {
             this.renderBorder = renderBorder;
-            return this;
-        }
-
-        /**
-         * Sets whether to bypass the maximum line length for text wrapping.
-         * When true, lines are only split on explicit newlines, not wrapped by width.
-         *
-         * @param bypassMaxLineLength true to disable width-based wrapping
-         * @return this builder
-         */
-        public Builder bypassMaxLineLength(boolean bypassMaxLineLength) {
-            this.bypassMaxLineLength = bypassMaxLineLength;
             return this;
         }
 
@@ -479,7 +465,6 @@ public final class SkyBlockTooltipBuilder {
                 .maxLineLength(maxLineLength)
                 .centeredText(centered)
                 .renderBorder(renderBorder)
-                .bypassMaxLineLength(bypassMaxLineLength)
                 .scaleFactor(scaleFactor)
                 .build();
         }

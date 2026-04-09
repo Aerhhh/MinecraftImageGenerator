@@ -22,7 +22,6 @@ import java.util.Objects;
  * @param centeredText        whether each line should be horizontally centered
  * @param renderBorder        whether to render the Minecraft-style tooltip border
  * @param scaleFactor         integer scale multiplier applied to all coordinates
- * @param bypassMaxLineLength whether to allow maxLineLength values outside the normal 1-128 range
  */
 public record TooltipRequest(
         List<String> lines,
@@ -32,8 +31,7 @@ public record TooltipRequest(
         int maxLineLength,
         boolean centeredText,
         boolean renderBorder,
-        int scaleFactor,
-        boolean bypassMaxLineLength
+        int scaleFactor
 ) implements RenderRequest {
 
     /** Default background alpha value. */
@@ -45,11 +43,8 @@ public record TooltipRequest(
     /** Default maximum visible character count per line. */
     public static final int DEFAULT_MAX_LINE_LENGTH = 38;
 
-    /** Minimum allowed value for {@code maxLineLength} when bypass is not enabled. */
+    /** Minimum allowed value for {@code maxLineLength}. */
     public static final int MIN_LINE_LENGTH = 1;
-
-    /** Maximum allowed value for {@code maxLineLength} when bypass is not enabled. */
-    public static final int MAX_LINE_LENGTH = 128;
 
     public TooltipRequest {
         Objects.requireNonNull(lines, "lines must not be null");
@@ -68,7 +63,7 @@ public record TooltipRequest(
             return this;
         }
         return new TooltipRequest(lines, alpha, padding, firstLinePadding, maxLineLength,
-                centeredText, renderBorder, scaleFactor, bypassMaxLineLength);
+                centeredText, renderBorder, scaleFactor);
     }
 
     /**
@@ -93,7 +88,6 @@ public record TooltipRequest(
         private boolean centeredText = false;
         private boolean renderBorder = true;
         private int scaleFactor = 1;
-        private boolean bypassMaxLineLength = false;
 
         private Builder() {
         }
@@ -155,19 +149,14 @@ public record TooltipRequest(
         }
 
         /**
-         * Sets the maximum visible character count per line before wrapping.
-         * When {@link #bypassMaxLineLength(boolean)} is not enabled, the value is clamped
-         * to [{@value #MIN_LINE_LENGTH}, {@value #MAX_LINE_LENGTH}].
+         * Sets the maximum visible character count per line.
+         * Values less than {@value #MIN_LINE_LENGTH} are treated as {@value #MIN_LINE_LENGTH}.
          *
          * @param val the max line length
          * @return this builder
          */
         public Builder maxLineLength(int val) {
-            if (bypassMaxLineLength) {
-                this.maxLineLength = val;
-            } else {
-                this.maxLineLength = Math.max(MIN_LINE_LENGTH, Math.min(MAX_LINE_LENGTH, val));
-            }
+            this.maxLineLength = Math.max(MIN_LINE_LENGTH, val);
             return this;
         }
 
@@ -206,18 +195,6 @@ public record TooltipRequest(
         }
 
         /**
-         * Sets whether to allow {@code maxLineLength} values outside the normal
-         * [{@value #MIN_LINE_LENGTH}, {@value #MAX_LINE_LENGTH}] range.
-         *
-         * @param val {@code true} to bypass clamping
-         * @return this builder
-         */
-        public Builder bypassMaxLineLength(boolean val) {
-            this.bypassMaxLineLength = val;
-            return this;
-        }
-
-        /**
          * Builds the {@link TooltipRequest}.
          *
          * @return a new request
@@ -226,7 +203,7 @@ public record TooltipRequest(
             return new TooltipRequest(
                     lines, alpha, padding, firstLinePadding,
                     maxLineLength, centeredText, renderBorder,
-                    scaleFactor, bypassMaxLineLength
+                    scaleFactor
             );
         }
     }

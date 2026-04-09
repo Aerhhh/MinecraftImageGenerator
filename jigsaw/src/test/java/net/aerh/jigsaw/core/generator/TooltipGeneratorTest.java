@@ -186,22 +186,11 @@ class TooltipGeneratorTest {
         assertThat(request.centeredText()).isFalse();
         assertThat(request.renderBorder()).isTrue();
         assertThat(request.scaleFactor()).isEqualTo(1);
-        assertThat(request.bypassMaxLineLength()).isFalse();
     }
 
     @Test
-    void tooltipRequest_maxLineLengthClampedWithoutBypass() {
+    void tooltipRequest_maxLineLengthNotClamped() {
         TooltipRequest request = TooltipRequest.builder()
-                .maxLineLength(500)
-                .build();
-
-        assertThat(request.maxLineLength()).isEqualTo(TooltipRequest.MAX_LINE_LENGTH);
-    }
-
-    @Test
-    void tooltipRequest_maxLineLengthNotClampedWithBypass() {
-        TooltipRequest request = TooltipRequest.builder()
-                .bypassMaxLineLength(true)
                 .maxLineLength(500)
                 .build();
 

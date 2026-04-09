@@ -21,9 +21,7 @@ import java.util.Objects;
  *
  * <p>The rendering pipeline:
  * <ol>
- *   <li>Wrap each input line at {@code maxLineLength} visible characters (unless
- *       {@code bypassMaxLineLength} is set, in which case newlines within lines are still
- *       split but no width-based wrapping is applied).</li>
+ *   <li>Split each input line on embedded newlines (no width-based wrapping is applied).</li>
  *   <li>Parse each line into text segments internally.</li>
  *   <li>Measure all lines to determine the tooltip width.</li>
  *   <li>Render text with shadows, border, and all formatting effects.</li>
@@ -58,11 +56,7 @@ public final class TooltipGenerator implements Generator<TooltipRequest, Generat
         List<String> wrappedLines = new ArrayList<>();
         for (String line : input.lines()) {
             String resolved = FormattingParser.resolveNamedFormats(line);
-            if (input.bypassMaxLineLength()) {
-                wrappedLines.addAll(splitOnNewlines(resolved));
-            } else {
-                wrappedLines.addAll(TextWrapper.wrapString(resolved, input.maxLineLength()));
-            }
+            wrappedLines.addAll(splitOnNewlines(resolved));
         }
 
         int firstLinePaddingPx = input.firstLinePadding() ? 1 : 0;
@@ -97,8 +91,7 @@ public final class TooltipGenerator implements Generator<TooltipRequest, Generat
 
     /**
      * Splits a single line string on embedded newline characters ({@code \n}) and on literal
-     * {@code \n} markers (backslash + n), returning one entry per resulting line. Used when
-     * {@code bypassMaxLineLength} is active and width-based wrapping is intentionally skipped.
+     * {@code \n} markers (backslash + n), returning one entry per resulting line.
      *
      * @param line the line to split; must not be {@code null}
      * @return a list containing at least one element
