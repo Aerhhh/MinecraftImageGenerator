@@ -19,7 +19,7 @@ import java.util.List;
 public final class ArmorLayer {
 
     /** Inflation added to each half-extent for outer armor (helmet, chestplate, boots). */
-    public static final double OUTER_INFLATION = 0.25;
+    public static final double OUTER_INFLATION = 0.3125;
 
     /** Inflation added to each half-extent for inner armor (leggings). */
     public static final double INNER_INFLATION = 0.125;
