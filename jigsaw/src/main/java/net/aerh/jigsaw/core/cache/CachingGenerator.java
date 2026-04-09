@@ -1,19 +1,25 @@
 package net.aerh.jigsaw.core.cache;
 
-import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.AsyncCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import net.aerh.jigsaw.api.generator.GenerationContext;
 import net.aerh.jigsaw.api.generator.Generator;
 import net.aerh.jigsaw.exception.RenderException;
 
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.function.Function;
 
 /**
- * A {@link Generator} decorator that caches results in a Caffeine cache.
+ * A {@link Generator} decorator that caches results in a Caffeine async cache.
  *
  * <p>When {@link GenerationContext#skipCache()} is {@code true}, the cache is bypassed entirely:
  * the delegate is called directly and the result is not stored.
+ *
+ * <p>The async cache deduplicates concurrent requests for the same key: if multiple threads
+ * request the same uncached item simultaneously, only one delegate invocation occurs and all
+ * callers share the resulting future. This prevents thundering herd / cache stampede scenarios.
  *
  * @param <I> input type
  * @param <O> output type
@@ -22,7 +28,7 @@ public final class CachingGenerator<I, O> implements Generator<I, O> {
 
     private final Generator<I, O> delegate;
     private final Function<I, CacheKey> keyFunction;
-    private final Cache<String, O> cache;
+    private final AsyncCache<String, O> cache;
 
     /**
      * Creates a new caching generator.
@@ -39,11 +45,14 @@ public final class CachingGenerator<I, O> implements Generator<I, O> {
         this.keyFunction = keyFunction;
         this.cache = Caffeine.newBuilder()
                 .maximumSize(maxSize)
-                .build();
+                .buildAsync();
     }
 
     /**
      * Renders the given input, returning a cached result when available and caching is not skipped.
+     *
+     * <p>Concurrent requests for the same cache key are coalesced: only one delegate invocation
+     * occurs, and all callers receive the same result.
      *
      * @param input   the render input; must not be {@code null}
      * @param context the generation context; must not be {@code null}
@@ -62,14 +71,26 @@ public final class CachingGenerator<I, O> implements Generator<I, O> {
         }
 
         String key = keyFunction.apply(input).value();
-        O cached = cache.getIfPresent(key);
-        if (cached != null) {
-            return cached;
-        }
 
-        O result = delegate.render(input, context);
-        cache.put(key, result);
-        return result;
+        try {
+            CompletableFuture<O> future = cache.get(key, (k, executor) ->
+                    CompletableFuture.supplyAsync(() -> {
+                        try {
+                            return delegate.render(input, context);
+                        } catch (RenderException e) {
+                            throw new CompletionException(e);
+                        }
+                    }, executor)
+            );
+            return future.join();
+        } catch (CompletionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RenderException re) {
+                throw re;
+            }
+            throw new RenderException("Cached render failed",
+                    java.util.Map.of("key", key), cause != null ? cause : e);
+        }
     }
 
     /**
@@ -96,14 +117,14 @@ public final class CachingGenerator<I, O> implements Generator<I, O> {
      * Returns the current number of entries in the cache.
      */
     public long cacheSize() {
-        cache.cleanUp();
-        return cache.estimatedSize();
+        cache.synchronous().cleanUp();
+        return cache.synchronous().estimatedSize();
     }
 
     /**
      * Invalidates all cached entries.
      */
     public void invalidate() {
-        cache.invalidateAll();
+        cache.synchronous().invalidateAll();
     }
 }
