@@ -24,6 +24,8 @@ import net.aerh.jigsaw.core.generator.InventoryGenerator;
 import net.aerh.jigsaw.core.generator.InventoryRequest;
 import net.aerh.jigsaw.core.generator.ItemGenerator;
 import net.aerh.jigsaw.core.generator.ItemRequest;
+import net.aerh.jigsaw.core.generator.PlayerBodyGenerator;
+import net.aerh.jigsaw.core.generator.PlayerBodyRequest;
 import net.aerh.jigsaw.core.generator.PlayerHeadGenerator;
 import net.aerh.jigsaw.core.generator.PlayerHeadRequest;
 import net.aerh.jigsaw.core.generator.ResultComposer;
@@ -69,6 +71,7 @@ public final class DefaultEngine implements Engine {
     private final TooltipGenerator tooltipGenerator;
     private final InventoryGenerator inventoryGenerator;
     private final PlayerHeadGenerator playerHeadGenerator;
+    private final PlayerBodyGenerator playerBodyGenerator;
     private final NbtParser nbtParser;
     private final Map<String, DataRegistry<?>> registries;
     private final OverlayColorProvider overlayColorProvider;
@@ -79,6 +82,7 @@ public final class DefaultEngine implements Engine {
             TooltipGenerator tooltipGenerator,
             InventoryGenerator inventoryGenerator,
             PlayerHeadGenerator playerHeadGenerator,
+            PlayerBodyGenerator playerBodyGenerator,
             NbtParser nbtParser,
             Map<String, DataRegistry<?>> registries,
             OverlayColorProvider overlayColorProvider
@@ -88,6 +92,7 @@ public final class DefaultEngine implements Engine {
         this.tooltipGenerator = tooltipGenerator;
         this.inventoryGenerator = inventoryGenerator;
         this.playerHeadGenerator = playerHeadGenerator;
+        this.playerBodyGenerator = playerBodyGenerator;
         this.nbtParser = nbtParser;
         this.registries = Map.copyOf(registries);
         this.overlayColorProvider = overlayColorProvider;
@@ -130,6 +135,7 @@ public final class DefaultEngine implements Engine {
             case TooltipRequest r -> tooltipGenerator.render(r, context);
             case InventoryRequest r -> inventoryGenerator.render(r, context);
             case PlayerHeadRequest r -> playerHeadGenerator.render(r, context);
+            case PlayerBodyRequest r -> playerBodyGenerator.render(r, context);
             case CompositeRequest r -> renderComposite(r, context);
             default -> throw new ValidationException("Unknown request type: " + request.getClass().getName());
         };
@@ -461,6 +467,7 @@ public final class DefaultEngine implements Engine {
             TooltipGenerator tooltipGenerator = new TooltipGenerator(textRenderer);
             InventoryGenerator inventoryGenerator = new InventoryGenerator(spriteProvider, effectPipeline, customSlotTexture, fontRegistry);
             PlayerHeadGenerator playerHeadGenerator = PlayerHeadGenerator.withDefaults();
+            PlayerBodyGenerator playerBodyGenerator = PlayerBodyGenerator.withDefaults();
 
             return new DefaultEngine(
                     spriteProvider,
@@ -468,6 +475,7 @@ public final class DefaultEngine implements Engine {
                     tooltipGenerator,
                     inventoryGenerator,
                     playerHeadGenerator,
+                    playerBodyGenerator,
                     nbtParser,
                     registries,
                     overlayColorProvider
