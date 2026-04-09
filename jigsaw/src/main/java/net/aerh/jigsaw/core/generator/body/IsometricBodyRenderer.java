@@ -316,10 +316,20 @@ public final class IsometricBodyRenderer {
             RenderFace face = faces.get(faceIndex);
 
             int[] verts = face.vertexIndices();
-            double[] v1 = vertices[verts[0]];
-            double[] v2 = vertices[verts[1]];
-            double[] v3 = vertices[verts[2]];
-            double[] v4 = vertices[verts[3]];
+            double[] v1raw = vertices[verts[0]];
+            double[] v2raw = vertices[verts[1]];
+            double[] v3raw = vertices[verts[2]];
+            double[] v4raw = vertices[verts[3]];
+
+            // Expand face vertices slightly outward from center to close gaps
+            // between adjacent faces caused by fillPolygon edge rules
+            double cx = (v1raw[0] + v2raw[0] + v3raw[0] + v4raw[0]) / 4.0;
+            double cy = (v1raw[1] + v2raw[1] + v3raw[1] + v4raw[1]) / 4.0;
+            double expand = 0.4;
+            double[] v1 = {v1raw[0] + (v1raw[0] - cx) * expand, v1raw[1] + (v1raw[1] - cy) * expand};
+            double[] v2 = {v2raw[0] + (v2raw[0] - cx) * expand, v2raw[1] + (v2raw[1] - cy) * expand};
+            double[] v3 = {v3raw[0] + (v3raw[0] - cx) * expand, v3raw[1] + (v3raw[1] - cy) * expand};
+            double[] v4 = {v4raw[0] + (v4raw[0] - cx) * expand, v4raw[1] + (v4raw[1] - cy) * expand};
 
             int faceW = face.uvWidth();
             int faceH = face.uvHeight();
