@@ -35,22 +35,28 @@ public enum BodyPart {
      * @param model the skin model (classic or slim)
      * @return the geometry for this part
      */
+    /**
+     * Small Y overlap to close sub-pixel seams between adjacent body parts.
+     * Each part below the head is shifted slightly upward so it overlaps with the part above.
+     */
+    private static final double SEAM_OVERLAP = 0.03;
+
     public Geometry geometry(SkinModel model) {
         return switch (this) {
             case HEAD -> new Geometry(8, 8, 8, 0, 0, 32, 0, 0, -3, 0);
-            case BODY -> new Geometry(8, 12, 4, 16, 16, 16, 32, 0, -0.5, 0);
+            case BODY -> new Geometry(8, 12, 4, 16, 16, 16, 32, 0, -0.5 - SEAM_OVERLAP, 0);
             case RIGHT_ARM -> {
                 int w = model.armWidth();
                 double ox = -(1.0 + w / 8.0);
-                yield new Geometry(w, 12, 4, 40, 16, 40, 32, ox, -0.5, 0);
+                yield new Geometry(w, 12, 4, 40, 16, 40, 32, ox, -0.5 - SEAM_OVERLAP, 0);
             }
             case LEFT_ARM -> {
                 int w = model.armWidth();
                 double ox = 1.0 + w / 8.0;
-                yield new Geometry(w, 12, 4, 32, 48, 48, 48, ox, -0.5, 0);
+                yield new Geometry(w, 12, 4, 32, 48, 48, 48, ox, -0.5 - SEAM_OVERLAP, 0);
             }
-            case RIGHT_LEG -> new Geometry(4, 12, 4, 0, 16, 0, 32, -0.5, 2.5, 0);
-            case LEFT_LEG -> new Geometry(4, 12, 4, 16, 48, 0, 48, 0.5, 2.5, 0);
+            case RIGHT_LEG -> new Geometry(4, 12, 4, 0, 16, 0, 32, -0.5, 2.5 - SEAM_OVERLAP, 0);
+            case LEFT_LEG -> new Geometry(4, 12, 4, 16, 48, 0, 48, 0.5, 2.5 - SEAM_OVERLAP, 0);
         };
     }
 

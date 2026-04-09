@@ -93,7 +93,11 @@ public final class IsometricBodyRenderer {
             List<ArmorLayer.ArmorMapping> mappings = ArmorLayer.mappingsFor(armor.slot(), model);
             for (ArmorLayer.ArmorMapping mapping : mappings) {
                 BodyPart.Geometry bodyGeom = mapping.bodyPart().geometry(model);
-                addCuboid(vertexList, faceList, bodyGeom, mapping.inflation(), armor.armorTexture(),
+                BodyPart.Geometry armorGeom = mapping.offsetX() == 0 ? bodyGeom
+                        : new BodyPart.Geometry(bodyGeom.pixelWidth(), bodyGeom.pixelHeight(), bodyGeom.pixelDepth(),
+                                bodyGeom.baseUvX(), bodyGeom.baseUvY(), bodyGeom.overlayUvX(), bodyGeom.overlayUvY(),
+                                bodyGeom.offsetX() + mapping.offsetX(), bodyGeom.offsetY(), bodyGeom.offsetZ());
+                addCuboid(vertexList, faceList, armorGeom, mapping.inflation(), armor.armorTexture(),
                         mapping.uvX(), mapping.uvY(),
                         mapping.pixelWidth(), mapping.pixelHeight(), mapping.pixelDepth(),
                         mapping.mirrored(), tint);
