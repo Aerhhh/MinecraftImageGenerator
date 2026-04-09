@@ -47,12 +47,12 @@ public enum BodyPart {
             case BODY -> new Geometry(8, 12, 4, 16, 16, 16, 32, 0, -0.5 - SEAM_OVERLAP, 0);
             case RIGHT_ARM -> {
                 int w = model.armWidth();
-                double ox = -(1.0 + w / 8.0);
+                double ox = -(1.0 + w / 8.0) - SEAM_OVERLAP;
                 yield new Geometry(w, 12, 4, 40, 16, 40, 32, ox, -0.5 - SEAM_OVERLAP, 0);
             }
             case LEFT_ARM -> {
                 int w = model.armWidth();
-                double ox = 1.0 + w / 8.0;
+                double ox = (1.0 + w / 8.0) + SEAM_OVERLAP;
                 yield new Geometry(w, 12, 4, 32, 48, 48, 48, ox, -0.5 - SEAM_OVERLAP, 0);
             }
             case RIGHT_LEG -> new Geometry(4, 12, 4, 0, 16, 0, 32, -0.5, 2.5 - SEAM_OVERLAP, 0);

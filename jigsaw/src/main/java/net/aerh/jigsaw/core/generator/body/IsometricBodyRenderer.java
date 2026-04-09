@@ -125,7 +125,7 @@ public final class IsometricBodyRenderer {
 
         g2d.dispose();
 
-        return downscale(image);
+        return autocrop(downscale(image));
     }
 
     // -------------------------------------------------------------------------
@@ -413,6 +413,33 @@ public final class IsometricBodyRenderer {
             return copy;
         }
         return skin;
+    }
+
+    private static BufferedImage autocrop(BufferedImage image) {
+        int w = image.getWidth();
+        int h = image.getHeight();
+        int minX = w, minY = h, maxX = 0, maxY = 0;
+
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                if (((image.getRGB(x, y) >> 24) & 0xFF) > 0) {
+                    minX = Math.min(minX, x);
+                    minY = Math.min(minY, y);
+                    maxX = Math.max(maxX, x);
+                    maxY = Math.max(maxY, y);
+                }
+            }
+        }
+
+        if (maxX < minX) return image; // fully transparent
+
+        int pad = 4;
+        minX = Math.max(0, minX - pad);
+        minY = Math.max(0, minY - pad);
+        maxX = Math.min(w - 1, maxX + pad);
+        maxY = Math.min(h - 1, maxY + pad);
+
+        return image.getSubimage(minX, minY, maxX - minX + 1, maxY - minY + 1);
     }
 
     private static BufferedImage downscale(BufferedImage image) {
