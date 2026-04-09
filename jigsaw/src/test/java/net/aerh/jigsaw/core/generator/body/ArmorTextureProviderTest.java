@@ -124,11 +124,27 @@ class ArmorTextureProviderTest {
         }
 
         @Test
-        void withDyeColor_setsDyeColor() throws IOException {
+        void withDyeColor_prebakesTintWhenOverlayExists() throws IOException {
+            // When a dyeable material has an overlay (leather_overlay on classpath),
+            // the dye color is pre-baked into the texture and ArmorPiece.color() is empty
             Path packDir = createModernPack("leather");
             try (FolderResourcePack pack = new FolderResourcePack(packDir)) {
                 ArmorTextureProvider provider = new ArmorTextureProvider(pack);
                 Optional<ArmorPiece> piece = provider.piece(ArmorSlot.CHESTPLATE, "leather", 0xFFA06540);
+
+                assertThat(piece).isPresent();
+                // Color is pre-baked - no runtime tint needed
+                assertThat(piece.get().color()).isEmpty();
+            }
+        }
+
+        @Test
+        void withDyeColor_preservesColorForNonDyeableMaterial() throws IOException {
+            // Non-dyeable materials keep the dye color on ArmorPiece for runtime tinting
+            Path packDir = createModernPack("iron");
+            try (FolderResourcePack pack = new FolderResourcePack(packDir)) {
+                ArmorTextureProvider provider = new ArmorTextureProvider(pack);
+                Optional<ArmorPiece> piece = provider.piece(ArmorSlot.CHESTPLATE, "iron", 0xFFA06540);
 
                 assertThat(piece).isPresent();
                 assertThat(piece.get().color()).contains(0xFFA06540);

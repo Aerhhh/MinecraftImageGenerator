@@ -1,8 +1,11 @@
 package net.aerh.jigsaw.core.generator.body;
 
 import net.aerh.jigsaw.core.resource.ResourcePack;
+import net.aerh.jigsaw.core.util.ColorUtil;
 
 import javax.imageio.ImageIO;
+import java.awt.AlphaComposite;
+import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
@@ -68,6 +71,9 @@ public final class ArmorTextureProvider {
     private static final Pattern LEGGINGS_TEXTURE_PATTERN = Pattern.compile(
             "\"humanoid_leggings\"\\s*:\\s*\\[\\s*\\{[^}]*\"texture\"\\s*:\\s*\"([^\"]+)\"");
 
+    /** Default undyed leather color (from Minecraft's equipment/leather.json: color_when_undyed = -6265536). */
+    private static final int DEFAULT_LEATHER_COLOR = 0xA06540;
+
     private final ResourcePack resourcePack;
     private final ConcurrentHashMap<String, Optional<BufferedImage>> cache = new ConcurrentHashMap<>();
 
@@ -99,6 +105,9 @@ public final class ArmorTextureProvider {
     /**
      * Creates an {@link ArmorPiece} for the given slot and material.
      *
+     * <p>For dyeable materials (e.g. leather), the default undyed color is applied and the
+     * overlay texture is composited automatically.
+     *
      * @param slot     the armor slot
      * @param material the armor material name (e.g. "iron", "diamond", "leather")
      * @return the armor piece, or empty if the texture was not found
@@ -107,23 +116,45 @@ public final class ArmorTextureProvider {
         java.util.Objects.requireNonNull(slot, "slot must not be null");
         java.util.Objects.requireNonNull(material, "material must not be null");
 
-        return loadTexture(material, layerFor(slot))
+        int layer = layerFor(slot);
+        Optional<BufferedImage> overlay = loadOverlayTexture(material, layer);
+        if (overlay.isPresent()) {
+            // Dyeable material - tint base with default color, composite overlay
+            return loadTexture(material, layer)
+                    .map(base -> compositeWithOverlay(base, overlay.get(), DEFAULT_LEATHER_COLOR))
+                    .map(texture -> ArmorPiece.of(slot, texture));
+        }
+
+        return loadTexture(material, layer)
                 .map(texture -> ArmorPiece.of(slot, texture));
     }
 
     /**
      * Creates a dyed {@link ArmorPiece} for the given slot and material.
      *
+     * <p>For dyeable materials (e.g. leather), the dye color is applied to the base texture
+     * and the overlay is composited on top. The returned {@link ArmorPiece} has the color
+     * pre-baked into the texture, so no further tinting is needed at render time.
+     *
      * @param slot     the armor slot
      * @param material the armor material name (e.g. "leather")
-     * @param dyeColor the dye color in ARGB format
-     * @return the armor piece with the dye color applied, or empty if the texture was not found
+     * @param dyeColor the dye color in RGB format
+     * @return the armor piece, or empty if the texture was not found
      */
     public Optional<ArmorPiece> piece(ArmorSlot slot, String material, int dyeColor) {
         java.util.Objects.requireNonNull(slot, "slot must not be null");
         java.util.Objects.requireNonNull(material, "material must not be null");
 
-        return loadTexture(material, layerFor(slot))
+        int layer = layerFor(slot);
+        Optional<BufferedImage> overlay = loadOverlayTexture(material, layer);
+        if (overlay.isPresent()) {
+            // Dyeable material - tint base with dye color, composite overlay, return without color
+            return loadTexture(material, layer)
+                    .map(base -> compositeWithOverlay(base, overlay.get(), dyeColor))
+                    .map(texture -> ArmorPiece.of(slot, texture));
+        }
+
+        return loadTexture(material, layer)
                 .map(texture -> ArmorPiece.dyed(slot, texture, dyeColor));
     }
 
@@ -142,6 +173,49 @@ public final class ArmorTextureProvider {
 
         String cacheKey = material + "/" + layer;
         return cache.computeIfAbsent(cacheKey, k -> resolveTexture(material, layer));
+    }
+
+    /**
+     * Loads the overlay texture for a dyeable material (e.g. {@code leather_overlay}).
+     * Returns empty if no overlay exists (meaning the material is not dyeable).
+     */
+    private Optional<BufferedImage> loadOverlayTexture(String material, int layer) {
+        String overlayKey = material + "_overlay/" + layer;
+        return cache.computeIfAbsent(overlayKey, k -> resolveTexture(material + "_overlay", layer));
+    }
+
+    /**
+     * Tints the base texture with the given color and composites the overlay on top.
+     * The overlay is drawn without tinting, preserving stitching/buckle details.
+     */
+    private static BufferedImage compositeWithOverlay(BufferedImage base, BufferedImage overlay, int tintColor) {
+        int w = base.getWidth();
+        int h = base.getHeight();
+        float[] tint = ColorUtil.extractTintRgb(tintColor);
+
+        BufferedImage result = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+
+        // Tint and draw the base layer
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                int pixel = base.getRGB(x, y);
+                int a = (pixel >> 24) & 0xFF;
+                if (a == 0) continue;
+
+                int r = ColorUtil.clamp(Math.round(((pixel >> 16) & 0xFF) * tint[0]));
+                int g = ColorUtil.clamp(Math.round(((pixel >> 8) & 0xFF) * tint[1]));
+                int b = ColorUtil.clamp(Math.round((pixel & 0xFF) * tint[2]));
+                result.setRGB(x, y, (a << 24) | (r << 16) | (g << 8) | b);
+            }
+        }
+
+        // Composite the overlay on top (no tinting)
+        Graphics2D g2d = result.createGraphics();
+        g2d.setComposite(AlphaComposite.SrcOver);
+        g2d.drawImage(overlay, 0, 0, null);
+        g2d.dispose();
+
+        return result;
     }
 
     /**
