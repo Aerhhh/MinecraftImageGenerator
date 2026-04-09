@@ -21,11 +21,14 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -69,8 +72,9 @@ public class EngineManager implements Closeable {
     }
 
     /**
-     * Scans {@link #packDirectory} for {@code *.zip} files, builds an {@link Engine} per pack,
-     * and atomically replaces the current state. Old packs are closed after the swap.
+     * Scans {@link #packDirectory} for {@code *.zip} files, builds an {@link Engine} per pack
+     * in parallel using virtual threads, and atomically replaces the current state. Old packs
+     * are closed after the swap.
      *
      * <p>If the directory does not exist it is created. Corrupt or unreadable zips are skipped
      * with a warning.
@@ -78,43 +82,36 @@ public class EngineManager implements Closeable {
     public void loadPacks() {
         ensureDirectoryExists();
 
+        List<Path> zipPaths = new ArrayList<>();
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(packDirectory, "*.zip")) {
+            stream.forEach(zipPaths::add);
+        } catch (IOException e) {
+            LOGGER.warn("Failed to scan pack directory '{}': {}", packDirectory, e.getMessage());
+        }
+
         Map<String, Engine> engines = new TreeMap<>();
         Map<String, PackMetadata> metadata = new TreeMap<>();
         List<ZipResourcePack> packs = new ArrayList<>();
 
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(packDirectory, "*.zip")) {
-            for (Path zipPath : stream) {
-                String packName = derivePackName(zipPath);
-                ZipResourcePack pack = null;
-                try {
-                    pack = new ZipResourcePack(zipPath);
-                    SpriteProvider spriteProvider = buildSpriteProvider(pack);
-                    // Extract slot texture from pack's GUI texture if available
-                    java.awt.image.BufferedImage slotTexture =
-                            net.aerh.jigsaw.core.generator.InventoryGenerator.extractSlotTextureFromPack(pack);
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<Future<PackLoadResult>> futures = zipPaths.stream()
+                    .map(path -> executor.submit(() -> loadSinglePack(path)))
+                    .toList();
 
-                    EngineBuilder engineBuilder = SkyBlockRegistries.registerAll(
-                            Engine.builder().spriteProvider(spriteProvider));
-                    if (slotTexture != null) {
-                        engineBuilder.slotTexture(slotTexture);
-                    }
-                    Engine engine = engineBuilder.build();
-                    engines.put(packName, engine);
-                    metadata.put(packName, pack.metadata());
-                    packs.add(pack);
-                } catch (Exception e) {
-                    LOGGER.warn("Skipping corrupt or unreadable pack '{}': {}", zipPath.getFileName(), e.getMessage());
-                    if (pack != null) {
-                        try {
-                            pack.close();
-                        } catch (IOException closeEx) {
-                            LOGGER.warn("Failed to close pack '{}' after load error", zipPath.getFileName(), closeEx);
-                        }
-                    }
+            for (Future<PackLoadResult> future : futures) {
+                try {
+                    PackLoadResult result = future.get();
+                    engines.put(result.name(), result.engine());
+                    metadata.put(result.name(), result.metadata());
+                    packs.add(result.pack());
+                } catch (ExecutionException e) {
+                    LOGGER.warn("Skipping corrupt or unreadable pack: {}", e.getCause().getMessage());
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    LOGGER.warn("Pack loading interrupted");
+                    break;
                 }
             }
-        } catch (IOException e) {
-            LOGGER.warn("Failed to scan pack directory '{}': {}", packDirectory, e.getMessage());
         }
 
         if (defaultPackName != null && !engines.containsKey(defaultPackName)) {
@@ -133,6 +130,38 @@ public class EngineManager implements Closeable {
         PackState oldState = stateRef.getAndSet(newState);
         if (oldState != null) {
             closePacksSilently(oldState.packs());
+        }
+    }
+
+    /**
+     * Loads a single resource pack from the given zip path, building a full {@link Engine} for it.
+     *
+     * @param zipPath the path to the zip file
+     * @return the loaded pack result
+     * @throws Exception if the pack is corrupt or unreadable
+     */
+    private PackLoadResult loadSinglePack(Path zipPath) throws Exception {
+        String packName = derivePackName(zipPath);
+        ZipResourcePack pack = new ZipResourcePack(zipPath);
+        try {
+            SpriteProvider spriteProvider = buildSpriteProvider(pack);
+            java.awt.image.BufferedImage slotTexture =
+                    net.aerh.jigsaw.core.generator.InventoryGenerator.extractSlotTextureFromPack(pack);
+
+            EngineBuilder engineBuilder = SkyBlockRegistries.registerAll(
+                    Engine.builder().spriteProvider(spriteProvider));
+            if (slotTexture != null) {
+                engineBuilder.slotTexture(slotTexture);
+            }
+            Engine engine = engineBuilder.build();
+            return new PackLoadResult(packName, engine, pack.metadata(), pack);
+        } catch (Exception e) {
+            try {
+                pack.close();
+            } catch (IOException closeEx) {
+                LOGGER.warn("Failed to close pack '{}' after load error", zipPath.getFileName(), closeEx);
+            }
+            throw e;
         }
     }
 
@@ -258,6 +287,13 @@ public class EngineManager implements Closeable {
     // -------------------------------------------------------------------------
     // Internal state record
     // -------------------------------------------------------------------------
+
+    private record PackLoadResult(
+        String name,
+        Engine engine,
+        PackMetadata metadata,
+        ZipResourcePack pack
+    ) {}
 
     private record PackState(
         Map<String, Engine> engines,
