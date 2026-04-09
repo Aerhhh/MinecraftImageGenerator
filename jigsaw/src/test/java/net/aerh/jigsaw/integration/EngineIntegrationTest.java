@@ -247,6 +247,43 @@ class EngineIntegrationTest {
     }
 
     // -------------------------------------------------------------------------
+    // Composite error propagation (parallel dispatch)
+    // -------------------------------------------------------------------------
+
+    @Test
+    void render_compositeWithFailingSubRequestPropagatesRenderException() {
+        CompositeRequest request = CompositeRequest.builder()
+                .add(ItemRequest.builder().itemId("diamond_sword").build())
+                .add(ItemRequest.builder().itemId("this_item_does_not_exist_xyz").build())
+                .build();
+
+        assertThatThrownBy(() -> engine.render(request))
+                .isInstanceOf(RenderException.class);
+    }
+
+    @Test
+    void render_compositeWithAllFailingSubRequestsPropagatesRenderException() {
+        CompositeRequest request = CompositeRequest.builder()
+                .add(ItemRequest.builder().itemId("nonexistent_item_aaa").build())
+                .add(ItemRequest.builder().itemId("nonexistent_item_bbb").build())
+                .build();
+
+        assertThatThrownBy(() -> engine.render(request))
+                .isInstanceOf(RenderException.class);
+    }
+
+    @Test
+    void render_compositePreservesExceptionDetails() {
+        CompositeRequest request = CompositeRequest.builder()
+                .add(ItemRequest.builder().itemId("nonexistent_xyz").build())
+                .build();
+
+        assertThatThrownBy(() -> engine.render(request))
+                .isInstanceOf(RenderException.class)
+                .hasMessageContaining("nonexistent_xyz");
+    }
+
+    // -------------------------------------------------------------------------
     // Unknown request type
     // -------------------------------------------------------------------------
 

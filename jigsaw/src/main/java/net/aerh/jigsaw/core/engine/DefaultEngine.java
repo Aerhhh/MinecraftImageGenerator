@@ -51,6 +51,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.ServiceLoader;
+import java.util.concurrent.StructuredTaskScope;
+import java.util.stream.Stream;
 
 /**
  * Default implementation of {@link Engine} that wires together all built-in components
@@ -225,17 +227,44 @@ public final class DefaultEngine implements Engine {
     }
 
     /**
-     * Renders a composite request by dispatching each sub-request recursively and
-     * composing the results.
+     * Renders a composite request by dispatching each sub-request in parallel using
+     * structured concurrency and composing the results.
+     *
+     * <p>Sub-requests are independent and are rendered concurrently via
+     * {@link StructuredTaskScope} with {@link StructuredTaskScope.Joiner#allSuccessfulOrThrow()}.
+     * If any sub-request fails, remaining sibling tasks are cancelled and the first exception
+     * is propagated.
      */
     private GeneratorResult renderComposite(CompositeRequest request, GenerationContext context)
             throws RenderException, ParseException {
-        List<GeneratorResult> results = new ArrayList<>();
-        for (RenderRequest sub : request.requests()) {
-            RenderRequest effective = sub.withInheritedScale(request.scaleFactor());
-            results.add(render(effective, context));
+        List<RenderRequest> subs = request.requests();
+        if (subs.isEmpty()) {
+            return ResultComposer.compose(List.of(), request.layout(), request.padding());
         }
-        return ResultComposer.compose(results, request.layout(), request.padding());
+
+        try (StructuredTaskScope<GeneratorResult, Stream<StructuredTaskScope.Subtask<GeneratorResult>>> scope =
+                     StructuredTaskScope.open(StructuredTaskScope.Joiner.allSuccessfulOrThrow())) {
+
+            for (RenderRequest sub : subs) {
+                RenderRequest effective = sub.withInheritedScale(request.scaleFactor());
+                scope.fork(() -> render(effective, context));
+            }
+
+            Stream<StructuredTaskScope.Subtask<GeneratorResult>> completed = scope.join();
+            List<GeneratorResult> results = completed
+                    .map(StructuredTaskScope.Subtask::get)
+                    .toList();
+            return ResultComposer.compose(results, request.layout(), request.padding());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RenderException("Composite render interrupted", Map.of(), e);
+        } catch (StructuredTaskScope.FailedException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RenderException re) throw re;
+            if (cause instanceof ParseException pe) throw pe;
+            throw new RenderException("Composite sub-request failed",
+                    Map.of("cause", String.valueOf(cause != null ? cause.getMessage() : e.getMessage())), cause != null ? cause : e);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -431,7 +460,7 @@ public final class DefaultEngine implements Engine {
             ItemGenerator itemGenerator = new ItemGenerator(spriteProvider, effectPipeline, overlayLoader);
             TooltipGenerator tooltipGenerator = new TooltipGenerator(textRenderer);
             InventoryGenerator inventoryGenerator = new InventoryGenerator(spriteProvider, effectPipeline, customSlotTexture, fontRegistry);
-            PlayerHeadGenerator playerHeadGenerator = new PlayerHeadGenerator();
+            PlayerHeadGenerator playerHeadGenerator = PlayerHeadGenerator.withDefaults();
 
             return new DefaultEngine(
                     spriteProvider,
