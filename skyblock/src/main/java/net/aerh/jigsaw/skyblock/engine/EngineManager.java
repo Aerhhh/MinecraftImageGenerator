@@ -1,7 +1,9 @@
 package net.aerh.jigsaw.skyblock.engine;
 
 import net.aerh.jigsaw.api.Engine;
+import net.aerh.jigsaw.api.EngineBuilder;
 import net.aerh.jigsaw.api.sprite.SpriteProvider;
+import net.aerh.jigsaw.skyblock.data.SkyBlockRegistries;
 import net.aerh.jigsaw.core.resource.PackMetadata;
 import net.aerh.jigsaw.core.resource.ResourcePackSpriteProvider;
 import net.aerh.jigsaw.core.resource.ZipResourcePack;
@@ -62,7 +64,7 @@ public class EngineManager implements Closeable {
         this.packDirectory = packDirectory;
         this.defaultPackName = defaultPackName != null ? defaultPackName.toLowerCase() : null;
         this.vanillaFallback = vanillaFallback;
-        this.vanillaEngine = Engine.builder().build();
+        this.vanillaEngine = SkyBlockRegistries.registerAll(Engine.builder()).build();
         loadPacks();
     }
 
@@ -91,7 +93,8 @@ public class EngineManager implements Closeable {
                     java.awt.image.BufferedImage slotTexture =
                             net.aerh.jigsaw.core.generator.InventoryGenerator.extractSlotTextureFromPack(pack);
 
-                    var engineBuilder = Engine.builder().spriteProvider(spriteProvider);
+                    EngineBuilder engineBuilder = SkyBlockRegistries.registerAll(
+                            Engine.builder().spriteProvider(spriteProvider));
                     if (slotTexture != null) {
                         engineBuilder.slotTexture(slotTexture);
                     }

@@ -1,5 +1,6 @@
 package net.aerh.jigsaw.skyblock.data;
 
+import net.aerh.jigsaw.api.EngineBuilder;
 import net.aerh.jigsaw.api.data.DataRegistry;
 import net.aerh.jigsaw.core.data.JsonDataRegistry;
 
@@ -15,6 +16,25 @@ import net.aerh.jigsaw.core.data.JsonDataRegistry;
 public final class SkyBlockRegistries {
 
     private SkyBlockRegistries() {}
+
+    /**
+     * Registers all SkyBlock data registries on the given engine builder so they are
+     * accessible via {@link net.aerh.jigsaw.api.Engine#registry(net.aerh.jigsaw.api.data.RegistryKey)}.
+     *
+     * @param builder the engine builder to register on; must not be {@code null}
+     * @return the same builder, for chaining
+     */
+    public static EngineBuilder registerAll(EngineBuilder builder) {
+        return builder
+                .registry(rarities())
+                .registry(stats())
+                .registry(flavors())
+                .registry(gemstones())
+                .registry(icons())
+                .registry(parseTypes())
+                .registry(powerStrengths())
+                .registry(armorTypes());
+    }
 
     // -----------------------------------------------------------------------
     // Rarity

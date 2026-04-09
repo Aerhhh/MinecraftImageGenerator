@@ -1,7 +1,10 @@
 package net.aerh.jigsaw.skyblock.engine;
 
 import net.aerh.jigsaw.api.Engine;
+import net.aerh.jigsaw.api.data.DataRegistry;
 import net.aerh.jigsaw.core.resource.PackMetadata;
+import net.aerh.jigsaw.skyblock.data.Rarity;
+import net.aerh.jigsaw.skyblock.data.SkyBlockRegistryKeys;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -267,6 +270,34 @@ class EngineManagerTest {
             assertThat(engine.sprites().getSprite("test_item")).isPresent();
             // Vanilla item available via fallback
             assertThat(engine.sprites().getSprite("diamond_sword")).isPresent();
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // SkyBlock registries accessible via engine
+    // -------------------------------------------------------------------------
+
+    @Test
+    void defaultEngine_hasSkyBlockRegistries() {
+        try (EngineManager manager = new EngineManager(tempDir, null, false)) {
+            Engine engine = manager.getDefaultEngine();
+
+            DataRegistry<Rarity> rarities = engine.registry(SkyBlockRegistryKeys.RARITIES);
+            assertThat(rarities).isNotNull();
+            assertThat(rarities.get("legendary")).isPresent();
+        }
+    }
+
+    @Test
+    void packEngine_hasSkyBlockRegistries() throws IOException {
+        createTestPack("mypack", 34, "My Pack");
+
+        try (EngineManager manager = new EngineManager(tempDir, null, false)) {
+            Engine engine = manager.getEngine("mypack");
+
+            DataRegistry<Rarity> rarities = engine.registry(SkyBlockRegistryKeys.RARITIES);
+            assertThat(rarities).isNotNull();
+            assertThat(rarities.get("legendary")).isPresent();
         }
     }
 

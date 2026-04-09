@@ -265,6 +265,7 @@ public final class DefaultEngine implements Engine {
         private final List<NbtFormatHandler> nbtHandlers = new ArrayList<>();
         private final List<OverlayRenderer> overlayRenderers = new ArrayList<>();
         private final List<FontProvider> fontProviders = new ArrayList<>();
+        private final Map<String, DataRegistry<?>> customRegistries = new HashMap<>();
         private SpriteProvider customSpriteProvider;
         private java.awt.image.BufferedImage customSlotTexture;
 
@@ -335,6 +336,21 @@ public final class DefaultEngine implements Engine {
         }
 
         /**
+         * Registers a {@link DataRegistry} that will be available via {@link Engine#registry(RegistryKey)}.
+         * If a registry with the same key name is already registered, the new one replaces it.
+         *
+         * @param <T>      the type of objects stored in the registry
+         * @param registry the data registry to register; must not be {@code null}
+         * @return this builder for chaining
+         */
+        @Override
+        public <T> Builder registry(DataRegistry<T> registry) {
+            Objects.requireNonNull(registry, "registry must not be null");
+            customRegistries.put(registry.key().name(), registry);
+            return this;
+        }
+
+        /**
          * Sets a custom {@link SpriteProvider} for loading item and block textures.
          * If not called, the engine defaults to the built-in atlas.
          *
@@ -395,8 +411,8 @@ public final class DefaultEngine implements Engine {
 
             EffectPipeline effectPipeline = pipelineBuilder.build();
 
-            // Data registries - empty by default; consumers register their own via the registry API
-            Map<String, DataRegistry<?>> registries = new HashMap<>();
+            // Data registries - populated from builder registrations
+            Map<String, DataRegistry<?>> registries = new HashMap<>(customRegistries);
 
             // NBT parser
             List<NbtFormatHandler> handlers = new ArrayList<>(nbtHandlers);

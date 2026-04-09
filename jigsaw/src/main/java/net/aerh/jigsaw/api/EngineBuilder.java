@@ -1,5 +1,7 @@
 package net.aerh.jigsaw.api;
 
+import net.aerh.jigsaw.api.data.DataRegistry;
+import net.aerh.jigsaw.api.data.RegistryKey;
 import net.aerh.jigsaw.api.effect.ImageEffect;
 import net.aerh.jigsaw.api.font.FontProvider;
 import net.aerh.jigsaw.api.overlay.OverlayRenderer;
@@ -64,6 +66,16 @@ public interface EngineBuilder {
      * @return this builder
      */
     EngineBuilder spriteProvider(SpriteProvider provider);
+
+    /**
+     * Registers a {@link DataRegistry} that will be available via {@link Engine#registry(RegistryKey)}.
+     * If a registry with the same key name is already registered, the new one replaces it.
+     *
+     * @param <T>      the type of objects stored in the registry
+     * @param registry the data registry to register; must not be {@code null}
+     * @return this builder
+     */
+    <T> EngineBuilder registry(DataRegistry<T> registry);
 
     /**
      * Sets a custom slot texture for inventory rendering.

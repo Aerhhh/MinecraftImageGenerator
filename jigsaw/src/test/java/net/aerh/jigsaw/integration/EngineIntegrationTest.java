@@ -66,6 +66,28 @@ class EngineIntegrationTest {
                 .isInstanceOf(net.aerh.jigsaw.exception.RegistryException.class);
     }
 
+    @Test
+    void registry_builderRegisteredRegistryIsRetrievable() {
+        var key = net.aerh.jigsaw.api.data.RegistryKey.of("test_registry", String.class);
+        net.aerh.jigsaw.api.data.DataRegistry<String> registry = new net.aerh.jigsaw.api.data.DataRegistry<>() {
+            private final java.util.Map<String, String> map = new java.util.concurrent.ConcurrentHashMap<>();
+
+            @Override public java.util.Optional<String> get(String id) { return java.util.Optional.ofNullable(map.get(id)); }
+            @Override public java.util.Collection<String> values() { return map.values(); }
+            @Override public net.aerh.jigsaw.api.data.RegistryKey<String> key() { return key; }
+            @Override public void register(String id, String value) { map.put(id, value); }
+            @Override public int size() { return map.size(); }
+            @Override public boolean isEmpty() { return map.isEmpty(); }
+        };
+        registry.register("hello", "world");
+
+        Engine customEngine = Engine.builder().registry(registry).build();
+
+        net.aerh.jigsaw.api.data.DataRegistry<String> retrieved = customEngine.registry(key);
+        assertThat(retrieved).isSameAs(registry);
+        assertThat(retrieved.get("hello")).contains("world");
+    }
+
     // -------------------------------------------------------------------------
     // render(RenderRequest) - Item
     // -------------------------------------------------------------------------
