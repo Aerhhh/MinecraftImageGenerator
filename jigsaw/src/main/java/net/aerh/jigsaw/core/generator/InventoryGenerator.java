@@ -152,7 +152,13 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
         if (drawTitle) {
             int titleX = 8 * scaleFactor;
             int titleY = titleHeight - scaleFactor * 4;
+
+            // Drop shadow
             g.setColor(DROP_SHADOW_COLOR);
+            g.drawString(input.title(), titleX + scaleFactor, titleY + scaleFactor);
+
+            // Foreground
+            g.setColor(NORMAL_TEXT_COLOR);
             g.drawString(input.title(), titleX, titleY);
         }
 
@@ -375,14 +381,22 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
     // Font loading
     // -------------------------------------------------------------------------
 
-    private static Font loadMinecraftFont(float size) {
+    private static final Font BASE_MINECRAFT_FONT = loadBaseMinecraftFont();
+
+    private static Font loadBaseMinecraftFont() {
         try (InputStream stream = InventoryGenerator.class.getResourceAsStream(FONT_PATH)) {
             if (stream != null) {
-                Font base = Font.createFont(Font.TRUETYPE_FONT, stream);
-                return base.deriveFont(size);
+                return Font.createFont(Font.TRUETYPE_FONT, stream);
             }
         } catch (IOException | FontFormatException e) {
             log.warn("Failed to load Minecraft font, using fallback: {}", e.getMessage());
+        }
+        return null;
+    }
+
+    private static Font loadMinecraftFont(float size) {
+        if (BASE_MINECRAFT_FONT != null) {
+            return BASE_MINECRAFT_FONT.deriveFont(size);
         }
         return new Font(Font.MONOSPACED, Font.PLAIN, Math.round(size));
     }

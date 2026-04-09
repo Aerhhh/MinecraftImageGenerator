@@ -11,6 +11,7 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -93,10 +94,17 @@ public final class PlayerHeadGenerator implements Generator<PlayerHeadRequest, G
         }
     }
 
+    private static final int CONNECTION_TIMEOUT_MS = 10_000;
+    private static final int READ_TIMEOUT_MS = 10_000;
+
     private static BufferedImage loadFromUrl(String skinUrl) throws RenderException {
         try {
             URL url = URI.create(skinUrl).toURL();
-            try (InputStream in = url.openStream()) {
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setConnectTimeout(CONNECTION_TIMEOUT_MS);
+            connection.setReadTimeout(READ_TIMEOUT_MS);
+
+            try (InputStream in = connection.getInputStream()) {
                 BufferedImage skin = ImageIO.read(in);
                 if (skin == null) {
                     throw new RenderException(
@@ -105,6 +113,8 @@ public final class PlayerHeadGenerator implements Generator<PlayerHeadRequest, G
                     );
                 }
                 return skin;
+            } finally {
+                connection.disconnect();
             }
         } catch (IOException e) {
             throw new RenderException(

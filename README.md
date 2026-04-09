@@ -31,7 +31,7 @@ Core module only:
 
 ```xml
 <dependency>
-    <groupId>com.github.Aerhhh.MinecraftImageGenerator</groupId>
+    <groupId>com.github.Aerhhh.jigsaw</groupId>
     <artifactId>jigsaw</artifactId>
     <version>master-SNAPSHOT</version>
 </dependency>
@@ -41,7 +41,7 @@ With SkyBlock support:
 
 ```xml
 <dependency>
-    <groupId>com.github.Aerhhh.MinecraftImageGenerator</groupId>
+    <groupId>com.github.Aerhhh.jigsaw</groupId>
     <artifactId>jigsaw-skyblock</artifactId>
     <version>master-SNAPSHOT</version>
 </dependency>
