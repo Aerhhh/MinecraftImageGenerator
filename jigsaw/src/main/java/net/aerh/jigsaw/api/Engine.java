@@ -13,6 +13,11 @@ import net.aerh.jigsaw.core.overlay.OverlayColorProvider;
 import net.aerh.jigsaw.exception.ParseException;
 import net.aerh.jigsaw.exception.RenderException;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+
 /**
  * Entry point for the Jigsaw rendering engine.
  *
@@ -146,6 +151,53 @@ public interface Engine {
      * @throws RenderException if the item cannot be rendered
      */
     GeneratorResult renderFromNbt(String nbt, GenerationContext context) throws ParseException, RenderException;
+
+    /**
+     * Shared virtual thread executor used by {@link #renderAsync} methods.
+     * Virtual thread executors are lightweight and designed for long-lived sharing.
+     */
+    Executor ASYNC_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
+
+    /**
+     * Asynchronously renders any request type using the default {@link GenerationContext}.
+     *
+     * <p>The render is executed on a virtual thread. The returned future completes with the
+     * rendered result, or completes exceptionally with a {@link CompletionException} wrapping
+     * the original {@link RenderException} or {@link ParseException}.
+     *
+     * @param request the render request; must not be {@code null}
+     * @return a future that completes with the rendered result
+     */
+    default CompletableFuture<GeneratorResult> renderAsync(RenderRequest request) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return render(request);
+            } catch (RenderException | ParseException e) {
+                throw new CompletionException(e);
+            }
+        }, ASYNC_EXECUTOR);
+    }
+
+    /**
+     * Asynchronously renders any request type using the supplied {@link GenerationContext}.
+     *
+     * <p>The render is executed on a virtual thread. The returned future completes with the
+     * rendered result, or completes exceptionally with a {@link CompletionException} wrapping
+     * the original {@link RenderException} or {@link ParseException}.
+     *
+     * @param request the render request; must not be {@code null}
+     * @param context the generation context; must not be {@code null}
+     * @return a future that completes with the rendered result
+     */
+    default CompletableFuture<GeneratorResult> renderAsync(RenderRequest request, GenerationContext context) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return render(request, context);
+            } catch (RenderException | ParseException e) {
+                throw new CompletionException(e);
+            }
+        }, ASYNC_EXECUTOR);
+    }
 
     /**
      * Returns a new {@link EngineBuilder} configured with all defaults enabled.
