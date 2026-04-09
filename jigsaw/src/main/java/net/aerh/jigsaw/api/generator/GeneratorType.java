@@ -26,9 +26,9 @@ public enum GeneratorType {
     PLAYER_HEAD,
 
     /**
-     * Generates a full isometric 3D player body from a skin texture, with optional armor.
+     * Generates a full isometric 3D player model from a skin texture, with optional armor.
      */
-    PLAYER_BODY,
+    PLAYER_MODEL,
 
     /**
      * Generates a tooltip image (item name and lore text).

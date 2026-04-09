@@ -24,15 +24,15 @@ import net.aerh.jigsaw.core.generator.InventoryGenerator;
 import net.aerh.jigsaw.core.generator.InventoryRequest;
 import net.aerh.jigsaw.core.generator.ItemGenerator;
 import net.aerh.jigsaw.core.generator.ItemRequest;
-import net.aerh.jigsaw.core.generator.PlayerBodyGenerator;
-import net.aerh.jigsaw.core.generator.PlayerBodyRequest;
-import net.aerh.jigsaw.core.generator.body.ArmorTextureProvider;
-import net.aerh.jigsaw.core.resource.ResourcePack;
 import net.aerh.jigsaw.core.generator.PlayerHeadGenerator;
 import net.aerh.jigsaw.core.generator.PlayerHeadRequest;
 import net.aerh.jigsaw.core.generator.ResultComposer;
 import net.aerh.jigsaw.core.generator.TooltipGenerator;
 import net.aerh.jigsaw.core.generator.TooltipRequest;
+import net.aerh.jigsaw.core.generator.player.ArmorTexture;
+import net.aerh.jigsaw.core.generator.player.PlayerModelGenerator;
+import net.aerh.jigsaw.core.generator.player.PlayerModelRequest;
+import net.aerh.jigsaw.core.resource.ResourcePack;
 import net.aerh.jigsaw.core.nbt.DefaultNbtParser;
 import net.aerh.jigsaw.core.nbt.handler.ComponentsNbtFormatHandler;
 import net.aerh.jigsaw.core.nbt.handler.DefaultNbtFormatHandler;
@@ -73,7 +73,7 @@ public final class DefaultEngine implements Engine {
     private final TooltipGenerator tooltipGenerator;
     private final InventoryGenerator inventoryGenerator;
     private final PlayerHeadGenerator playerHeadGenerator;
-    private final PlayerBodyGenerator playerBodyGenerator;
+    private final PlayerModelGenerator playerModelGenerator;
     private final NbtParser nbtParser;
     private final Map<String, DataRegistry<?>> registries;
     private final OverlayColorProvider overlayColorProvider;
@@ -84,7 +84,7 @@ public final class DefaultEngine implements Engine {
             TooltipGenerator tooltipGenerator,
             InventoryGenerator inventoryGenerator,
             PlayerHeadGenerator playerHeadGenerator,
-            PlayerBodyGenerator playerBodyGenerator,
+            PlayerModelGenerator playerModelGenerator,
             NbtParser nbtParser,
             Map<String, DataRegistry<?>> registries,
             OverlayColorProvider overlayColorProvider
@@ -94,7 +94,7 @@ public final class DefaultEngine implements Engine {
         this.tooltipGenerator = tooltipGenerator;
         this.inventoryGenerator = inventoryGenerator;
         this.playerHeadGenerator = playerHeadGenerator;
-        this.playerBodyGenerator = playerBodyGenerator;
+        this.playerModelGenerator = playerModelGenerator;
         this.nbtParser = nbtParser;
         this.registries = Map.copyOf(registries);
         this.overlayColorProvider = overlayColorProvider;
@@ -137,7 +137,7 @@ public final class DefaultEngine implements Engine {
             case TooltipRequest r -> tooltipGenerator.render(r, context);
             case InventoryRequest r -> inventoryGenerator.render(r, context);
             case PlayerHeadRequest r -> playerHeadGenerator.render(r, context);
-            case PlayerBodyRequest r -> playerBodyGenerator.render(r, context);
+            case PlayerModelRequest r -> playerModelGenerator.render(r, context);
             case CompositeRequest r -> renderComposite(r, context);
             default -> throw new ValidationException("Unknown request type: " + request.getClass().getName());
         };
@@ -477,11 +477,9 @@ public final class DefaultEngine implements Engine {
             InventoryGenerator inventoryGenerator = new InventoryGenerator(spriteProvider, effectPipeline, customSlotTexture, fontRegistry);
             PlayerHeadGenerator playerHeadGenerator = PlayerHeadGenerator.withDefaults();
 
-            // Armor texture provider (resource pack overrides bundled defaults)
-            ArmorTextureProvider armorTextureProvider = customResourcePack != null
-                    ? new ArmorTextureProvider(customResourcePack)
-                    : ArmorTextureProvider.withDefaults();
-            PlayerBodyGenerator playerBodyGenerator = PlayerBodyGenerator.withDefaults(armorTextureProvider);
+            // Armor texture loader
+            ArmorTexture armorTexture = new ArmorTexture();
+            PlayerModelGenerator playerModelGenerator = PlayerModelGenerator.withDefaults(armorTexture);
 
             return new DefaultEngine(
                     spriteProvider,
@@ -489,7 +487,7 @@ public final class DefaultEngine implements Engine {
                     tooltipGenerator,
                     inventoryGenerator,
                     playerHeadGenerator,
-                    playerBodyGenerator,
+                    playerModelGenerator,
                     nbtParser,
                     registries,
                     overlayColorProvider
