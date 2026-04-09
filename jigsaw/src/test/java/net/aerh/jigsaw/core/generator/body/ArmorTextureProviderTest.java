@@ -265,7 +265,7 @@ class ArmorTextureProviderTest {
 
             try (FolderResourcePack pack = new FolderResourcePack(packDir)) {
                 ArmorTextureProvider provider = new ArmorTextureProvider(pack);
-                assertThat(provider.piece(ArmorSlot.HELMET, "netherite")).isEmpty();
+                assertThat(provider.piece(ArmorSlot.HELMET, "nonexistent_fantasy_material")).isEmpty();
             }
         }
 
@@ -277,8 +277,34 @@ class ArmorTextureProviderTest {
 
             try (FolderResourcePack pack = new FolderResourcePack(packDir)) {
                 ArmorTextureProvider provider = new ArmorTextureProvider(pack);
-                assertThat(provider.hasTexture("gold", ArmorSlot.HELMET)).isFalse();
+                assertThat(provider.hasTexture("nonexistent_fantasy_material", ArmorSlot.HELMET)).isFalse();
             }
+        }
+
+        @Test
+        void withDefaults_loadsVanillaIronTexture() {
+            ArmorTextureProvider provider = ArmorTextureProvider.withDefaults();
+            Optional<ArmorPiece> piece = provider.piece(ArmorSlot.HELMET, "iron");
+
+            assertThat(piece).isPresent();
+            assertThat(piece.get().slot()).isEqualTo(ArmorSlot.HELMET);
+            assertThat(piece.get().armorTexture().getWidth()).isEqualTo(64);
+            assertThat(piece.get().armorTexture().getHeight()).isEqualTo(32);
+        }
+
+        @Test
+        void withDefaults_loadsLeggingsFromClasspath() {
+            ArmorTextureProvider provider = ArmorTextureProvider.withDefaults();
+            Optional<ArmorPiece> piece = provider.piece(ArmorSlot.LEGGINGS, "diamond");
+
+            assertThat(piece).isPresent();
+            assertThat(piece.get().slot()).isEqualTo(ArmorSlot.LEGGINGS);
+        }
+
+        @Test
+        void withDefaults_missingMaterial_returnsEmpty() {
+            ArmorTextureProvider provider = ArmorTextureProvider.withDefaults();
+            assertThat(provider.piece(ArmorSlot.HELMET, "nonexistent_fantasy_material")).isEmpty();
         }
 
         @Test

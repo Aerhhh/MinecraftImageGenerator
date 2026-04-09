@@ -477,10 +477,10 @@ public final class DefaultEngine implements Engine {
             InventoryGenerator inventoryGenerator = new InventoryGenerator(spriteProvider, effectPipeline, customSlotTexture, fontRegistry);
             PlayerHeadGenerator playerHeadGenerator = PlayerHeadGenerator.withDefaults();
 
-            // Armor texture provider (only available if a resource pack was configured)
+            // Armor texture provider (resource pack overrides bundled defaults)
             ArmorTextureProvider armorTextureProvider = customResourcePack != null
                     ? new ArmorTextureProvider(customResourcePack)
-                    : null;
+                    : ArmorTextureProvider.withDefaults();
             PlayerBodyGenerator playerBodyGenerator = PlayerBodyGenerator.withDefaults(armorTextureProvider);
 
             return new DefaultEngine(
