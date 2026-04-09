@@ -42,14 +42,12 @@ public final class ArmorLayer {
             case HELMET -> List.of(
                     new ArmorMapping(BodyPart.HEAD, 0, 0, 8, 8, 8, OUTER_INFLATION, false)
             );
-            case CHESTPLATE -> {
-                int armW = model.armWidth();
-                yield List.of(
-                        new ArmorMapping(BodyPart.BODY, 16, 16, 8, 12, 4, OUTER_INFLATION, false),
-                        new ArmorMapping(BodyPart.RIGHT_ARM, 40, 16, armW, 12, 4, OUTER_INFLATION, false),
-                        new ArmorMapping(BodyPart.LEFT_ARM, 40, 16, armW, 12, 4, OUTER_INFLATION, true)
-                );
-            }
+            case CHESTPLATE -> List.of(
+                    // Armor arm textures are always 4px wide regardless of skin model
+                    new ArmorMapping(BodyPart.BODY, 16, 16, 8, 12, 4, OUTER_INFLATION, false),
+                    new ArmorMapping(BodyPart.RIGHT_ARM, 40, 16, 4, 12, 4, OUTER_INFLATION, false),
+                    new ArmorMapping(BodyPart.LEFT_ARM, 40, 16, 4, 12, 4, OUTER_INFLATION, true)
+            );
             case LEGGINGS -> List.of(
                     new ArmorMapping(BodyPart.RIGHT_LEG, 0, 16, 4, 12, 4, INNER_INFLATION, false),
                     new ArmorMapping(BodyPart.LEFT_LEG, 0, 16, 4, 12, 4, INNER_INFLATION, true)
