@@ -1,5 +1,7 @@
 package net.aerh.jigsaw.core.generator.body;
 
+import net.aerh.jigsaw.core.util.ColorUtil;
+
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.Image;
@@ -77,23 +79,24 @@ public final class IsometricBodyRenderer {
             // Base layer
             addCuboid(vertexList, faceList, geom, 0, skin,
                     geom.baseUvX(), geom.baseUvY(),
-                    geom.pixelWidth(), geom.pixelHeight(), geom.pixelDepth(), false);
+                    geom.pixelWidth(), geom.pixelHeight(), geom.pixelDepth(), false, -1);
 
             // Overlay layer (slightly inflated)
             addCuboid(vertexList, faceList, geom, PlayerBodySettings.OVERLAY_INFLATION, skin,
                     geom.overlayUvX(), geom.overlayUvY(),
-                    geom.pixelWidth(), geom.pixelHeight(), geom.pixelDepth(), false);
+                    geom.pixelWidth(), geom.pixelHeight(), geom.pixelDepth(), false, -1);
         }
 
         // Armor layers
         for (ArmorPiece armor : armorPieces) {
+            int tint = armor.color().orElse(-1);
             List<ArmorLayer.ArmorMapping> mappings = ArmorLayer.mappingsFor(armor.slot(), model);
             for (ArmorLayer.ArmorMapping mapping : mappings) {
                 BodyPart.Geometry bodyGeom = mapping.bodyPart().geometry(model);
                 addCuboid(vertexList, faceList, bodyGeom, mapping.inflation(), armor.armorTexture(),
                         mapping.uvX(), mapping.uvY(),
                         mapping.pixelWidth(), mapping.pixelHeight(), mapping.pixelDepth(),
-                        mapping.mirrored());
+                        mapping.mirrored(), tint);
             }
         }
 
@@ -139,12 +142,13 @@ public final class IsometricBodyRenderer {
      * @param pixelH     cuboid height in pixels
      * @param pixelD     cuboid depth in pixels
      * @param mirrored   whether to mirror the texture horizontally
+     * @param tintColor  dye tint color (packed RGB), or -1 for no tint
      */
     private static void addCuboid(
             List<double[]> vertices, List<RenderFace> faces,
             BodyPart.Geometry geom, double inflation, BufferedImage texture,
             int uvOriginX, int uvOriginY, int pixelW, int pixelH, int pixelD,
-            boolean mirrored) {
+            boolean mirrored, int tintColor) {
 
         int baseIndex = vertices.size();
 
@@ -181,30 +185,30 @@ public final class IsometricBodyRenderer {
         if (mirrored) {
             // For mirrored (left-side) pieces, swap left/right faces and flip UV x within each face
             faces.add(new RenderFace(new int[]{b + 7, b + 4, b + 0, b + 3}, SHADOW_FRONT,
-                    uvOriginX + d, uvOriginY + d, w, h, texture, true));
+                    uvOriginX + d, uvOriginY + d, w, h, texture, true, tintColor));
             faces.add(new RenderFace(new int[]{b + 4, b + 5, b + 1, b + 0}, SHADOW_RIGHT,
-                    uvOriginX, uvOriginY + d, d, h, texture, true));
+                    uvOriginX, uvOriginY + d, d, h, texture, true, tintColor));
             faces.add(new RenderFace(new int[]{b + 5, b + 6, b + 2, b + 1}, SHADOW_BACK,
-                    uvOriginX + d + w + d, uvOriginY + d, w, h, texture, true));
+                    uvOriginX + d + w + d, uvOriginY + d, w, h, texture, true, tintColor));
             faces.add(new RenderFace(new int[]{b + 6, b + 7, b + 3, b + 2}, SHADOW_LEFT,
-                    uvOriginX + d + w, uvOriginY + d, d, h, texture, true));
+                    uvOriginX + d + w, uvOriginY + d, d, h, texture, true, tintColor));
             faces.add(new RenderFace(new int[]{b + 6, b + 5, b + 4, b + 7}, SHADOW_TOP,
-                    uvOriginX + d, uvOriginY, w, d, texture, true));
+                    uvOriginX + d, uvOriginY, w, d, texture, true, tintColor));
             faces.add(new RenderFace(new int[]{b + 2, b + 1, b + 0, b + 3}, SHADOW_BOTTOM,
-                    uvOriginX + d + w, uvOriginY, w, d, texture, true));
+                    uvOriginX + d + w, uvOriginY, w, d, texture, true, tintColor));
         } else {
             faces.add(new RenderFace(new int[]{b + 7, b + 4, b + 0, b + 3}, SHADOW_FRONT,
-                    uvOriginX + d, uvOriginY + d, w, h, texture, false));
+                    uvOriginX + d, uvOriginY + d, w, h, texture, false, tintColor));
             faces.add(new RenderFace(new int[]{b + 4, b + 5, b + 1, b + 0}, SHADOW_RIGHT,
-                    uvOriginX + d + w, uvOriginY + d, d, h, texture, false));
+                    uvOriginX + d + w, uvOriginY + d, d, h, texture, false, tintColor));
             faces.add(new RenderFace(new int[]{b + 5, b + 6, b + 2, b + 1}, SHADOW_BACK,
-                    uvOriginX + d + w + d, uvOriginY + d, w, h, texture, false));
+                    uvOriginX + d + w + d, uvOriginY + d, w, h, texture, false, tintColor));
             faces.add(new RenderFace(new int[]{b + 6, b + 7, b + 3, b + 2}, SHADOW_LEFT,
-                    uvOriginX, uvOriginY + d, d, h, texture, false));
+                    uvOriginX, uvOriginY + d, d, h, texture, false, tintColor));
             faces.add(new RenderFace(new int[]{b + 6, b + 5, b + 4, b + 7}, SHADOW_TOP,
-                    uvOriginX + d, uvOriginY, w, d, texture, false));
+                    uvOriginX + d, uvOriginY, w, d, texture, false, tintColor));
             faces.add(new RenderFace(new int[]{b + 2, b + 1, b + 0, b + 3}, SHADOW_BOTTOM,
-                    uvOriginX + d + w, uvOriginY, w, d, texture, false));
+                    uvOriginX + d + w, uvOriginY, w, d, texture, false, tintColor));
         }
     }
 
@@ -330,6 +334,14 @@ public final class IsometricBodyRenderer {
             float shadow = face.shadow() / 255f;
             BufferedImage texture = face.texture();
             boolean mirrored = face.mirrored();
+            int tintColor = face.tintColor();
+            float tintR = 1f, tintG = 1f, tintB = 1f;
+            if (tintColor != -1) {
+                float[] tint = ColorUtil.extractTintRgb(tintColor);
+                tintR = tint[0];
+                tintG = tint[1];
+                tintB = tint[2];
+            }
 
             for (int y = 0; y < faceH; y++) {
                 for (int x = 0; x < faceW; x++) {
@@ -345,10 +357,11 @@ public final class IsometricBodyRenderer {
                     int alpha = (color >> 24) & 0xFF;
                     if (alpha == 0) continue;
 
-                    int red = Math.round(((color >> 16) & 0xFF) * shadow);
-                    int green = Math.round(((color >> 8) & 0xFF) * shadow);
-                    int blue = Math.round((color & 0xFF) * shadow);
-                    g2d.setColor(new Color(red, green, blue, alpha));
+                    int red = Math.round(((color >> 16) & 0xFF) * tintR * shadow);
+                    int green = Math.round(((color >> 8) & 0xFF) * tintG * shadow);
+                    int blue = Math.round((color & 0xFF) * tintB * shadow);
+                    g2d.setColor(new Color(
+                            ColorUtil.clamp(red), ColorUtil.clamp(green), ColorUtil.clamp(blue), alpha));
 
                     double xCoord = v1[0] - displacement[0][0] * x + xStep * y;
                     double yCoord = v1[1] - displacement[0][1] * x - displacement[1][1] * y;
@@ -417,12 +430,16 @@ public final class IsometricBodyRenderer {
     /**
      * Internal record representing a face to render, with texture and UV mapping information.
      */
+    /**
+     * @param tintColor packed RGB dye color, or -1 for no tint
+     */
     private record RenderFace(
             int[] vertexIndices,
             int shadow,
             int uvX, int uvY,
             int uvWidth, int uvHeight,
             BufferedImage texture,
-            boolean mirrored
+            boolean mirrored,
+            int tintColor
     ) {}
 }

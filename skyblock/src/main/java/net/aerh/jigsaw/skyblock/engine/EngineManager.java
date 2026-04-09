@@ -149,7 +149,7 @@ public class EngineManager implements Closeable {
                     net.aerh.jigsaw.core.generator.InventoryGenerator.extractSlotTextureFromPack(pack);
 
             EngineBuilder engineBuilder = SkyBlockRegistries.registerAll(
-                    Engine.builder().spriteProvider(spriteProvider));
+                    Engine.builder().spriteProvider(spriteProvider).resourcePack(pack));
             if (slotTexture != null) {
                 engineBuilder.slotTexture(slotTexture);
             }
