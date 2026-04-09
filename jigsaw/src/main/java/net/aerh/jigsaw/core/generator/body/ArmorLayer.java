@@ -49,8 +49,8 @@ public final class ArmorLayer {
                     // Armor arm textures are always 4px wide regardless of skin model.
                     // Arms are nudged slightly inward to close the shoulder seam with the body.
                     new ArmorMapping(BodyPart.BODY, 16, 16, 8, 12, 4, OUTER_INFLATION, false, 0),
-                    new ArmorMapping(BodyPart.RIGHT_ARM, 40, 16, 4, 12, 4, OUTER_INFLATION, false, ARM_INWARD_NUDGE),
-                    new ArmorMapping(BodyPart.LEFT_ARM, 40, 16, 4, 12, 4, OUTER_INFLATION, true, -ARM_INWARD_NUDGE)
+                    new ArmorMapping(BodyPart.RIGHT_ARM, 40, 16, 4, 12, 4, OUTER_INFLATION, false, 0),
+                    new ArmorMapping(BodyPart.LEFT_ARM, 40, 16, 4, 12, 4, OUTER_INFLATION, true, 0)
             );
             case LEGGINGS -> List.of(
                     new ArmorMapping(BodyPart.RIGHT_LEG, 0, 16, 4, 12, 4, INNER_INFLATION, false, 0),

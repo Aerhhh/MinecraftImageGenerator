@@ -326,29 +326,12 @@ public final class IsometricBodyRenderer {
 
             if (faceW == 0 || faceH == 0) continue;
 
-            // Pre-compute a grid of corner points so adjacent pixels share exact vertices.
-            // This eliminates sub-pixel gaps between polygons caused by independent rounding.
-            // Grid is (faceW+1) x (faceH+1) - one corner per pixel boundary.
-            int[][] gridX = new int[faceH + 1][faceW + 1];
-            int[][] gridY = new int[faceH + 1][faceW + 1];
-
-            double edgeTopDx = (v2[0] - v1[0]) / faceW;   // v1 -> v2 along top edge
-            double edgeTopDy = (v2[1] - v1[1]) / faceW;
-            double edgeBotDx = (v3[0] - v4[0]) / faceW;   // v4 -> v3 along bottom edge
-            double edgeBotDy = (v3[1] - v4[1]) / faceW;
-
-            for (int x = 0; x <= faceW; x++) {
-                double topX = v1[0] + edgeTopDx * x;
-                double topY = v1[1] + edgeTopDy * x;
-                double botX = v4[0] + edgeBotDx * x;
-                double botY = v4[1] + edgeBotDy * x;
-
-                for (int y = 0; y <= faceH; y++) {
-                    double t = (double) y / faceH;
-                    gridX[y][x] = (int) Math.round(topX + (botX - topX) * t);
-                    gridY[y][x] = (int) Math.round(topY + (botY - topY) * t);
-                }
-            }
+            double[][] displacement = {
+                    {(v1[0] - v2[0]) / faceW, (v1[1] - v2[1]) / faceW},
+                    {(v2[0] - v3[0]) / faceH, (v2[1] - v3[1]) / faceH},
+                    {(v3[0] - v4[0]) / faceW, (v3[1] - v4[1]) / faceW}
+            };
+            double xStep = (v4[0] - v1[0]) / faceH;
 
             int uvFaceX = face.uvX();
             int uvFaceY = face.uvY();
@@ -383,8 +366,20 @@ public final class IsometricBodyRenderer {
                     g2d.setColor(new Color(
                             ColorUtil.clamp(red), ColorUtil.clamp(green), ColorUtil.clamp(blue), alpha));
 
-                    int[] pointsX = {gridX[y][x], gridX[y][x + 1], gridX[y + 1][x + 1], gridX[y + 1][x]};
-                    int[] pointsY = {gridY[y][x], gridY[y][x + 1], gridY[y + 1][x + 1], gridY[y + 1][x]};
+                    double xCoord = v1[0] - displacement[0][0] * x + xStep * y;
+                    double yCoord = v1[1] - displacement[0][1] * x - displacement[1][1] * y;
+
+                    int[] pointsX = new int[4];
+                    int[] pointsY = new int[4];
+
+                    pointsX[0] = (int) Math.round(xCoord);
+                    pointsY[0] = (int) Math.round(yCoord);
+                    for (int i = 0; i < 3; i++) {
+                        xCoord -= displacement[i][0];
+                        yCoord -= displacement[i][1];
+                        pointsX[i + 1] = (int) Math.round(xCoord);
+                        pointsY[i + 1] = (int) Math.round(yCoord);
+                    }
 
                     g2d.drawPolygon(pointsX, pointsY, 4);
                     g2d.fillPolygon(pointsX, pointsY, 4);
