@@ -325,7 +325,7 @@ public final class IsometricBodyRenderer {
             // between adjacent faces caused by fillPolygon edge rules
             double cx = (v1raw[0] + v2raw[0] + v3raw[0] + v4raw[0]) / 4.0;
             double cy = (v1raw[1] + v2raw[1] + v3raw[1] + v4raw[1]) / 4.0;
-            double expand = 0.4;
+            double expand = 0.012;
             double[] v1 = {v1raw[0] + (v1raw[0] - cx) * expand, v1raw[1] + (v1raw[1] - cy) * expand};
             double[] v2 = {v2raw[0] + (v2raw[0] - cx) * expand, v2raw[1] + (v2raw[1] - cy) * expand};
             double[] v3 = {v3raw[0] + (v3raw[0] - cx) * expand, v3raw[1] + (v3raw[1] - cy) * expand};
