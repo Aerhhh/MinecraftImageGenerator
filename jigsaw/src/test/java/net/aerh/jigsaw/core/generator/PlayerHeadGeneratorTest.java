@@ -10,6 +10,7 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.net.http.HttpClient;
 import java.util.Base64;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -30,7 +31,7 @@ class PlayerHeadGeneratorTest {
 
     @BeforeEach
     void setUp() {
-        generator = new PlayerHeadGenerator();
+        generator = PlayerHeadGenerator.withDefaults();
     }
 
     // -------------------------------------------------------------------------

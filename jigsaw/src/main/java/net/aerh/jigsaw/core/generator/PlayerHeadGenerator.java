@@ -11,13 +11,15 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.HttpURLConnection;
 import java.net.URI;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -30,10 +32,39 @@ import java.util.regex.Pattern;
  *
  * <p>If {@link PlayerHeadRequest#scale()} is greater than 1, the rendered head is further
  * upscaled by that factor using nearest-neighbor interpolation.
+ *
+ * <p>The HTTP client is injected via the constructor for testability. Use {@link #withDefaults()}
+ * to create an instance with a default client configured for virtual threads.
  */
 public final class PlayerHeadGenerator implements Generator<PlayerHeadRequest, GeneratorResult> {
 
     private static final Pattern URL_PATTERN = Pattern.compile("\"url\"\\s*:\\s*\"([^\"]+)\"");
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
+
+    private final HttpClient httpClient;
+
+    /**
+     * Creates a new {@link PlayerHeadGenerator} with the given HTTP client.
+     *
+     * @param httpClient the HTTP client to use for skin fetching; must not be {@code null}
+     */
+    public PlayerHeadGenerator(HttpClient httpClient) {
+        this.httpClient = Objects.requireNonNull(httpClient, "httpClient must not be null");
+    }
+
+    /**
+     * Creates a new {@link PlayerHeadGenerator} with a default {@link HttpClient}
+     * configured with a virtual thread executor and a 10-second connect timeout.
+     *
+     * @return a new generator with default HTTP settings
+     */
+    public static PlayerHeadGenerator withDefaults() {
+        HttpClient client = HttpClient.newBuilder()
+                .connectTimeout(REQUEST_TIMEOUT)
+                .executor(Executors.newVirtualThreadPerTaskExecutor())
+                .build();
+        return new PlayerHeadGenerator(client);
+    }
 
     @Override
     public GeneratorResult render(PlayerHeadRequest input, GenerationContext context) throws RenderException {
@@ -64,14 +95,14 @@ public final class PlayerHeadGenerator implements Generator<PlayerHeadRequest, G
     // Skin loading
     // -------------------------------------------------------------------------
 
-    private static BufferedImage loadSkin(PlayerHeadRequest request) throws RenderException {
+    private BufferedImage loadSkin(PlayerHeadRequest request) throws RenderException {
         if (request.base64Texture().isPresent()) {
             return loadFromBase64(request.base64Texture().get());
         }
         return loadFromUrl(request.textureUrl().get());
     }
 
-    private static BufferedImage loadFromBase64(String base64Texture) throws RenderException {
+    private BufferedImage loadFromBase64(String base64Texture) throws RenderException {
         try {
             byte[] decoded = Base64.getDecoder().decode(base64Texture);
             String json = new String(decoded, java.nio.charset.StandardCharsets.UTF_8);
@@ -94,31 +125,44 @@ public final class PlayerHeadGenerator implements Generator<PlayerHeadRequest, G
         }
     }
 
-    private static final int CONNECTION_TIMEOUT_MS = 10_000;
-    private static final int READ_TIMEOUT_MS = 10_000;
-
-    private static BufferedImage loadFromUrl(String skinUrl) throws RenderException {
+    private BufferedImage loadFromUrl(String skinUrl) throws RenderException {
         try {
-            URL url = URI.create(skinUrl).toURL();
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setConnectTimeout(CONNECTION_TIMEOUT_MS);
-            connection.setReadTimeout(READ_TIMEOUT_MS);
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(skinUrl))
+                    .timeout(REQUEST_TIMEOUT)
+                    .GET()
+                    .build();
 
-            try (InputStream in = connection.getInputStream()) {
+            HttpResponse<InputStream> response = httpClient.send(request,
+                    HttpResponse.BodyHandlers.ofInputStream());
+
+            if (response.statusCode() != 200) {
+                throw new RenderException(
+                        "Failed to fetch skin: HTTP " + response.statusCode(),
+                        Map.of("url", skinUrl, "statusCode", String.valueOf(response.statusCode()))
+                );
+            }
+
+            try (InputStream in = response.body()) {
                 BufferedImage skin = ImageIO.read(in);
                 if (skin == null) {
                     throw new RenderException(
                             "Failed to decode skin image from URL (ImageIO returned null)",
-                            Map.of("url", skinUrl)
+                            Map.of("url", skinUrl, "statusCode", String.valueOf(response.statusCode()))
                     );
                 }
                 return skin;
-            } finally {
-                connection.disconnect();
             }
         } catch (IOException e) {
             throw new RenderException(
                     "Failed to load skin from URL: " + skinUrl,
+                    Map.of("url", skinUrl),
+                    e
+            );
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RenderException(
+                    "Skin fetch interrupted for URL: " + skinUrl,
                     Map.of("url", skinUrl),
                     e
             );
