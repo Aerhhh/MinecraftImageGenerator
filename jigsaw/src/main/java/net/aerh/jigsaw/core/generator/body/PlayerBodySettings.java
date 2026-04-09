@@ -7,13 +7,13 @@ package net.aerh.jigsaw.core.generator.body;
 public final class PlayerBodySettings {
 
     /** Canvas width for the high-resolution render (before downscaling). */
-    public static final int DEFAULT_WIDTH = 3600;
+    public static final int DEFAULT_WIDTH = 4800;
 
     /** Canvas height for the high-resolution render (before downscaling). */
-    public static final int DEFAULT_HEIGHT = 3600;
+    public static final int DEFAULT_HEIGHT = 4800;
 
     /** Scale factor mapping renderer units to pixels on the canvas. */
-    public static final int DEFAULT_RENDER_SCALE = 250;
+    public static final int DEFAULT_RENDER_SCALE = 400;
 
     /** Default X rotation (pitch) in radians - 30 degrees. */
     public static final double DEFAULT_X_ROTATION = Math.PI / 6;
