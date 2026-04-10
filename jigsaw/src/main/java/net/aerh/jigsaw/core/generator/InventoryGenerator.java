@@ -24,6 +24,7 @@ import java.io.InputStream;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.StructuredTaskScope;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -57,6 +58,8 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
     private final EffectPipeline effectPipeline;
     private final net.aerh.jigsaw.api.font.FontRegistry fontRegistry;
     private final BufferedImage baseSlotTexture;
+    private final int cachedSpriteSize;
+    private final ConcurrentHashMap<Integer, BufferedImage> slotTextureCache = new ConcurrentHashMap<>();
 
     /**
      * Creates a new {@link InventoryGenerator} with a custom slot texture.
@@ -71,6 +74,7 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
         this.effectPipeline = Objects.requireNonNull(effectPipeline, "effectPipeline must not be null");
         this.fontRegistry = Objects.requireNonNull(fontRegistry, "fontRegistry must not be null");
         this.baseSlotTexture = slotTexture != null ? slotTexture : loadDefaultSlotTexture();
+        this.cachedSpriteSize = computeSpriteSize();
     }
 
     /**
@@ -117,7 +121,7 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
         Objects.requireNonNull(context, "context must not be null");
 
         // Derive scale factor from sprite size (sprites are double-size in atlas)
-        int baseSpriteSize = detectSpriteSize();
+        int baseSpriteSize = cachedSpriteSize;
         int baseScaleFactor = Math.max(1, baseSpriteSize / 2 / 16);
 
         // Apply request scale on top
@@ -240,11 +244,10 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
      * Returns the scale factor derived from the sprite provider's actual sprite size.
      */
     public int getScaleFactor() {
-        int spriteSize = detectSpriteSize();
-        return Math.max(1, spriteSize / 2 / 16);
+        return Math.max(1, cachedSpriteSize / 2 / 16);
     }
 
-    private int detectSpriteSize() {
+    private int computeSpriteSize() {
         return spriteProvider.availableSprites().stream()
                 .findFirst()
                 .flatMap(spriteProvider::getSprite)
@@ -296,12 +299,14 @@ public final class InventoryGenerator implements Generator<InventoryRequest, Gen
 
     /**
      * Resizes the base slot texture to the target slot size for rendering.
+     * Results are cached by slot size since the same size is used for all slots in a render.
      */
     private BufferedImage resizeSlotTexture(int slotSize) {
         if (baseSlotTexture == null) {
             return null;
         }
-        return ImageUtil.resizeImage(baseSlotTexture, slotSize, slotSize, BufferedImage.TYPE_INT_ARGB);
+        return slotTextureCache.computeIfAbsent(slotSize,
+                size -> ImageUtil.resizeImage(baseSlotTexture, size, size, BufferedImage.TYPE_INT_ARGB));
     }
 
     /**

@@ -56,6 +56,17 @@ public final class EffectContext {
         this.metadata = Collections.unmodifiableMap(new HashMap<>(builder.metadata));
     }
 
+    private EffectContext(BufferedImage image, List<BufferedImage> animationFrames, int frameDelayMs,
+                          String itemId, boolean enchanted, boolean hovered, Map<String, Object> metadata) {
+        this.image = image;
+        this.animationFrames = animationFrames;
+        this.frameDelayMs = frameDelayMs;
+        this.itemId = itemId;
+        this.enchanted = enchanted;
+        this.hovered = hovered;
+        this.metadata = metadata;
+    }
+
     /**
      * Returns a new, empty {@link Builder} for constructing an {@code EffectContext} from scratch.
      *
@@ -133,16 +144,19 @@ public final class EffectContext {
 
     /**
      * Returns a new {@code EffectContext} with the image replaced, all other fields unchanged.
+     * Shares collection references with the parent since they are unmodifiable.
      */
     public EffectContext withImage(BufferedImage newImage) {
-        return toBuilder().image(newImage).build();
+        return new EffectContext(newImage, this.animationFrames, this.frameDelayMs,
+                this.itemId, this.enchanted, this.hovered, this.metadata);
     }
 
     /**
      * Returns a new {@code EffectContext} with the animation frames replaced, all other fields unchanged.
      */
     public EffectContext withAnimationFrames(List<BufferedImage> frames) {
-        return toBuilder().animationFrames(frames).build();
+        return new EffectContext(this.image, Collections.unmodifiableList(new ArrayList<>(frames)),
+                this.frameDelayMs, this.itemId, this.enchanted, this.hovered, this.metadata);
     }
 
     /**
@@ -150,9 +164,10 @@ public final class EffectContext {
      * The original context is not modified.
      */
     public EffectContext withMetadata(String key, Object value) {
-        Builder b = toBuilder();
-        b.metadata.put(key, value);
-        return b.build();
+        Map<String, Object> newMetadata = new HashMap<>(this.metadata);
+        newMetadata.put(key, value);
+        return new EffectContext(this.image, this.animationFrames, this.frameDelayMs,
+                this.itemId, this.enchanted, this.hovered, Collections.unmodifiableMap(newMetadata));
     }
 
     /**

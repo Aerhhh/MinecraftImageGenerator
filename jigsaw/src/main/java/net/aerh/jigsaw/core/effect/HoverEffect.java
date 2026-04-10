@@ -61,36 +61,33 @@ public final class HoverEffect implements ImageEffect {
      * @param context the current effect context
      * @return the updated context with the brightened image
      */
+    /** Pre-computed fully opaque slot gray pixel. */
+    private static final int SLOT_GRAY_PIXEL = (0xFF << 24) | (SLOT_GRAY << 16) | (SLOT_GRAY << 8) | SLOT_GRAY;
+
     @Override
     public EffectContext apply(EffectContext context) {
         BufferedImage src = context.image();
         int w = src.getWidth();
         int h = src.getHeight();
-        BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
 
-        for (int y = 0; y < h; y++) {
-            for (int x = 0; x < w; x++) {
-                int pixel = src.getRGB(x, y);
-                int alpha = (pixel >> 24) & 0xFF;
+        int[] pixels = src.getRGB(0, 0, w, h, null, 0, w);
 
-                if (alpha == 0) {
-                    // Fill fully transparent pixels with slot gray
-                    out.setRGB(x, y, (0xFF << 24) | (SLOT_GRAY << 16) | (SLOT_GRAY << 8) | SLOT_GRAY);
-                } else {
-                    // Brighten: 50% blend toward white
-                    int r = (pixel >> 16) & 0xFF;
-                    int g = (pixel >> 8) & 0xFF;
-                    int b = pixel & 0xFF;
+        for (int i = 0; i < pixels.length; i++) {
+            int pixel = pixels[i];
+            int alpha = (pixel >>> 24) & 0xFF;
 
-                    r = (r + 255) / 2;
-                    g = (g + 255) / 2;
-                    b = (b + 255) / 2;
-
-                    out.setRGB(x, y, (alpha << 24) | (r << 16) | (g << 8) | b);
-                }
+            if (alpha == 0) {
+                pixels[i] = SLOT_GRAY_PIXEL;
+            } else {
+                int r = (((pixel >> 16) & 0xFF) + 255) / 2;
+                int g = (((pixel >> 8) & 0xFF) + 255) / 2;
+                int b = ((pixel & 0xFF) + 255) / 2;
+                pixels[i] = (alpha << 24) | (r << 16) | (g << 8) | b;
             }
         }
 
+        BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+        out.setRGB(0, 0, w, h, pixels, 0, w);
         return context.withImage(out);
     }
 }

@@ -1,5 +1,7 @@
 package net.aerh.jigsaw.core.generator;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import net.aerh.jigsaw.exception.RenderException;
 
 import javax.imageio.ImageIO;
@@ -29,8 +31,11 @@ public final class SkinLoader {
 
     private static final Pattern URL_PATTERN = Pattern.compile("\"url\"\\s*:\\s*\"([^\"]+)\"");
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
+    private static final long SKIN_CACHE_MAX_SIZE = 256;
+    private static final Duration SKIN_CACHE_TTL = Duration.ofMinutes(10);
 
     private final HttpClient httpClient;
+    private final Cache<String, BufferedImage> skinCache;
 
     /**
      * Creates a new skin loader with the given HTTP client.
@@ -39,6 +44,10 @@ public final class SkinLoader {
      */
     public SkinLoader(HttpClient httpClient) {
         this.httpClient = Objects.requireNonNull(httpClient, "httpClient must not be null");
+        this.skinCache = Caffeine.newBuilder()
+                .maximumSize(SKIN_CACHE_MAX_SIZE)
+                .expireAfterWrite(SKIN_CACHE_TTL)
+                .build();
     }
 
     /**
@@ -95,6 +104,11 @@ public final class SkinLoader {
      * @throws RenderException if the download or image decoding fails
      */
     public BufferedImage loadFromUrl(String skinUrl) throws RenderException {
+        BufferedImage cached = skinCache.getIfPresent(skinUrl);
+        if (cached != null) {
+            return cached;
+        }
+
         try {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(skinUrl))
@@ -120,6 +134,7 @@ public final class SkinLoader {
                             Map.of("url", skinUrl, "statusCode", String.valueOf(response.statusCode()))
                     );
                 }
+                skinCache.put(skinUrl, skin);
                 return skin;
             }
         } catch (IOException e) {

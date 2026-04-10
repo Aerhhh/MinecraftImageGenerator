@@ -8,7 +8,6 @@ import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.IntStream;
@@ -113,6 +112,7 @@ public final class GlintEffect implements ImageEffect {
         int frameCount = (int) Math.ceil((double) TOTAL_DURATION_MS / FRAME_DELAY_MS);
         int width = baseImage.getWidth();
         int height = baseImage.getHeight();
+        int pixelCount = width * height;
         int[] basePixels = baseImage.getRGB(0, 0, width, height, null, 0, width);
 
         double spriteSpanU = BASE_SPRITE_PIXELS / glintTextureWidth;
@@ -124,7 +124,8 @@ public final class GlintEffect implements ImageEffect {
 
         IntStream.range(0, frameCount).parallel().forEach(frameIndex -> {
             double timeMs = frameIndex * FRAME_DELAY_MS;
-            int[] framePixels = Arrays.copyOf(basePixels, basePixels.length);
+            int[] framePixels = new int[pixelCount];
+            System.arraycopy(basePixels, 0, framePixels, 0, pixelCount);
 
             applyGlintPass(framePixels, width, height, timeMs, PRIMARY_PERIOD_MS, PRIMARY_ROTATION_DEG, 1.0, spriteSpanU, spriteSpanV, uvScale);
             applyGlintPass(framePixels, width, height, timeMs, SECONDARY_PERIOD_MS, SECONDARY_ROTATION_DEG, -1.0, spriteSpanU, spriteSpanV, uvScale);
@@ -197,31 +198,35 @@ public final class GlintEffect implements ImageEffect {
     }
 
     private void sampleGlint(double u, double v, int textureWidth, int textureHeight, float[] out) {
+        // u - floor(u) gives [0, 1) range; for positive values, (int) cast is equivalent to floor
         double wrappedU = u - Math.floor(u);
         double wrappedV = v - Math.floor(v);
 
         double texX = wrappedU * textureWidth - 0.5;
         double texY = wrappedV * textureHeight - 0.5;
 
-        double baseX = Math.floor(texX);
-        double baseY = Math.floor(texY);
+        // texX/texY are in [-0.5, textureWidth-0.5), so use floorToInt for correct negative handling
+        int baseXi = floorToInt(texX);
+        int baseYi = floorToInt(texY);
 
-        int leftX = floorMod((int) baseX, textureWidth);
-        int topY = floorMod((int) baseY, textureHeight);
+        int leftX = floorMod(baseXi, textureWidth);
+        int topY = floorMod(baseYi, textureHeight);
         int rightX = (leftX + 1) % textureWidth;
         int bottomY = (topY + 1) % textureHeight;
 
-        double fracX = texX - baseX;
-        double fracY = texY - baseY;
+        double fracX = texX - baseXi;
+        double fracY = texY - baseYi;
 
         int topLeftColor = glintPixels[topY * textureWidth + leftX];
         int topRightColor = glintPixels[topY * textureWidth + rightX];
         int bottomLeftColor = glintPixels[bottomY * textureWidth + leftX];
         int bottomRightColor = glintPixels[bottomY * textureWidth + rightX];
 
-        double weightTopLeft = (1.0 - fracX) * (1.0 - fracY);
-        double weightTopRight = fracX * (1.0 - fracY);
-        double weightBottomLeft = (1.0 - fracX) * fracY;
+        double oneMinusFracX = 1.0 - fracX;
+        double oneMinusFracY = 1.0 - fracY;
+        double weightTopLeft = oneMinusFracX * oneMinusFracY;
+        double weightTopRight = fracX * oneMinusFracY;
+        double weightBottomLeft = oneMinusFracX * fracY;
         double weightBottomRight = fracX * fracY;
 
         double red = ((topLeftColor >> 16) & 0xFF) * weightTopLeft
@@ -247,7 +252,12 @@ public final class GlintEffect implements ImageEffect {
         out[3] = (float) (alpha / 255.0);
     }
 
-    private int floorMod(int value, int modulus) {
+    private static int floorToInt(double value) {
+        int i = (int) value;
+        return value < i ? i - 1 : i;
+    }
+
+    private static int floorMod(int value, int modulus) {
         int result = value % modulus;
         return result < 0 ? result + modulus : result;
     }

@@ -12,7 +12,10 @@ import net.aerh.jigsaw.api.generator.RenderRequest;
 import net.aerh.jigsaw.api.nbt.NbtParser;
 import net.aerh.jigsaw.api.nbt.ParsedItem;
 import net.aerh.jigsaw.api.overlay.OverlayRenderer;
+import net.aerh.jigsaw.api.generator.Generator;
 import net.aerh.jigsaw.api.sprite.SpriteProvider;
+import net.aerh.jigsaw.core.cache.CacheKey;
+import net.aerh.jigsaw.core.cache.CachingGenerator;
 import net.aerh.jigsaw.core.effect.DurabilityBarEffect;
 import net.aerh.jigsaw.core.effect.EffectPipeline;
 import net.aerh.jigsaw.core.effect.GlintEffect;
@@ -68,23 +71,25 @@ import java.util.stream.Stream;
  */
 public final class DefaultEngine implements Engine {
 
+    private static final long DEFAULT_CACHE_MAX_SIZE = 1024;
+
     private final SpriteProvider spriteProvider;
-    private final ItemGenerator itemGenerator;
-    private final TooltipGenerator tooltipGenerator;
-    private final InventoryGenerator inventoryGenerator;
-    private final PlayerHeadGenerator playerHeadGenerator;
-    private final PlayerModelGenerator playerModelGenerator;
+    private final Generator<ItemRequest, GeneratorResult> itemGenerator;
+    private final Generator<TooltipRequest, GeneratorResult> tooltipGenerator;
+    private final Generator<InventoryRequest, GeneratorResult> inventoryGenerator;
+    private final Generator<PlayerHeadRequest, GeneratorResult> playerHeadGenerator;
+    private final Generator<PlayerModelRequest, GeneratorResult> playerModelGenerator;
     private final NbtParser nbtParser;
     private final Map<String, DataRegistry<?>> registries;
     private final OverlayColorProvider overlayColorProvider;
 
     private DefaultEngine(
             SpriteProvider spriteProvider,
-            ItemGenerator itemGenerator,
-            TooltipGenerator tooltipGenerator,
-            InventoryGenerator inventoryGenerator,
-            PlayerHeadGenerator playerHeadGenerator,
-            PlayerModelGenerator playerModelGenerator,
+            Generator<ItemRequest, GeneratorResult> itemGenerator,
+            Generator<TooltipRequest, GeneratorResult> tooltipGenerator,
+            Generator<InventoryRequest, GeneratorResult> inventoryGenerator,
+            Generator<PlayerHeadRequest, GeneratorResult> playerHeadGenerator,
+            Generator<PlayerModelRequest, GeneratorResult> playerModelGenerator,
             NbtParser nbtParser,
             Map<String, DataRegistry<?>> registries,
             OverlayColorProvider overlayColorProvider
@@ -471,15 +476,25 @@ public final class DefaultEngine implements Engine {
             // Text renderer (uses the shared font registry)
             MinecraftTextRenderer textRenderer = new MinecraftTextRenderer(fontRegistry);
 
-            // Generators
-            ItemGenerator itemGenerator = new ItemGenerator(spriteProvider, effectPipeline, overlayLoader);
-            TooltipGenerator tooltipGenerator = new TooltipGenerator(textRenderer);
-            InventoryGenerator inventoryGenerator = new InventoryGenerator(spriteProvider, effectPipeline, customSlotTexture, fontRegistry);
-            PlayerHeadGenerator playerHeadGenerator = PlayerHeadGenerator.withDefaults();
+            // Generators (wrapped with CachingGenerator for automatic result caching)
+            Generator<ItemRequest, GeneratorResult> itemGenerator = new CachingGenerator<>(
+                    new ItemGenerator(spriteProvider, effectPipeline, overlayLoader),
+                    CacheKey::of, DEFAULT_CACHE_MAX_SIZE);
+            Generator<TooltipRequest, GeneratorResult> tooltipGenerator = new CachingGenerator<>(
+                    new TooltipGenerator(textRenderer),
+                    CacheKey::of, DEFAULT_CACHE_MAX_SIZE);
+            Generator<InventoryRequest, GeneratorResult> inventoryGenerator = new CachingGenerator<>(
+                    new InventoryGenerator(spriteProvider, effectPipeline, customSlotTexture, fontRegistry),
+                    CacheKey::of, DEFAULT_CACHE_MAX_SIZE);
+            Generator<PlayerHeadRequest, GeneratorResult> playerHeadGenerator = new CachingGenerator<>(
+                    PlayerHeadGenerator.withDefaults(),
+                    CacheKey::of, DEFAULT_CACHE_MAX_SIZE);
 
             // Armor texture loader
             ArmorTexture armorTexture = new ArmorTexture();
-            PlayerModelGenerator playerModelGenerator = PlayerModelGenerator.withDefaults(armorTexture);
+            Generator<PlayerModelRequest, GeneratorResult> playerModelGenerator = new CachingGenerator<>(
+                    PlayerModelGenerator.withDefaults(armorTexture),
+                    CacheKey::of, DEFAULT_CACHE_MAX_SIZE);
 
             return new DefaultEngine(
                     spriteProvider,

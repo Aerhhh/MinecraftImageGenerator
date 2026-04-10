@@ -169,6 +169,9 @@ public class AtlasSpriteProvider implements SpriteProvider {
     }
 
     private BufferedImage extractSprite(ImageCoordinates coord) {
-        return atlas.getSubimage(coord.x(), coord.y(), coord.size(), coord.size());
+        BufferedImage sub = atlas.getSubimage(coord.x(), coord.y(), coord.size(), coord.size());
+        BufferedImage copy = new BufferedImage(coord.size(), coord.size(), BufferedImage.TYPE_INT_ARGB);
+        copy.getGraphics().drawImage(sub, 0, 0, null);
+        return copy;
     }
 }

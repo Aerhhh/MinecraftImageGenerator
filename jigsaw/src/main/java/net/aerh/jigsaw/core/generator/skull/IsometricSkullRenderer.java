@@ -2,7 +2,6 @@ package net.aerh.jigsaw.core.generator.skull;
 
 import java.awt.Color;
 import java.awt.Graphics2D;
-import java.awt.Image;
 import java.awt.image.BufferedImage;
 import java.util.Arrays;
 
@@ -180,7 +179,7 @@ public final class IsometricSkullRenderer {
                     int red = Math.round(((color >> 16) & 0xFF) * shadow);
                     int green = Math.round(((color >> 8) & 0xFF) * shadow);
                     int blue = Math.round((color & 0xFF) * shadow);
-                    g2d.setColor(new Color(red, green, blue, alpha));
+                    g2d.setColor(new Color((alpha << 24) | (red << 16) | (green << 8) | blue, true));
 
                     double xCoordinate = vertex1[0] - startPointDisplacement[0][0] * x + xOffset * y;
                     double yCoordinate = vertex1[1] - startPointDisplacement[0][1] * x - startPointDisplacement[1][1] * y;
@@ -234,11 +233,11 @@ public final class IsometricSkullRenderer {
     private static BufferedImage downscale(BufferedImage image) {
         int newWidth = image.getWidth() / PlayerSkullSettings.HEAD_SCALE_DOWN;
         int newHeight = image.getHeight() / PlayerSkullSettings.HEAD_SCALE_DOWN;
-        Image rescaled = image.getScaledInstance(newWidth, newHeight, Image.SCALE_AREA_AVERAGING);
 
         BufferedImage result = new BufferedImage(newWidth, newHeight, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = result.createGraphics();
-        g.drawImage(rescaled, 0, 0, null);
+        g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g.drawImage(image, 0, 0, newWidth, newHeight, null);
         g.dispose();
         return result;
     }
