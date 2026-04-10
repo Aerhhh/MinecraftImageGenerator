@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/circular_b",
+  "textures": {
+    "layer0": "minecraft:item/test_sword"
+  }
+}
