@@ -134,8 +134,19 @@ public final class IsometricPlayerRenderer {
                 // Armor always uses 4px arm width (non-slim) for UV computation
                 int armorW = part.width(false);
 
+                // Armor textures (64x32) have no separate left-side sections.
+                // Left arm/leg mirrors the right arm/leg UV region.
+                int uvX = part.baseUvX();
+                int uvY = part.baseUvY();
+                if (mirrored) {
+                    BodyPart rightSide = (part == BodyPart.LEFT_ARM)
+                            ? BodyPart.RIGHT_ARM : BodyPart.RIGHT_LEG;
+                    uvX = rightSide.baseUvX();
+                    uvY = rightSide.baseUvY();
+                }
+
                 buildCuboid(vertices, faces, part, slim, piece.inflation(),
-                        tex, part.baseUvX(), part.baseUvY(),
+                        tex, uvX, uvY,
                         armorW, part.height(), part.depth(),
                         mirrored, -1);
             }

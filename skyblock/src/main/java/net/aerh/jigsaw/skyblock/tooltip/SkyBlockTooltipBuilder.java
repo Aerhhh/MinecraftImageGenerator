@@ -2,6 +2,7 @@ package net.aerh.jigsaw.skyblock.tooltip;
 
 import net.aerh.jigsaw.api.text.ChatColor;
 import net.aerh.jigsaw.core.generator.TooltipRequest;
+import net.aerh.jigsaw.core.text.TextWrapper;
 import net.aerh.jigsaw.skyblock.data.Flavor;
 import net.aerh.jigsaw.skyblock.data.ParseType;
 import net.aerh.jigsaw.skyblock.data.Rarity;
@@ -430,12 +431,12 @@ public final class SkyBlockTooltipBuilder {
                 lines.add(name);
             }
 
-            // Lore lines
+            // Lore lines - wrapped here so the generator does not re-wrap the name or footer
             String resolvedLore = resolvePlaceholders(itemLore);
             if (resolvedLore != null && !resolvedLore.isEmpty()) {
                 String[] rawLines = normalizeNewlines(resolvedLore).split("\n", -1);
                 for (String line : rawLines) {
-                    lines.add(line);
+                    lines.addAll(TextWrapper.wrapString(line, maxLineLength));
                 }
             }
 
@@ -462,7 +463,7 @@ public final class SkyBlockTooltipBuilder {
                 .alpha(alpha)
                 .padding(padding)
                 .firstLinePadding(firstLinePadding)
-                .maxLineLength(maxLineLength)
+                .maxLineLength(0) // lines are pre-wrapped by buildLines(); disable generator-level wrapping
                 .centeredText(centered)
                 .renderBorder(renderBorder)
                 .scaleFactor(scaleFactor)

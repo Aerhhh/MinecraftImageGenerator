@@ -55,15 +55,21 @@ public final class SkinTextureMapper {
      * Returns the UV region for an armor texture face.
      *
      * <p>Armor textures use the same cross-pattern UV layout as skin textures, with
-     * identical UV origins per body region. Armor arms are always 4px wide regardless
-     * of the slim model setting.
+     * identical UV origins per body region. Left arm/leg map to the right arm/leg UV
+     * region because armor textures (64x32) have no separate left-side sections.
+     * Armor arms are always 4px wide regardless of the slim model setting.
      *
      * @param part the body part being covered
      * @param face the cuboid face direction
      * @return the UV region on the armor texture
      */
     public static UvRegion armorUv(BodyPart part, CuboidFace face) {
-        return computeUv(part.baseUvX(), part.baseUvY(),
+        BodyPart uvSource = switch (part) {
+            case LEFT_ARM -> BodyPart.RIGHT_ARM;
+            case LEFT_LEG -> BodyPart.RIGHT_LEG;
+            default -> part;
+        };
+        return computeUv(uvSource.baseUvX(), uvSource.baseUvY(),
                 part.width(false), part.height(), part.depth(), face);
     }
 

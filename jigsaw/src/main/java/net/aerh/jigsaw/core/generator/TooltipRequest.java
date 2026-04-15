@@ -18,7 +18,8 @@ import java.util.Objects;
  * @param alpha               the background alpha value (0-255)
  * @param padding             the padding in pixels around the tooltip
  * @param firstLinePadding    whether to add extra padding below the first line
- * @param maxLineLength       the maximum visible character count per line before wrapping
+ * @param maxLineLength       the maximum visible character count per line before wrapping;
+ *                            0 disables wrapping entirely (use when lines are pre-wrapped by the caller)
  * @param centeredText        whether each line should be horizontally centered
  * @param renderBorder        whether to render the Minecraft-style tooltip border
  * @param scaleFactor         integer scale multiplier applied to all coordinates
@@ -43,8 +44,8 @@ public record TooltipRequest(
     /** Default maximum visible character count per line. */
     public static final int DEFAULT_MAX_LINE_LENGTH = 38;
 
-    /** Minimum allowed value for {@code maxLineLength}. */
-    public static final int MIN_LINE_LENGTH = 1;
+    /** Minimum allowed value for {@code maxLineLength}; 0 disables wrapping. */
+    public static final int MIN_LINE_LENGTH = 0;
 
     public TooltipRequest {
         Objects.requireNonNull(lines, "lines must not be null");
