@@ -120,12 +120,10 @@ class TextWrapperTest {
 
     @Test
     void wrapString_handlesWordsLongerThanMaxLength() {
-        // "abcdefghij" is 10 chars, maxLineLength=4 - must be split mid-word
+        // "abcdefghij" is 10 chars, maxLineLength=4 - word exceeds limit so it gets its own line intact
         List<String> result = TextWrapper.wrapString("abcdefghij", 4);
-        assertThat(result).hasSize(3);
-        assertThat(result.get(0)).isEqualTo("abcd");
-        assertThat(result.get(1)).isEqualTo("efgh");
-        assertThat(result.get(2)).isEqualTo("ij");
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0)).isEqualTo("abcdefghij");
     }
 
     @Test

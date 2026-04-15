@@ -151,7 +151,7 @@ public final class TextWrapper {
                 int wordVisibleLength = strippedWord.length();
 
                 if (wordVisibleLength > maxLineLength) {
-                    // Flush the current line before splitting the long word
+                    // Flush the current line, then place the oversized word on its own line intact
                     if (!currentLineBuilder.isEmpty()) {
                         String finishedLine = currentLineBuilder.toString();
                         lines.add(currentFormatState.prefix() + finishedLine);
@@ -160,7 +160,8 @@ public final class TextWrapper {
                         currentVisibleLength = 0;
                     }
 
-                    currentFormatState = splitLongWord(token, maxLineLength, lines, currentFormatState);
+                    lines.add(currentFormatState.prefix() + token);
+                    currentFormatState = FormatState.deriveStateFromSegment(token, currentFormatState);
                     currentVisibleLength = 0;
                 } else if (currentVisibleLength + wordVisibleLength <= maxLineLength) {
                     currentLineBuilder.append(token);
@@ -277,55 +278,4 @@ public final class TextWrapper {
     // Private helpers
     // -----------------------------------------------------------------------
 
-    /**
-     * Splits a single word that is longer than {@code maxLineLength} into multiple lines,
-     * preserving formatting codes across each segment.
-     *
-     * @param word          the word to split
-     * @param maxLineLength the maximum visible length per line
-     * @param lines         the list to add the split segments to
-     * @param initialState  the {@link FormatState} entering this word
-     * @return the {@link FormatState} at the end of the split word
-     */
-    private static FormatState splitLongWord(String word, int maxLineLength, List<String> lines, FormatState initialState) {
-        FormatState currentWordFormatState = initialState;
-        int currentActualIndex = 0;
-
-        while (currentActualIndex < word.length()) {
-            int currentVisibleLength = 0;
-            int segmentEndActualIndex = currentActualIndex;
-
-            for (int i = currentActualIndex; i < word.length(); ) {
-                char currentChar = word.charAt(i);
-
-                if ((currentChar == '&' || currentChar == '§') && i + 1 < word.length()) {
-                    char code = Character.toLowerCase(word.charAt(i + 1));
-
-                    if ("0123456789abcdefklmnor".indexOf(code) != -1) {
-                        i += 2; // formatting codes do not count towards visible length
-                    } else {
-                        currentVisibleLength++;
-                        i++;
-                    }
-                } else {
-                    currentVisibleLength++;
-                    i++;
-                }
-
-                segmentEndActualIndex = i;
-
-                if (currentVisibleLength >= maxLineLength) {
-                    break;
-                }
-            }
-
-            String lineSegment = word.substring(currentActualIndex, segmentEndActualIndex);
-            lines.add(currentWordFormatState.prefix() + lineSegment);
-
-            currentWordFormatState = FormatState.deriveStateFromSegment(lineSegment, currentWordFormatState);
-            currentActualIndex = segmentEndActualIndex;
-        }
-
-        return currentWordFormatState;
-    }
 }
