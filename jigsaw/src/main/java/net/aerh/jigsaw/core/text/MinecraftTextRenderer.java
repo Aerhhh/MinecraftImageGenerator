@@ -16,7 +16,6 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
-import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -89,7 +88,7 @@ public final class MinecraftTextRenderer {
 
         BufferedImage tempImg = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
         Graphics2D tempG2d = tempImg.createGraphics();
-        tempG2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
+        GraphicsUtil.disableAntialiasing(tempG2d);
         FontMetrics[] metrics = new FontMetrics[fonts.size()];
 
         for (int i = 0; i < fonts.size(); i++) {
@@ -153,7 +152,7 @@ public final class MinecraftTextRenderer {
         // Measure lines to find largest width
         BufferedImage dummyImage = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
         Graphics2D measureGraphics = dummyImage.createGraphics();
-        measureGraphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
+        GraphicsUtil.disableAntialiasing(measureGraphics);
 
         Map<Integer, Integer> lineWidths = new HashMap<>();
         int locationY = startXY + pixelSize * 2 + yIncrement / 2;

@@ -8,6 +8,11 @@ on:
         required: false
         default: ''
         type: string
+      target_branch:
+        description: 'Branch to commit fonts to (leave empty for default branch)'
+        required: false
+        default: ''
+        type: string
       create_pr:
         description: 'Create a pull request with changes'
         required: false
@@ -31,6 +36,7 @@ jobs:
         uses: actions/checkout@v6.0.2
         with:
           fetch-depth: 0
+          ref: ${{ inputs.target_branch != '' && inputs.target_branch || github.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -76,10 +82,12 @@ jobs:
           VERSION="${{ inputs.minecraft_version }}"
           VERSION="${VERSION:-latest}"
 
+          BASE="${{ inputs.target_branch }}"
+          BASE="${BASE:-master}"
           gh pr create \
             --title "Update Minecraft fonts" \
             --body "Automated font generation for Minecraft version \`$VERSION\`." \
-            --base master || echo "PR already exists"
+            --base "$BASE" || echo "PR already exists"
 
       - name: Commit Directly
         if: steps.changes.outputs.has_changes == 'true' && inputs.create_pr == false
@@ -89,7 +97,8 @@ jobs:
           git add generator/src/main/resources/minecraft/assets/fonts/
           git add jigsaw/src/main/resources/minecraft/assets/fonts/
           git commit -m "Update Minecraft fonts"
-          git push
+          BRANCH="${{ inputs.target_branch }}"
+          git push origin HEAD:${BRANCH:-$(git rev-parse --abbrev-ref HEAD)}
 
       - name: Upload Artifacts
         if: steps.changes.outputs.has_changes == 'true'
