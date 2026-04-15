@@ -25,9 +25,9 @@ public class ResourceFontProvider implements FontProvider {
     private static final Logger log = LoggerFactory.getLogger(ResourceFontProvider.class);
 
     /**
-     * Default font size matching the pixel-perfect Minecraft tooltip rendering.
+     * Default font size: 2x the font's native 8ppem design size for pixel-perfect 2:1 scaling.
      */
-    public static final float DEFAULT_FONT_SIZE = 15.5f;
+    public static final float DEFAULT_FONT_SIZE = 16.0f;
 
     private final String fontId;
     private final Font font;

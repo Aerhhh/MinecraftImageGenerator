@@ -42,8 +42,8 @@ public final class MinecraftTextRenderer {
     private static final int STRIKETHROUGH_OFFSET = -8;
     private static final int UNDERLINE_OFFSET = 2;
 
-    /** Base font size matching the original MinecraftTooltip rendering. */
-    private static final float BASE_FONT_SIZE = 15.5f;
+    /** Base font size: 2x the font's native 8ppem design size for pixel-perfect 2:1 scaling. */
+    private static final float BASE_FONT_SIZE = 16.0f;
 
     private static final int[] UNICODE_BLOCK_RANGES = {
         0x0020, 0x007E, // Basic Latin
