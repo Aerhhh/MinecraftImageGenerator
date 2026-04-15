@@ -21,7 +21,8 @@ import java.util.Objects;
  *
  * <p>The rendering pipeline:
  * <ol>
- *   <li>Split each input line on embedded newlines (no width-based wrapping is applied).</li>
+ *   <li>Wrap and split each input line using {@link TextWrapper#wrapString} (respects
+ *       {@link TooltipRequest#maxLineLength()} and embedded newlines).</li>
  *   <li>Parse each line into text segments internally.</li>
  *   <li>Measure all lines to determine the tooltip width.</li>
  *   <li>Render text with shadows, border, and all formatting effects.</li>
@@ -56,7 +57,7 @@ public final class TooltipGenerator implements Generator<TooltipRequest, Generat
         List<String> wrappedLines = new ArrayList<>();
         for (String line : input.lines()) {
             String resolved = FormattingParser.resolveNamedFormats(line);
-            wrappedLines.addAll(splitOnNewlines(resolved));
+            wrappedLines.addAll(TextWrapper.wrapString(resolved, input.maxLineLength()));
         }
 
         int firstLinePaddingPx = input.firstLinePadding() ? 1 : 0;
@@ -85,24 +86,4 @@ public final class TooltipGenerator implements Generator<TooltipRequest, Generat
         return GeneratorResult.class;
     }
 
-    // -----------------------------------------------------------------------
-    // Private helpers
-    // -----------------------------------------------------------------------
-
-    /**
-     * Splits a single line string on embedded newline characters ({@code \n}) and on literal
-     * {@code \n} markers (backslash + n), returning one entry per resulting line.
-     *
-     * @param line the line to split; must not be {@code null}
-     * @return a list containing at least one element
-     */
-    private static List<String> splitOnNewlines(String line) {
-        String normalized = TextWrapper.normalizeNewlines(line);
-        if (normalized == null || normalized.isEmpty()) {
-            List<String> result = new ArrayList<>();
-            result.add(line);
-            return result;
-        }
-        return List.of(normalized.split("\n", -1));
-    }
 }
