@@ -115,5 +115,23 @@ public sealed interface GeneratorResult {
                 throw new UncheckedIOException("Failed to encode animated GIF", e);
             }
         }
+
+        /**
+         * Encodes all frames into an animated WebP and returns the raw bytes.
+         *
+         * <p>The WebP is encoded with the frame delay stored in this result and is set to loop
+         * indefinitely. Uses lossless compression to preserve pixel-art fidelity.
+         *
+         * @return the WebP-encoded byte array; never {@code null} or empty
+         *
+         * @throws UncheckedIOException if WebP encoding fails
+         */
+        public byte[] toWebpBytes() {
+            try {
+                return ImageUtil.toWebpBytes(frames, frameDelayMs, true);
+            } catch (IOException e) {
+                throw new UncheckedIOException("Failed to encode animated WebP", e);
+            }
+        }
     }
 }

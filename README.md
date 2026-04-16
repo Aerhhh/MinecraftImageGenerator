@@ -71,8 +71,12 @@ GeneratorResult result = engine.render(
 // Static image
 BufferedImage image = result.firstFrame();
 
-// Animated (enchanted items produce GIF frames)
+// Animated (enchanted items produce multiple frames)
 if (result.isAnimated()) {
+    // Animated WebP (recommended for pixel art: lossless, preserves alpha, smaller than GIF)
+    byte[] webp = ((GeneratorResult.AnimatedImage) result).toWebpBytes();
+
+    // Legacy animated GIF
     byte[] gif = ((GeneratorResult.AnimatedImage) result).toGifBytes();
 }
 ```
