@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -53,76 +54,71 @@ public final class MinecraftTextRenderer {
     };
 
     private final FontRegistry fontRegistry;
-    private final Map<Integer, Map<Integer, List<Character>>> obfuscationWidthMaps = new HashMap<>();
+    private final Map<WidthMapKey, Map<Integer, List<Character>>> obfuscationWidthMaps = new ConcurrentHashMap<>();
+
+    /**
+     * Cache key for {@link #obfuscationWidthMaps}. Font metrics depend on fontId, style, and
+     * final rendered size — the lookup must match the font actually used at draw time, not the
+     * base design size.
+     */
+    private record WidthMapKey(String fontId, boolean bold, boolean italic, int scaleFactor) {}
 
     /**
      * Creates a new renderer backed by the given font registry.
-     *
-     * <p>Eagerly precomputes obfuscation character width tables for all style variants.
      *
      * @param fontRegistry the font registry to resolve fonts from; must not be {@code null}
      */
     public MinecraftTextRenderer(FontRegistry fontRegistry) {
         this.fontRegistry = Objects.requireNonNull(fontRegistry, "fontRegistry must not be null");
-        precomputeCharacterWidths();
     }
 
     /**
-     * Precomputes character widths for the text obfuscation/magic formatting effect.
+     * Returns the obfuscation width map for the given font variant and scale, lazily computing
+     * and caching it on first access.
      *
-     * <p>The four style variants (regular, bold, italic, bold+italic) are indexed 0-3 matching
-     * the bit pattern: bold=bit0, italic=bit1.
+     * <p>Each combination of (fontId, bold, italic, scaleFactor) produces its own map because
+     * {@link FontMetrics#charWidth(char)} values depend on all four: they are measured against
+     * the exact font instance used at draw time. Using a map built for a different size or font
+     * would cause {@link #drawObfuscatedChar} to miss on lookup and silently fall back to the
+     * original character.
      */
-    private void precomputeCharacterWidths() {
-        // Index 0=regular, 1=bold, 2=italic, 3=bold+italic
-        List<Font> fonts = List.of(
-            fontRegistry.getStyledFont(MinecraftFontId.DEFAULT, false, false, BASE_FONT_SIZE),
-            fontRegistry.getStyledFont(MinecraftFontId.DEFAULT, true,  false, BASE_FONT_SIZE),
-            fontRegistry.getStyledFont(MinecraftFontId.DEFAULT, false, true,  BASE_FONT_SIZE),
-            fontRegistry.getStyledFont(MinecraftFontId.DEFAULT, true,  true,  BASE_FONT_SIZE)
+    private Map<Integer, List<Character>> getOrComputeWidthMap(String fontId, boolean bold, boolean italic, int scaleFactor) {
+        return obfuscationWidthMaps.computeIfAbsent(
+            new WidthMapKey(fontId, bold, italic, scaleFactor),
+            key -> computeWidthMap(key.fontId(), key.bold(), key.italic(), key.scaleFactor())
         );
+    }
 
-        for (int i = 0; i < fonts.size(); i++) {
-            obfuscationWidthMaps.put(i, new HashMap<>());
-        }
+    private Map<Integer, List<Character>> computeWidthMap(String fontId, boolean bold, boolean italic, int scaleFactor) {
+        float fontSize = BASE_FONT_SIZE * scaleFactor;
+        Font font = fontRegistry.getStyledFont(fontId, bold, italic, fontSize);
 
         BufferedImage tempImg = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
         Graphics2D tempG2d = tempImg.createGraphics();
-        GraphicsUtil.disableAntialiasing(tempG2d);
-        FontMetrics[] metrics = new FontMetrics[fonts.size()];
-
-        for (int i = 0; i < fonts.size(); i++) {
-            metrics[i] = tempG2d.getFontMetrics(fonts.get(i));
-        }
-
-        for (int fontIndex = 0; fontIndex < fonts.size(); fontIndex++) {
-            Font font = fonts.get(fontIndex);
-            FontMetrics fontMetrics = metrics[fontIndex];
-
-            Map<Integer, List<Character>> map = obfuscationWidthMaps.get(fontIndex);
+        Map<Integer, List<Character>> map = new HashMap<>();
+        try {
+            GraphicsUtil.disableAntialiasing(tempG2d);
+            FontMetrics metrics = tempG2d.getFontMetrics(font);
 
             for (int range = 0; range < UNICODE_BLOCK_RANGES.length; range += 2) {
                 for (int codePoint = UNICODE_BLOCK_RANGES[range]; codePoint <= UNICODE_BLOCK_RANGES[range + 1]; codePoint++) {
                     char c = (char) codePoint;
-
                     if (font.canDisplay(c)) {
-                        int width = fontMetrics.charWidth(c);
+                        int width = metrics.charWidth(c);
                         if (width > 0) {
                             map.computeIfAbsent(width, k -> new ArrayList<>()).add(c);
                         }
                     }
                 }
             }
+        } finally {
+            tempG2d.dispose();
         }
 
-        tempG2d.dispose();
-
-        log.info("Precomputed obfuscation character widths. Regular: {} chars, Bold: {} chars, Italic: {} chars, BoldItalic: {} chars.",
-            obfuscationWidthMaps.get(0).values().stream().mapToInt(List::size).sum(),
-            obfuscationWidthMaps.get(1).values().stream().mapToInt(List::size).sum(),
-            obfuscationWidthMaps.get(2).values().stream().mapToInt(List::size).sum(),
-            obfuscationWidthMaps.get(3).values().stream().mapToInt(List::size).sum()
-        );
+        int totalChars = map.values().stream().mapToInt(List::size).sum();
+        log.debug("Built obfuscation width map for fontId={} bold={} italic={} scale={}: {} chars across {} widths",
+            fontId, bold, italic, scaleFactor, totalChars, map.size());
+        return map;
     }
 
     /**
@@ -406,7 +402,7 @@ public final class MinecraftTextRenderer {
                 // Draw obfuscated character
                 if (codePoint <= 0xFFFF) {
                     locationX = drawObfuscatedChar(graphics, (char) codePoint, style, currentColor, currentBgColor,
-                        currentFont, metrics, locationX, locationY, pixelSize, scaleFactor);
+                        metrics, locationX, locationY, pixelSize, scaleFactor);
                 } else {
                     locationX = drawSymbolAndAdvance(graphics, codePoint, charStr, style, currentColor, currentBgColor,
                         currentFont, locationX, locationY, pixelSize, scaleFactor);
@@ -474,15 +470,15 @@ public final class MinecraftTextRenderer {
      * Draw an obfuscated character with a random character of the same width.
      */
     private int drawObfuscatedChar(Graphics2D graphics, char originalChar, TextStyle style,
-                                          Color fgColor, Color bgColor, Font currentFont,
+                                          Color fgColor, Color bgColor,
                                           FontMetrics metrics, int locationX, int locationY,
                                           int pixelSize, int scaleFactor) {
         int originalWidth = metrics.charWidth(originalChar);
         String charToDrawStr = String.valueOf(originalChar);
 
-        int fontStyleIndex = (style.bold() ? 1 : 0) + (style.italic() ? 2 : 0);
-        Map<Integer, List<Character>> widthMap = obfuscationWidthMaps.get(fontStyleIndex);
-        List<Character> matchingWidthChars = (widthMap != null) ? widthMap.get(originalWidth) : null;
+        Map<Integer, List<Character>> widthMap = getOrComputeWidthMap(
+            style.fontId(), style.bold(), style.italic(), scaleFactor);
+        List<Character> matchingWidthChars = widthMap.get(originalWidth);
 
         if (matchingWidthChars != null && !matchingWidthChars.isEmpty()) {
             char randomChar = matchingWidthChars.get(ThreadLocalRandom.current().nextInt(matchingWidthChars.size()));

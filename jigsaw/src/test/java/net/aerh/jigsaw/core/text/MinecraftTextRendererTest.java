@@ -157,4 +157,61 @@ class MinecraftTextRendererTest {
         GeneratorResult result = renderer.renderLayout(layout, opts);
         assertThat(result).isNotNull();
     }
+
+    // --- obfuscation ---
+
+    @Test
+    void renderLines_obfuscatedText_returnsAnimatedResult() {
+        GeneratorResult result = renderer.renderLines(
+            List.of("&d&l&kabcdefgh"), TextRenderOptions.defaults());
+
+        assertThat(result.isAnimated()).isTrue();
+        assertThat(((GeneratorResult.AnimatedImage) result).frames()).hasSize(TextRenderOptions.DEFAULT_ANIMATION_FRAME_COUNT);
+    }
+
+    @Test
+    void renderLines_nonObfuscatedText_returnsStaticResult() {
+        GeneratorResult result = renderer.renderLines(
+            List.of("&d&lPlain bold text"), TextRenderOptions.defaults());
+
+        assertThat(result.isAnimated()).isFalse();
+    }
+
+    /**
+     * Regression test for the obfuscation scale-mismatch bug: the precomputed character
+     * width map must match the font size used at draw time, otherwise
+     * {@link MinecraftTextRenderer#drawObfuscatedChar} falls through and draws the original
+     * character unchanged in every frame.
+     */
+    @Test
+    void renderLines_obfuscatedText_producesDistinctFramesAtAnyScale() {
+        for (int scale : new int[] {1, 2, 3}) {
+            TextRenderOptions opts = new TextRenderOptions(
+                true, true, false, scale, 255, 7, 13, 200);
+
+            GeneratorResult result = renderer.renderLines(
+                List.of("&d&l&kabcdefghij"), opts);
+
+            assertThat(result.isAnimated())
+                .as("scale=%d should produce an animated result for obfuscated text", scale)
+                .isTrue();
+
+            List<BufferedImage> frames = ((GeneratorResult.AnimatedImage) result).frames();
+            long uniqueFrames = frames.stream().map(MinecraftTextRendererTest::frameSignature).distinct().count();
+
+            assertThat(uniqueFrames)
+                .as("scale=%d should produce frames that differ due to obfuscation randomness", scale)
+                .isGreaterThan(1);
+        }
+    }
+
+    private static String frameSignature(BufferedImage image) {
+        // Hash the RGB values of every pixel into a stable string identifier
+        int[] rgb = image.getRGB(0, 0, image.getWidth(), image.getHeight(), null, 0, image.getWidth());
+        long hash = 1469598103934665603L;
+        for (int pixel : rgb) {
+            hash = (hash ^ pixel) * 1099511628211L;
+        }
+        return Long.toHexString(hash);
+    }
 }
