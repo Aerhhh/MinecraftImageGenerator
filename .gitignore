@@ -157,3 +157,6 @@ generator/src/main/resources/minecraft/assets/fonts/Minecraft-*.otf
 
 # Tooling build artifacts
 tooling/build/
+
+# Font generation work directory
+work/
