@@ -360,10 +360,14 @@ public final class DefaultEngineBuilder implements EngineBuilder {
         Objects.requireNonNull(spriteProvider, "A SpriteProvider is required. Use defaults or provide one.");
 
         // ----- Step 5: Effect pipeline. -----
+        // mcVer is guaranteed non-null by the guard at the top of build(), so the glint
+        // texture is routed through GlintEffect.fromAssetProvider(resolvedProvider, mcVer)
+        // instead of the no-arg constructor (which tries to load a now-stripped classpath
+        // PNG and throws IllegalStateException at runtime on a fresh checkout).
         EffectPipeline.Builder pipelineBuilder = EffectPipeline.builder();
         if (useDefaults) {
             pipelineBuilder
-                    .add(new GlintEffect())
+                    .add(GlintEffect.fromAssetProvider(resolvedProvider, mcVer))
                     .add(new HoverEffect())
                     .add(new DurabilityBarEffect());
         }

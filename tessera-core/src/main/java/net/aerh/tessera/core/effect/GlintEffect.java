@@ -1,5 +1,6 @@
 package net.aerh.tessera.core.effect;
 
+import net.aerh.tessera.api.assets.AssetProvider;
 import net.aerh.tessera.api.effect.EffectContext;
 import net.aerh.tessera.api.effect.ImageEffect;
 import net.aerh.tessera.api.image.Graphics2DFactory;
@@ -9,6 +10,8 @@ import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.IntStream;
@@ -20,7 +23,12 @@ import java.util.stream.IntStream;
  * Two rotation passes are blended per frame - a primary pass rotating at -50 degrees and a
  * secondary pass at +10 degrees. Both passes use full 4-channel bilinear sampling with UV wrapping.
  * <p>
- * The glint texture is loaded once from {@code minecraft/assets/textures/glint.png} on the classpath.
+ * Production callers should obtain instances via
+ * {@link #fromAssetProvider(AssetProvider, String)}, which reads the glint PNG from the
+ * consumer's hydrated asset cache ({@code assets/minecraft/textures/misc/enchanted_glint_item.png}
+ * under the resolved asset root). The no-arg {@link #GlintEffect()} constructor is retained
+ * for source-compatibility but will fail at runtime because the bundled classpath PNG was
+ * stripped with the rest of the vanilla Mojang bytes.
  */
 public final class GlintEffect implements ImageEffect {
 
@@ -39,6 +47,16 @@ public final class GlintEffect implements ImageEffect {
     private static final double SCROLL_SPEED = 0.3;
     private static final double BASE_SPRITE_PIXELS = 16.0;
 
+    /** Glint PNG path relative to {@code AssetProvider#resolveAssetRoot(String)}. */
+    private static final String ASSET_RELATIVE_GLINT_PATH = "assets/minecraft/textures/misc/enchanted_glint_item.png";
+
+    /**
+     * @deprecated since 0.3.0 - points at the classpath-bundled glint PNG that was stripped
+     * with the rest of the vanilla Mojang bytes; kept for one cycle alongside
+     * {@link #GlintEffect()} and {@link #loadGlintTexture()} so downstream code can migrate
+     * without breaking compilation. Hard-removed in a post-1.0 housekeeping pass.
+     */
+    @Deprecated(since = "0.3.0", forRemoval = true)
     private static final String GLINT_TEXTURE_PATH = "minecraft/assets/textures/glint.png";
 
     private final int[] glintPixels;
@@ -46,8 +64,13 @@ public final class GlintEffect implements ImageEffect {
     private final int glintTextureHeight;
 
     /**
-     * Creates the glint effect, loading the glint texture from the classpath.
+     * @deprecated since 0.3.0 - the bundled classpath glint PNG was stripped with the rest
+     * of the vanilla Mojang bytes, so this constructor throws {@link IllegalStateException}
+     * at runtime on a fresh checkout. Use {@link #fromAssetProvider(AssetProvider, String)}
+     * to read the glint texture from the consumer's hydrated asset cache. Kept for one
+     * cycle to keep existing source compiling; hard-removed in a post-1.0 housekeeping pass.
      */
+    @Deprecated(since = "0.3.0", forRemoval = true)
     public GlintEffect() {
         this(loadGlintTexture());
     }
@@ -65,6 +88,37 @@ public final class GlintEffect implements ImageEffect {
         this.glintTextureWidth = glintTexture.getWidth();
         this.glintTextureHeight = glintTexture.getHeight();
         this.glintPixels = glintTexture.getRGB(0, 0, glintTextureWidth, glintTextureHeight, null, 0, glintTextureWidth);
+    }
+
+    /**
+     * Creates a {@link GlintEffect} backed by the glint PNG in the consumer's hydrated
+     * asset cache.
+     *
+     * <p>Reads from {@code provider.resolveAssetRoot(mcVer).resolve("assets/minecraft/textures/misc/enchanted_glint_item.png")}.
+     * Mirrors the {@code fromAssetProvider} / {@code withBuiltins(provider, mcVer)} factory
+     * shape used by {@link net.aerh.tessera.core.sprite.AtlasSpriteProvider},
+     * {@link net.aerh.tessera.core.overlay.OverlayLoader}, and
+     * {@link net.aerh.tessera.core.font.DefaultFontRegistry}.
+     *
+     * @param provider the {@link AssetProvider} for the active Minecraft version
+     * @param mcVer the Minecraft version string (must match {@code provider.supportedVersions()})
+     * @return a fully loaded glint effect
+     * @throws NullPointerException if any argument is {@code null}
+     * @throws IllegalStateException if the glint PNG cannot be read from the resolved asset root
+     */
+    public static GlintEffect fromAssetProvider(AssetProvider provider, String mcVer) {
+        Objects.requireNonNull(provider, "provider must not be null");
+        Objects.requireNonNull(mcVer, "mcVer must not be null");
+        Path glintPath = provider.resolveAssetRoot(mcVer).resolve(ASSET_RELATIVE_GLINT_PATH);
+        try (InputStream in = Files.newInputStream(glintPath)) {
+            BufferedImage texture = ImageIO.read(in);
+            if (texture == null) {
+                throw new IllegalStateException("Failed to decode glint texture from " + glintPath);
+            }
+            return new GlintEffect(texture);
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to read glint texture from " + glintPath, e);
+        }
     }
 
     /**
@@ -276,6 +330,14 @@ public final class GlintEffect implements ImageEffect {
         return converted;
     }
 
+    /**
+     * @deprecated since 0.3.0 - loads the bundled classpath glint PNG that was stripped with
+     * the rest of the vanilla Mojang bytes; throws {@link IllegalStateException} at runtime
+     * because the resource is absent. Retained for one cycle so the no-arg
+     * {@link #GlintEffect()} constructor still compiles during the migration window. Use
+     * {@link #fromAssetProvider(AssetProvider, String)} instead.
+     */
+    @Deprecated(since = "0.3.0", forRemoval = true)
     private static BufferedImage loadGlintTexture() {
         try (InputStream in = GlintEffect.class.getClassLoader().getResourceAsStream(GLINT_TEXTURE_PATH)) {
             if (in == null) {

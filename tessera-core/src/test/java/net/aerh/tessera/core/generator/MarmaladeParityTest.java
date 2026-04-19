@@ -238,9 +238,12 @@ class MarmaladeParityTest {
     }
 
     private static GeneratorResult.AnimatedImage renderEnchantedDiamondSword() throws Exception {
+        AssetProvider provider = LiveAssetProviderResolver.resolve26_1_2();
         ItemGenerator gen = new ItemGenerator(
                 liveAtlas(),
-                EffectPipeline.builder().add(new GlintEffect()).build());
+                EffectPipeline.builder()
+                        .add(GlintEffect.fromAssetProvider(provider, LiveAssetProviderResolver.MC_VER))
+                        .build());
         return (GeneratorResult.AnimatedImage) gen.render(
                 ItemRequest.builder().itemId("diamond_sword").enchanted(true).build(),
                 GenerationContext.defaults());

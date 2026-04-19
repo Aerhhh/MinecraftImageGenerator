@@ -1,20 +1,29 @@
 package net.aerh.tessera.core.effect;
 
+import net.aerh.tessera.api.assets.AssetProvider;
+import net.aerh.tessera.api.assets.Capabilities;
 import net.aerh.tessera.api.effect.EffectContext;
 import net.aerh.tessera.api.image.Graphics2DFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import javax.imageio.ImageIO;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
 /**
  * Unit tests for {@link GlintEffect} logic (frame count, priority, parallel determinism
@@ -254,5 +263,74 @@ class GlintEffectTest {
         int[] pixelsA = a.getRGB(0, 0, a.getWidth(), a.getHeight(), null, 0, a.getWidth());
         int[] pixelsB = b.getRGB(0, 0, b.getWidth(), b.getHeight(), null, 0, b.getWidth());
         assertThat(pixelsA).as(message).isEqualTo(pixelsB);
+    }
+
+    // ----- fromAssetProvider factory -----
+
+    /**
+     * Stub {@link AssetProvider} whose {@link #resolveAssetRoot(String)} points at the
+     * supplied temp directory. Mirrors {@code TestAssetProvider} in tessera-core's engine
+     * test-scope package but is self-contained here so the test has no cross-package coupling.
+     */
+    private record TempDirAssetProvider(Path assetRoot) implements AssetProvider {
+        private static final String VERSION = "26.1.2-test";
+
+        @Override
+        public Set<String> supportedVersions() {
+            return Set.of(VERSION);
+        }
+
+        @Override
+        public Path resolveAssetRoot(String version) {
+            return assetRoot;
+        }
+
+        @Override
+        public Capabilities capabilities() {
+            return new Capabilities(true, true, true, VERSION);
+        }
+    }
+
+    // Test 14: fromAssetProvider reads the glint PNG from the hydrated asset cache
+    @Test
+    void fromAssetProvider_readsGlintFromHydratedCache(@TempDir Path tempDir) throws Exception {
+        Path glintPath = tempDir.resolve("assets/minecraft/textures/misc/enchanted_glint_item.png");
+        Files.createDirectories(glintPath.getParent());
+        ImageIO.write(syntheticGlintTexture(), "PNG", glintPath.toFile());
+
+        AssetProvider provider = new TempDirAssetProvider(tempDir);
+        GlintEffect effect = GlintEffect.fromAssetProvider(provider, TempDirAssetProvider.VERSION);
+
+        assertThat(effect).isNotNull();
+        assertThat(effect.id()).isEqualTo("glint");
+        // Sanity check: feeding a base image through apply() succeeds and produces frames.
+        EffectContext result = effect.apply(EffectContext.builder()
+                .image(blankImage())
+                .enchanted(true)
+                .build());
+        assertThat(result.animationFrames()).hasSize(182);
+    }
+
+    // Test 15: fromAssetProvider throws IllegalStateException when the glint PNG is missing
+    @Test
+    void fromAssetProvider_throwsWhenGlintMissing(@TempDir Path tempDir) {
+        AssetProvider provider = new TempDirAssetProvider(tempDir);
+
+        assertThatThrownBy(() -> GlintEffect.fromAssetProvider(provider, TempDirAssetProvider.VERSION))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("enchanted_glint_item.png");
+    }
+
+    // Test 16: fromAssetProvider rejects null arguments
+    @Test
+    void fromAssetProvider_rejectsNullArgs(@TempDir Path tempDir) {
+        AssetProvider provider = new TempDirAssetProvider(tempDir);
+
+        assertThatNullPointerException()
+                .isThrownBy(() -> GlintEffect.fromAssetProvider(null, "26.1.2"))
+                .withMessageContaining("provider");
+        assertThatNullPointerException()
+                .isThrownBy(() -> GlintEffect.fromAssetProvider(provider, null))
+                .withMessageContaining("mcVer");
     }
 }
