@@ -43,12 +43,14 @@ jobs:
           java-version: '21'
           cache: 'maven'
 
-      - name: Compile reactor up to tessera-testkit
-        # Pre-compiles the CaptureBaselinesHydrator helper so the next step's
-        # exec:java invocation has a ready classpath. Without -am, tessera-core
-        # + tessera-assets-26.1.2 would not yet be in the local Maven repo and
-        # testkit's test-scope deps would fail to resolve.
-        run: ./mvnw -B -ntp -pl tessera-testkit -am test-compile
+      - name: Install reactor up to tessera-testkit
+        # Installs sibling SNAPSHOT jars (tessera-api, tessera-spi, tessera-bom,
+        # tessera-assets-26.1.2, tessera-core) into ~/.m2 so that later `mvn -pl
+        # tessera-testkit ...` invocations (which run in fresh reactor contexts)
+        # resolve the in-repo deps locally instead of hitting JitPack. `test-compile`
+        # alone only produces target/classes per module; it does not publish jars,
+        # so subsequent -pl calls without -am would 404 on JitPack.
+        run: ./mvnw -B -ntp -pl tessera-testkit -am install -DskipTests
 
       - name: Hydrate ~/.tessera/assets/${{ github.event.inputs.mc_version }}
         # Why this approach and not the plan's original /tmp/Hydrate.java idea:
