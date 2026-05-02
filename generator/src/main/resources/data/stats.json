@@ -711,5 +711,14 @@
         "color": "GOLD",
         "subColor": null,
         "parseType": "NORMAL"
+    },
+    {
+        "icon": "☀",
+        "name": "overbloom",
+        "stat": "Overbloom",
+        "display": "☀ Overbloom",
+        "color": "YELLOW",
+        "subColor": null,
+        "parseType": "NORMAL"
     }
 ]
