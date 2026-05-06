@@ -90,9 +90,9 @@
     },
     {
         "icon": "⚔",
-        "name": "bonus_attack_speed",
-        "stat": "Bonus Attack Speed",
-        "display": "⚔ Bonus Attack Speed",
+        "name": "attack_speed",
+        "stat": "Attack Speed",
+        "display": "⚔ Attack Speed",
         "color": "YELLOW",
         "subColor": "GREEN",
         "parseType": "NORMAL",
