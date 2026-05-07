@@ -90,9 +90,9 @@
     },
     {
         "icon": "⚔",
-        "name": "bonus_attack_speed",
-        "stat": "Bonus Attack Speed",
-        "display": "⚔ Bonus Attack Speed",
+        "name": "attack_speed",
+        "stat": "Attack Speed",
+        "display": "⚔ Attack Speed",
         "color": "YELLOW",
         "subColor": "GREEN",
         "parseType": "NORMAL",
@@ -709,6 +709,15 @@
         "stat": "Absorption",
         "display": "❤ Absorption",
         "color": "GOLD",
+        "subColor": null,
+        "parseType": "NORMAL"
+    },
+    {
+        "icon": "☀",
+        "name": "overbloom",
+        "stat": "Overbloom",
+        "display": "☀ Overbloom",
+        "color": "YELLOW",
         "subColor": null,
         "parseType": "NORMAL"
     }
