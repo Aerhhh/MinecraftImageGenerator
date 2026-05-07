@@ -5,9 +5,5 @@ before_install:
   - sdk default java 25.0.1-tem
   - sdk install maven 3.9.11
   - sdk default maven 3.9.11
-  - curl -sS https://bootstrap.pypa.io/get-pip.py | python - --user
-  - python -m pip install --user git+https://github.com/SkyBlock-Simplified/minecraft-fontgen.git
-  - python -m minecraft_fontgen --version latest --output /tmp/minecraft-fonts --type opentype --silent
-  - cp /tmp/minecraft-fonts/Minecraft-*.otf generator/src/main/resources/minecraft/assets/fonts/
 install:
   - bash -c 'source "$HOME/.sdkman/bin/sdkman-init.sh" && export JAVA_HOME="$HOME/.sdkman/candidates/java/current" && mvn -B clean install -DskipTests'
