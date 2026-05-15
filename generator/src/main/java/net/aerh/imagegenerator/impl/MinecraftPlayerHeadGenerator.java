@@ -3,17 +3,20 @@ package net.aerh.imagegenerator.impl;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
+import feign.FeignException;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import net.hypixel.nerdbot.marmalade.exception.HttpException;
-import net.hypixel.nerdbot.marmalade.http.HttpClient;
 import net.hypixel.nerdbot.marmalade.image.ImageUtil;
 import net.aerh.imagegenerator.context.GenerationContext;
 import net.aerh.imagegenerator.Generator;
 import net.aerh.imagegenerator.builder.ClassBuilder;
 import net.aerh.imagegenerator.exception.GeneratorException;
+import net.aerh.imagegenerator.http.MojangApiClient;
+import net.aerh.imagegenerator.http.MojangApiClientFactory;
+import net.aerh.imagegenerator.http.MojangProfileResponse;
+import net.aerh.imagegenerator.http.MojangSessionResponse;
 import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.skull.RenderedPlayerSkull;
 import org.jetbrains.annotations.NotNull;
@@ -40,6 +43,7 @@ public class MinecraftPlayerHeadGenerator implements Generator {
 
     private final String textureId;
     private final int scale;
+    private final MojangApiClient mojangApiClient;
 
     /**
      * Gets the Skin ID from a Base64 String
@@ -103,30 +107,34 @@ public class MinecraftPlayerHeadGenerator implements Generator {
     private String getPlayerHeadURL(String playerName) {
         playerName = playerName.replaceAll("[^a-zA-Z0-9_]", "");
 
-        JsonObject userUUID;
+        MojangProfileResponse profile;
         try {
-            userUUID = HttpClient.getJson(String.format("https://api.mojang.com/users/profiles/minecraft/%s", playerName)).orElseThrow();
-        } catch (HttpException e) {
+            profile = mojangApiClient.lookupUuid(playerName);
+        } catch (FeignException e) {
             throw new GeneratorException("Could not find player with name: `%s`", playerName);
         }
 
-        if (userUUID.get("id") == null) {
+        if (profile == null || profile.id() == null) {
             throw new GeneratorException("Could not find player with name: `%s`", playerName);
         }
 
-        JsonObject userProfile;
+        MojangSessionResponse session;
         try {
-            userProfile = HttpClient.getJson(String.format("https://sessionserver.mojang.com/session/minecraft/profile/%s", userUUID.get("id").getAsString())).orElseThrow();
-        } catch (HttpException e) {
+            session = mojangApiClient.fetchProfile(profile.id());
+        } catch (FeignException e) {
             throw new GeneratorException("Could not find player with name: `%s`", playerName);
         }
 
-        if (userProfile.get("properties") == null) {
+        if (session == null || session.properties() == null || session.properties().isEmpty()) {
             throw new GeneratorException("Could not find player with name: `%s`", playerName);
         }
 
-        String base64SkinData = userProfile.get("properties").getAsJsonArray().get(0).getAsJsonObject().get("value").getAsString();
-        return base64ToSkinURL(base64SkinData);
+        MojangSessionResponse.Property firstProperty = session.properties().get(0);
+        if (firstProperty == null || firstProperty.value() == null) {
+            throw new GeneratorException("Could not find player with name: `%s`", playerName);
+        }
+
+        return base64ToSkinURL(firstProperty.value());
     }
 
     private boolean isHexTextureHash(String string) {
@@ -161,6 +169,7 @@ public class MinecraftPlayerHeadGenerator implements Generator {
     public static class Builder implements ClassBuilder<MinecraftPlayerHeadGenerator> {
         private String texture;
         private int scale;
+        private MojangApiClient mojangApiClient;
 
         public Builder withSkin(String texture) {
             this.texture = texture;
@@ -172,9 +181,17 @@ public class MinecraftPlayerHeadGenerator implements Generator {
             return this;
         }
 
+        public Builder withMojangApiClient(MojangApiClient mojangApiClient) {
+            this.mojangApiClient = mojangApiClient;
+            return this;
+        }
+
         @Override
         public MinecraftPlayerHeadGenerator build() {
-            return new MinecraftPlayerHeadGenerator(texture, scale);
+            MojangApiClient client = (mojangApiClient != null)
+                ? mojangApiClient
+                : MojangApiClientFactory.defaultInstance();
+            return new MinecraftPlayerHeadGenerator(texture, scale, client);
         }
     }
 }
