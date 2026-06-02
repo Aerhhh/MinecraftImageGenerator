@@ -570,9 +570,9 @@
     },
     {
         "icon": "♔",
-        "name": "trophy_fish_chance",
-        "stat": "Trophy Fish Chance",
-        "display": "♔ Trophy Fish Chance",
+        "name": "trophy_chance",
+        "stat": "Trophy Chance",
+        "display": "♔ Trophy Chance",
         "color": "GOLD",
         "subColor": null,
         "parseType": "NORMAL"
