@@ -1,6 +1,7 @@
 package net.aerh.imagegenerator.pack;
 
 import net.aerh.imagegenerator.exception.PackLoadException;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -21,6 +22,9 @@ class DirectoryPackSourceTest {
 
     @TempDir
     Path root;
+
+    @TempDir
+    Path outsideDir;
 
     @BeforeEach
     void writeFixture() throws IOException {
@@ -70,5 +74,48 @@ class DirectoryPackSourceTest {
     @Test
     void rejectsNonexistentRootDirectory() {
         assertThrows(PackLoadException.class, () -> PackSource.directory(root.resolve("nope"), LIMITS));
+    }
+
+    @Test
+    void rejectsSymlinkEscapingRoot() throws IOException {
+        Path outside = Files.write(outsideDir.resolve("outside.txt"), "secret".getBytes());
+        Path link = root.resolve("assets/testpack/link.txt");
+        try {
+            Files.createSymbolicLink(link, outside);
+        } catch (IOException | UnsupportedOperationException e) {
+            Assumptions.assumeTrue(false, "symlinks not supported here");
+        }
+        try (PackSource source = PackSource.directory(root, LIMITS)) {
+            assertThrows(PackLoadException.class, () -> source.read("assets/testpack/link.txt"));
+        }
+    }
+
+    @Test
+    void rejectsMalformedPath() throws IOException {
+        try (PackSource source = PackSource.directory(root, LIMITS)) {
+            assertThrows(PackLoadException.class, () -> source.read("assets/\0bad"));
+            assertFalse(source.exists("assets/\0bad"));
+        }
+    }
+
+    @Test
+    void rejectsListingBeyondMaxEntries() throws IOException {
+        PackLimits capped = new PackLimits(2, 32, 1024, 1024);
+        Files.write(root.resolve("assets/testpack/extra1.json"), "{}".getBytes());
+        Files.write(root.resolve("assets/testpack/extra2.json"), "{}".getBytes());
+        try (PackSource source = PackSource.directory(root, capped)) {
+            assertThrows(PackLoadException.class, () -> source.list("assets/"));
+        }
+    }
+
+    @Test
+    void listsUpToMaxEntries() throws IOException {
+        PackLimits capped = new PackLimits(2, 32, 1024, 1024);
+        Files.write(root.resolve("assets/testpack/extra1.json"), "{}".getBytes());
+        try (PackSource source = PackSource.directory(root, capped)) {
+            List<String> entries = source.list("assets/");
+            assertTrue(entries.contains("assets/testpack/items/item/simple.json"));
+            assertTrue(entries.contains("assets/testpack/extra1.json"));
+        }
     }
 }

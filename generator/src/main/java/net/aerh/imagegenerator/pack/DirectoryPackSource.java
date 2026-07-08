@@ -1,22 +1,23 @@
 package net.aerh.imagegenerator.pack;
 
-import lombok.extern.slf4j.Slf4j;
 import net.aerh.imagegenerator.exception.PackLoadException;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.stream.Stream;
 
 /**
  * {@link PackSource} over an extracted pack directory. Rejects reads that resolve outside the
- * root and files exceeding the per-entry byte cap.
+ * root (including via symlinks) and files exceeding the per-entry byte cap.
  */
-@Slf4j
 final class DirectoryPackSource implements PackSource {
 
     private final Path root;
+    private final Path realRoot;
     private final PackLimits limits;
 
     DirectoryPackSource(Path root, PackLimits limits) {
@@ -24,6 +25,11 @@ final class DirectoryPackSource implements PackSource {
             throw new PackLoadException("Pack directory does not exist: %s", root.toString());
         }
         this.root = root.toAbsolutePath().normalize();
+        try {
+            this.realRoot = root.toRealPath();
+        } catch (IOException e) {
+            throw new PackLoadException("Failed to resolve pack directory: " + root, e);
+        }
         this.limits = limits;
     }
 
@@ -34,12 +40,17 @@ final class DirectoryPackSource implements PackSource {
             if (!Files.isRegularFile(resolved)) {
                 throw new PackLoadException("Pack file not found: %s", assetPath);
             }
-            long size = Files.size(resolved);
-            if (size > limits.maxEntryBytes()) {
-                throw new PackLoadException("Pack file %s exceeds max entry size (%s > %s bytes)",
-                    assetPath, String.valueOf(size), String.valueOf(limits.maxEntryBytes()));
+            if (!resolved.toRealPath().startsWith(realRoot)) {
+                throw new PackLoadException("Pack path escapes pack root: %s", assetPath);
             }
-            return Files.readAllBytes(resolved);
+            try (InputStream in = Files.newInputStream(resolved)) {
+                byte[] data = in.readNBytes((int) limits.maxEntryBytes() + 1);
+                if (data.length > limits.maxEntryBytes()) {
+                    throw new PackLoadException("Pack file %s exceeds max entry size (%s bytes)",
+                        assetPath, String.valueOf(limits.maxEntryBytes()));
+                }
+                return data;
+            }
         } catch (IOException e) {
             throw new PackLoadException("Failed to read pack file: " + assetPath, e);
         }
@@ -57,18 +68,29 @@ final class DirectoryPackSource implements PackSource {
     @Override
     public List<String> list(String prefix) {
         try (Stream<Path> walk = Files.walk(root)) {
-            return walk.filter(Files::isRegularFile)
+            List<String> entries = walk.filter(Files::isRegularFile)
                 .map(path -> root.relativize(path).toString().replace('\\', '/'))
                 .filter(path -> path.startsWith(prefix))
+                .limit((long) limits.maxEntries() + 1)
                 .sorted()
                 .toList();
+            if (entries.size() > limits.maxEntries()) {
+                throw new PackLoadException("Pack directory exceeds max entry count (%s)",
+                    String.valueOf(limits.maxEntries()));
+            }
+            return entries;
         } catch (IOException e) {
             throw new PackLoadException("Failed to list pack directory", e);
         }
     }
 
     private Path resolveInsideRoot(String assetPath) {
-        Path resolved = root.resolve(assetPath).normalize();
+        Path resolved;
+        try {
+            resolved = root.resolve(assetPath).normalize();
+        } catch (InvalidPathException e) {
+            throw new PackLoadException("Invalid pack path: " + assetPath, e);
+        }
         if (!resolved.startsWith(root)) {
             throw new PackLoadException("Pack path escapes pack root: %s", assetPath);
         }
