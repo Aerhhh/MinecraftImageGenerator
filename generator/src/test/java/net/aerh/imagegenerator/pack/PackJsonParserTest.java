@@ -133,4 +133,54 @@ class PackJsonParserTest {
     void lenientJsonIsRejected() {
         assertThrows(PackLoadException.class, () -> parse("{model: {type: 'model', model: 'x'}}"));
     }
+
+    @Test
+    void parsesModelWithParentAndLayer0() {
+        ModelInfo model = PackJsonParser.parseModel("""
+            {"parent":"item/paper","textures":{"layer0":"testpack:item/simple"}}""".getBytes(StandardCharsets.UTF_8));
+        assertEquals("item/paper", model.parentRef());
+        assertEquals("testpack:item/simple", model.layer0Ref());
+    }
+
+    @Test
+    void parsesModelWithoutLayer0() {
+        ModelInfo model = PackJsonParser.parseModel("""
+            {"parent":"testpack:item/base"}""".getBytes(StandardCharsets.UTF_8));
+        assertEquals("testpack:item/base", model.parentRef());
+        assertEquals(null, model.layer0Ref());
+    }
+
+    @Test
+    void animationFirstFrameIsFirstListEntryNotIndexZero() {
+        AnimationMeta meta = PackJsonParser.parseAnimationMeta("""
+            {"animation":{"frametime":3,"frames":[4,3,2,{"index":0,"time":81}]}}""".getBytes(StandardCharsets.UTF_8));
+        assertEquals(4, meta.firstFrameIndex());
+    }
+
+    @Test
+    void animationWithoutFramesListDefaultsToFrameZero() {
+        AnimationMeta meta = PackJsonParser.parseAnimationMeta("""
+            {"animation":{"frametime":5}}""".getBytes(StandardCharsets.UTF_8));
+        assertEquals(0, meta.firstFrameIndex());
+    }
+
+    @Test
+    void animationParsesExplicitFrameSize() {
+        AnimationMeta meta = PackJsonParser.parseAnimationMeta("""
+            {"animation":{"width":16,"height":32}}""".getBytes(StandardCharsets.UTF_8));
+        assertEquals(16, meta.frameWidth());
+        assertEquals(32, meta.frameHeight());
+    }
+
+    @Test
+    void rejectsMcmetaWithoutAnimationObject() {
+        assertThrows(PackLoadException.class,
+            () -> PackJsonParser.parseAnimationMeta("{\"gui\":{}}".getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Test
+    void trailingContentIsRejected() {
+        assertThrows(PackLoadException.class,
+            () -> PackJsonParser.parseModel("{\"model\":{\"type\":\"model\",\"model\":\"t:x\"}} extra".getBytes(StandardCharsets.UTF_8)));
+    }
 }

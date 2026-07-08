@@ -7,6 +7,7 @@ import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.Strictness;
 import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
 import lombok.experimental.UtilityClass;
 import net.aerh.imagegenerator.exception.PackLoadException;
 
@@ -101,10 +102,47 @@ public class PackJsonParser {
             if (!element.isJsonObject()) {
                 throw new PackLoadException("Expected a JSON object at pack file root");
             }
+            if (jsonReader.peek() != JsonToken.END_DOCUMENT) {
+                throw new PackLoadException("Trailing content after JSON document");
+            }
             return element.getAsJsonObject();
         } catch (JsonSyntaxException | java.io.IOException | IllegalStateException e) {
             throw new PackLoadException("Malformed pack JSON", e);
         }
+    }
+
+    public static ModelInfo parseModel(byte[] json) {
+        JsonObject root = parseObject(json);
+        String parent = root.has("parent") ? root.get("parent").getAsString() : null;
+        String layer0 = null;
+        if (root.has("textures") && root.get("textures").isJsonObject()) {
+            JsonObject textures = root.getAsJsonObject("textures");
+            if (textures.has("layer0")) {
+                layer0 = textures.get("layer0").getAsString();
+            }
+        }
+        return new ModelInfo(parent, layer0);
+    }
+
+    public static AnimationMeta parseAnimationMeta(byte[] json) {
+        JsonObject root = parseObject(json);
+        if (!root.has("animation") || !root.get("animation").isJsonObject()) {
+            throw new PackLoadException("Texture mcmeta has no 'animation' section");
+        }
+        JsonObject animation = root.getAsJsonObject("animation");
+        int firstFrameIndex = 0;
+        if (animation.has("frames") && animation.get("frames").isJsonArray()) {
+            JsonArray frames = animation.getAsJsonArray("frames");
+            if (!frames.isEmpty()) {
+                JsonElement first = frames.get(0);
+                firstFrameIndex = first.isJsonObject()
+                    ? first.getAsJsonObject().get("index").getAsInt()
+                    : first.getAsInt();
+            }
+        }
+        Integer width = animation.has("width") ? animation.get("width").getAsInt() : null;
+        Integer height = animation.has("height") ? animation.get("height").getAsInt() : null;
+        return new AnimationMeta(firstFrameIndex, width, height);
     }
 
     private static ItemModelNode parseFallback(JsonObject node) {
