@@ -7,7 +7,6 @@ import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.Strictness;
 import com.google.gson.stream.JsonReader;
-import com.google.gson.stream.JsonToken;
 import lombok.experimental.UtilityClass;
 import net.aerh.imagegenerator.exception.PackLoadException;
 
@@ -102,9 +101,9 @@ public class PackJsonParser {
             if (!element.isJsonObject()) {
                 throw new PackLoadException("Expected a JSON object at pack file root");
             }
-            if (jsonReader.peek() != JsonToken.END_DOCUMENT) {
-                throw new PackLoadException("Trailing content after JSON document");
-            }
+            // STRICT mode makes peek() throw on any trailing non-whitespace content - no explicit
+            // END_DOCUMENT comparison needed. The peek() call itself is load-bearing.
+            jsonReader.peek();
             return element.getAsJsonObject();
         } catch (JsonSyntaxException | java.io.IOException | IllegalStateException e) {
             throw new PackLoadException("Malformed pack JSON", e);
@@ -113,13 +112,10 @@ public class PackJsonParser {
 
     public static ModelInfo parseModel(byte[] json) {
         JsonObject root = parseObject(json);
-        String parent = root.has("parent") ? root.get("parent").getAsString() : null;
+        String parent = optionalString(root, "parent");
         String layer0 = null;
         if (root.has("textures") && root.get("textures").isJsonObject()) {
-            JsonObject textures = root.getAsJsonObject("textures");
-            if (textures.has("layer0")) {
-                layer0 = textures.get("layer0").getAsString();
-            }
+            layer0 = optionalString(root.getAsJsonObject("textures"), "layer0");
         }
         return new ModelInfo(parent, layer0);
     }
@@ -134,15 +130,26 @@ public class PackJsonParser {
         if (animation.has("frames") && animation.get("frames").isJsonArray()) {
             JsonArray frames = animation.getAsJsonArray("frames");
             if (!frames.isEmpty()) {
-                JsonElement first = frames.get(0);
-                firstFrameIndex = first.isJsonObject()
-                    ? first.getAsJsonObject().get("index").getAsInt()
-                    : first.getAsInt();
+                firstFrameIndex = firstFrameIndex(frames.get(0));
             }
         }
-        Integer width = animation.has("width") ? animation.get("width").getAsInt() : null;
-        Integer height = animation.has("height") ? animation.get("height").getAsInt() : null;
+        Integer width = optionalInt(animation, "width");
+        Integer height = optionalInt(animation, "height");
         return new AnimationMeta(firstFrameIndex, width, height);
+    }
+
+    private static int firstFrameIndex(JsonElement first) {
+        if (first.isJsonObject()) {
+            JsonElement index = first.getAsJsonObject().get("index");
+            if (index == null || !index.isJsonPrimitive() || !index.getAsJsonPrimitive().isNumber()) {
+                throw new PackLoadException("Animation frame entry is missing numeric 'index'");
+            }
+            return index.getAsInt();
+        }
+        if (!first.isJsonPrimitive() || !first.getAsJsonPrimitive().isNumber()) {
+            throw new PackLoadException("Animation frame entry must be a number or an object with 'index'");
+        }
+        return first.getAsInt();
     }
 
     private static ItemModelNode parseFallback(JsonObject node) {
@@ -167,6 +174,28 @@ public class PackJsonParser {
             throw new PackLoadException("Item definition node is missing numeric member '%s'", member);
         }
         return element.getAsDouble();
+    }
+
+    private static String optionalString(JsonObject node, String member) {
+        JsonElement element = node.get(member);
+        if (element == null || element.isJsonNull()) {
+            return null;
+        }
+        if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString()) {
+            throw new PackLoadException("Expected string for member '%s'", member);
+        }
+        return element.getAsString();
+    }
+
+    private static Integer optionalInt(JsonObject node, String member) {
+        JsonElement element = node.get(member);
+        if (element == null || element.isJsonNull()) {
+            return null;
+        }
+        if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isNumber()) {
+            throw new PackLoadException("Expected number for member '%s'", member);
+        }
+        return element.getAsInt();
     }
 
     private static String asString(JsonElement element, String description) {

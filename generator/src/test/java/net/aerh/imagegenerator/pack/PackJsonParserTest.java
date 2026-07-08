@@ -183,4 +183,40 @@ class PackJsonParserTest {
         assertThrows(PackLoadException.class,
             () -> PackJsonParser.parseModel("{\"model\":{\"type\":\"model\",\"model\":\"t:x\"}} extra".getBytes(StandardCharsets.UTF_8)));
     }
+
+    @Test
+    void frameEntryObjectMissingIndexIsRejected() {
+        assertThrows(PackLoadException.class, () -> PackJsonParser.parseAnimationMeta(
+            "{\"animation\":{\"frames\":[{\"time\":81}]}}".getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Test
+    void frameEntryNonNumericIsRejected() {
+        assertThrows(PackLoadException.class, () -> PackJsonParser.parseAnimationMeta(
+            "{\"animation\":{\"frames\":[\"a\"]}}".getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Test
+    void modelParentWrongTypedIsRejected() {
+        assertThrows(PackLoadException.class,
+            () -> PackJsonParser.parseModel("{\"parent\":{}}".getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Test
+    void modelLayer0WrongTypedIsRejected() {
+        assertThrows(PackLoadException.class,
+            () -> PackJsonParser.parseModel("{\"textures\":{\"layer0\":[]}}".getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Test
+    void animationWidthWrongTypedIsRejected() {
+        assertThrows(PackLoadException.class, () -> PackJsonParser.parseAnimationMeta(
+            "{\"animation\":{\"width\":\"abc\"}}".getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Test
+    void modelParentExplicitNullIsNull() {
+        ModelInfo model = PackJsonParser.parseModel("{\"parent\":null}".getBytes(StandardCharsets.UTF_8));
+        assertEquals(null, model.parentRef());
+    }
 }
