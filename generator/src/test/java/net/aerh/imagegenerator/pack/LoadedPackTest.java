@@ -116,4 +116,27 @@ class LoadedPackTest {
     void modelWithoutLayer0AndVanillaParentThrows() {
         assertThrows(PackResolveException.class, () -> pack.resolveSprite("testpack:item/no_layer0"));
     }
+
+    @Test
+    void missingTextureThrowsPackResolveNotPackLoad() {
+        assertThrows(PackResolveException.class, () -> pack.resolveSprite("testpack:item/broken_texture_ref"));
+    }
+
+    @Test
+    void malformedLayer0RefThrowsPackResolveNotIllegalArgument() {
+        assertThrows(PackResolveException.class, () -> pack.resolveSprite("testpack:item/malformed_ref"));
+    }
+
+    @Test
+    void parentCycleThrowsAtDepthCap() {
+        assertThrows(PackResolveException.class, () -> pack.resolveSprite("testpack:item/cyclic"));
+    }
+
+    @Test
+    void resolvesBigTextureAtFullSize() {
+        BufferedImage sprite = pack.resolveSprite("testpack:item/big").orElseThrow();
+        assertEquals(32, sprite.getWidth());
+        assertEquals(32, sprite.getHeight());
+        assertEquals(0xFF123456, sprite.getRGB(16, 16));
+    }
 }

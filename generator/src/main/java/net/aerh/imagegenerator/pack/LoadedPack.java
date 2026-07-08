@@ -3,6 +3,7 @@ package net.aerh.imagegenerator.pack;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import lombok.extern.slf4j.Slf4j;
+import net.aerh.imagegenerator.exception.GeneratorException;
 import net.aerh.imagegenerator.exception.PackLoadException;
 import net.aerh.imagegenerator.exception.PackResolveException;
 
@@ -45,7 +46,10 @@ public final class LoadedPack {
         this.limits = limits;
         this.textureCache = Caffeine.newBuilder()
             .maximumWeight(limits.textureCacheMaxBytes())
-            .weigher((String key, BufferedImage image) -> Math.max(1, image.getWidth() * image.getHeight() * 4))
+            // long arithmetic: large custom maxTextureDim configs can overflow int and silently
+            // underweight the cache, mirroring TextureDecoder's overflow-safe bounds pattern.
+            .weigher((String key, BufferedImage image) ->
+                (int) Math.min(Integer.MAX_VALUE, Math.max(1L, (long) image.getWidth() * image.getHeight() * 4)))
             .softValues()
             .build(this::loadTexture);
         buildIndex();
@@ -137,7 +141,7 @@ public final class LoadedPack {
     }
 
     private String resolveLayer0(String modelRefValue) {
-        ResourceRef modelRef = ResourceRef.parse(modelRefValue, "minecraft");
+        ResourceRef modelRef = parseRefOrResolveError(modelRefValue, "minecraft");
         for (int depth = 0; depth < MAX_PARENT_DEPTH; depth++) {
             if (!namespaces.contains(modelRef.namespace())) {
                 throw new PackResolveException(
@@ -149,20 +153,39 @@ public final class LoadedPack {
                 throw new PackResolveException("Model `%s` not found in pack `%s`", modelRef.toString(), id.toString());
             }
             if (model.layer0Ref() != null) {
-                return ResourceRef.parse(model.layer0Ref(), modelRef.namespace()).texturePath();
+                return parseRefOrResolveError(model.layer0Ref(), modelRef.namespace()).texturePath();
             }
             if (model.parentRef() == null) {
                 throw new PackResolveException("Model `%s` in pack `%s` has neither layer0 nor parent",
                     modelRef.toString(), id.toString());
             }
-            modelRef = ResourceRef.parse(model.parentRef(), "minecraft");
+            modelRef = parseRefOrResolveError(model.parentRef(), "minecraft");
         }
         throw new PackResolveException("Model parent chain exceeds depth %s in pack `%s`",
             String.valueOf(MAX_PARENT_DEPTH), id.toString());
     }
 
+    /**
+     * Parses a model/texture reference coming from untrusted pack JSON, converting parse failures
+     * into the {@link PackResolveException} contract of {@link #resolveSprite(String)}.
+     */
+    private ResourceRef parseRefOrResolveError(String value, String defaultNamespace) {
+        try {
+            return ResourceRef.parse(value, defaultNamespace);
+        } catch (IllegalArgumentException e) {
+            throw new PackResolveException(GeneratorException.formatMessage(
+                "Malformed resource reference `%s` in pack `%s`", value, id.toString()), e);
+        }
+    }
+
     private BufferedImage loadTexture(String texturePath) {
-        BufferedImage image = TextureDecoder.decode(source.read(texturePath), limits.maxTextureDim());
+        BufferedImage image;
+        try {
+            image = TextureDecoder.decode(source.read(texturePath), limits.maxTextureDim());
+        } catch (PackLoadException e) {
+            throw new PackResolveException(GeneratorException.formatMessage(
+                "Texture `%s` in pack `%s` failed to load: %s", texturePath, id.toString(), e.getMessage()), e);
+        }
         String mcmetaPath = texturePath + ".mcmeta";
         if (source.exists(mcmetaPath)) {
             try {

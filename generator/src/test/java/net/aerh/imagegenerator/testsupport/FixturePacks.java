@@ -75,6 +75,24 @@ public final class FixturePacks {
             write(root, "assets/testpack/models/item/no_layer0.json", """
                 {"parent":"item/paper"}""");
 
+            // Model whose layer0 points at a texture PNG that does not exist
+            item(root, "broken_texture_ref", """
+                {"model":{"type":"minecraft:model","model":"testpack:item/broken_texture_ref"}}""");
+            model(root, "broken_texture_ref", "item/generated", "testpack:item/missing_texture");
+
+            // Model whose layer0 is not a parseable resource reference (multiple colons)
+            item(root, "malformed_ref", """
+                {"model":{"type":"minecraft:model","model":"testpack:item/malformed_ref"}}""");
+            model(root, "malformed_ref", "item/generated", "a:b:c");
+
+            // Parent cycle: two models referencing each other, neither with layer0
+            item(root, "cyclic", """
+                {"model":{"type":"minecraft:model","model":"testpack:item/cycle_a"}}""");
+            write(root, "assets/testpack/models/item/cycle_a.json", """
+                {"parent":"testpack:item/cycle_b"}""");
+            write(root, "assets/testpack/models/item/cycle_b.json", """
+                {"parent":"testpack:item/cycle_a"}""");
+
             // Animated flipbook: 16x48, frames list starts at index 2 (blue frame)
             item(root, "animated", """
                 {"model":{"type":"minecraft:model","model":"testpack:item/animated"}}""");
