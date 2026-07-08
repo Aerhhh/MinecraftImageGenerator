@@ -71,8 +71,10 @@ public class TextureDecoder {
         int frameWidth = meta.frameWidth() != null ? meta.frameWidth() : image.getWidth();
         // Vanilla default: square frames sized by texture width, stacked vertically.
         int frameHeight = meta.frameHeight() != null ? meta.frameHeight() : frameWidth;
-        int y = meta.firstFrameIndex() * frameHeight;
-        if (frameWidth > image.getWidth() || y + frameHeight > image.getHeight() || meta.firstFrameIndex() < 0 || frameWidth <= 0 || frameHeight <= 0) {
+        // long arithmetic: untrusted index * height can overflow int and wrap past the bounds check.
+        long y = (long) meta.firstFrameIndex() * frameHeight;
+        if (frameWidth <= 0 || frameHeight <= 0 || meta.firstFrameIndex() < 0
+            || frameWidth > image.getWidth() || y + frameHeight > image.getHeight()) {
             throw new PackLoadException("Animation frame %s is outside texture bounds (%sx%s, frame %sx%s)",
                 String.valueOf(meta.firstFrameIndex()), String.valueOf(image.getWidth()),
                 String.valueOf(image.getHeight()), String.valueOf(frameWidth), String.valueOf(frameHeight));
@@ -80,7 +82,7 @@ public class TextureDecoder {
         BufferedImage frame = new BufferedImage(frameWidth, frameHeight, BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = frame.createGraphics();
         try {
-            graphics.drawImage(image.getSubimage(0, y, frameWidth, frameHeight), 0, 0, null);
+            graphics.drawImage(image.getSubimage(0, (int) y, frameWidth, frameHeight), 0, 0, null);
         } finally {
             graphics.dispose();
         }

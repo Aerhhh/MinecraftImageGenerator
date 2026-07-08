@@ -80,6 +80,14 @@ class TextureDecoderTest {
     }
 
     @Test
+    void firstFrameRejectsOverflowingFrameOffset() {
+        BufferedImage flipbook = argb(16, 32);
+        assertThrows(PackLoadException.class,
+            () -> TextureDecoder.firstFrame(flipbook, new AnimationMeta(3000, null, 1_000_000)),
+            "int overflow in the frame offset must not bypass the bounds check");
+    }
+
+    @Test
     void firstFrameRejectsNonPositiveFrameSize() {
         BufferedImage flipbook = argb(16, 32);
         assertThrows(PackLoadException.class,
