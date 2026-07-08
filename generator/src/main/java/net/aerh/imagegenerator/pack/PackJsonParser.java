@@ -1,0 +1,142 @@
+package net.aerh.imagegenerator.pack;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.JsonSyntaxException;
+import lombok.experimental.UtilityClass;
+import net.aerh.imagegenerator.exception.PackLoadException;
+
+import java.io.ByteArrayInputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+
+/**
+ * Gson-based parsers for the pack JSON formats used at register time: item model definitions,
+ * item models, and texture animation mcmeta.
+ */
+@UtilityClass
+public class PackJsonParser {
+
+    private static final String MINECRAFT_PREFIX = "minecraft:";
+
+    public static ItemModelNode parseItemDefinition(byte[] json) {
+        JsonObject root = parseObject(json);
+        if (!root.has("model") || !root.get("model").isJsonObject()) {
+            throw new PackLoadException("Item definition is missing required 'model' object");
+        }
+        return parseNode(root.getAsJsonObject("model"));
+    }
+
+    private static ItemModelNode parseNode(JsonObject node) {
+        String type = normalize(requireString(node, "type"));
+        return switch (type) {
+            case "model" -> new ItemModelNode.ModelLeaf(requireString(node, "model"));
+            case "condition" -> new ItemModelNode.ConditionNode(
+                normalize(requireString(node, "property")),
+                parseNode(requireObject(node, "on_true")),
+                parseNode(requireObject(node, "on_false")));
+            case "select" -> parseSelect(node);
+            case "range_dispatch" -> parseRangeDispatch(node);
+            case "composite" -> parseComposite(node);
+            default -> new ItemModelNode.UnsupportedNode(type);
+        };
+    }
+
+    private static ItemModelNode parseSelect(JsonObject node) {
+        String property = normalize(requireString(node, "property"));
+        List<ItemModelNode.SelectNode.Case> cases = new ArrayList<>();
+        for (JsonElement caseElement : requireArray(node, "cases")) {
+            JsonObject caseObject = asObject(caseElement, "select case");
+            Set<String> when = new LinkedHashSet<>();
+            JsonElement whenElement = caseObject.get("when");
+            if (whenElement == null) {
+                throw new PackLoadException("Select case is missing 'when'");
+            }
+            if (whenElement.isJsonArray()) {
+                whenElement.getAsJsonArray().forEach(value -> when.add(value.getAsString()));
+            } else {
+                when.add(whenElement.getAsString());
+            }
+            cases.add(new ItemModelNode.SelectNode.Case(when, parseNode(requireObject(caseObject, "model"))));
+        }
+        ItemModelNode fallback = node.has("fallback") ? parseNode(requireObject(node, "fallback")) : null;
+        return new ItemModelNode.SelectNode(property, List.copyOf(cases), fallback);
+    }
+
+    private static ItemModelNode parseRangeDispatch(JsonObject node) {
+        String property = normalize(requireString(node, "property"));
+        double scale = node.has("scale") ? node.get("scale").getAsDouble() : 1.0;
+        List<ItemModelNode.RangeDispatchNode.Entry> entries = new ArrayList<>();
+        if (node.has("entries")) {
+            for (JsonElement entryElement : requireArray(node, "entries")) {
+                JsonObject entryObject = asObject(entryElement, "range_dispatch entry");
+                entries.add(new ItemModelNode.RangeDispatchNode.Entry(
+                    entryObject.get("threshold").getAsDouble(),
+                    parseNode(requireObject(entryObject, "model"))));
+            }
+        }
+        ItemModelNode fallback = node.has("fallback") ? parseNode(requireObject(node, "fallback")) : null;
+        return new ItemModelNode.RangeDispatchNode(property, scale, List.copyOf(entries), fallback);
+    }
+
+    private static ItemModelNode parseComposite(JsonObject node) {
+        List<ItemModelNode> models = new ArrayList<>();
+        for (JsonElement modelElement : requireArray(node, "models")) {
+            models.add(parseNode(asObject(modelElement, "composite model")));
+        }
+        return new ItemModelNode.CompositeNode(List.copyOf(models));
+    }
+
+    static JsonObject parseObject(byte[] json) {
+        try (InputStreamReader reader = new InputStreamReader(new ByteArrayInputStream(json), StandardCharsets.UTF_8)) {
+            JsonElement element = JsonParser.parseReader(reader);
+            if (!element.isJsonObject()) {
+                throw new PackLoadException("Expected a JSON object at pack file root");
+            }
+            return element.getAsJsonObject();
+        } catch (JsonSyntaxException | java.io.IOException | IllegalStateException e) {
+            throw new PackLoadException("Malformed pack JSON", e);
+        }
+    }
+
+    private static String normalize(String type) {
+        return type.startsWith(MINECRAFT_PREFIX) ? type.substring(MINECRAFT_PREFIX.length()) : type;
+    }
+
+    private static String requireString(JsonObject node, String member) {
+        JsonElement element = node.get(member);
+        if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString()) {
+            throw new PackLoadException("Item definition node is missing string member '%s'", member);
+        }
+        return element.getAsString();
+    }
+
+    private static JsonObject requireObject(JsonObject node, String member) {
+        JsonElement element = node.get(member);
+        if (element == null || !element.isJsonObject()) {
+            throw new PackLoadException("Item definition node is missing object member '%s'", member);
+        }
+        return element.getAsJsonObject();
+    }
+
+    private static JsonArray requireArray(JsonObject node, String member) {
+        JsonElement element = node.get(member);
+        if (element == null || !element.isJsonArray()) {
+            throw new PackLoadException("Item definition node is missing array member '%s'", member);
+        }
+        return element.getAsJsonArray();
+    }
+
+    private static JsonObject asObject(JsonElement element, String description) {
+        if (!element.isJsonObject()) {
+            throw new PackLoadException("Expected JSON object for %s", description);
+        }
+        return element.getAsJsonObject();
+    }
+}
