@@ -118,4 +118,12 @@ class DirectoryPackSourceTest {
             assertTrue(entries.contains("assets/testpack/extra1.json"));
         }
     }
+
+    @Test
+    void readsFileWithHugeEntryCap() throws IOException {
+        PackLimits huge = new PackLimits(100, Long.MAX_VALUE, 1024, 1024);
+        try (PackSource source = PackSource.directory(root, huge)) {
+            assertArrayEquals("{}".getBytes(), source.read("assets/testpack/items/item/simple.json"));
+        }
+    }
 }
