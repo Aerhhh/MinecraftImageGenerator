@@ -5,7 +5,7 @@ import net.aerh.imagegenerator.testsupport.TestResources;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -13,6 +13,8 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -29,14 +31,18 @@ class VanillaGoldenImageTest {
         return new MinecraftItemGenerator.Builder().withItem(itemId).build().generate().getImage();
     }
 
+    static Stream<String> goldenItems() {
+        return Arrays.stream(GOLDEN_ITEMS);
+    }
+
     @ParameterizedTest
-    @ValueSource(strings = {"stone", "diamond_sword", "oak_planks"})
+    @MethodSource("goldenItems")
     void vanillaRenderMatchesGolden(String itemId) throws IOException {
         BufferedImage actual = render(itemId);
         BufferedImage golden = ImageIO.read(new ByteArrayInputStream(
             TestResources.readBytes("golden/vanilla/" + itemId + ".png")));
-        assertEquals(golden.getWidth(), actual.getWidth());
-        assertEquals(golden.getHeight(), actual.getHeight());
+        assertEquals(golden.getWidth(), actual.getWidth(), "Width mismatch for '" + itemId + "'");
+        assertEquals(golden.getHeight(), actual.getHeight(), "Height mismatch for '" + itemId + "'");
         for (int y = 0; y < golden.getHeight(); y++) {
             for (int x = 0; x < golden.getWidth(); x++) {
                 assertEquals(golden.getRGB(x, y), actual.getRGB(x, y),
