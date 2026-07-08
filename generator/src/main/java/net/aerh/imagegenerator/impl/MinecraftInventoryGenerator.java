@@ -554,8 +554,8 @@ public class MinecraftInventoryGenerator implements Generator {
 
         /**
          * Selects the resource pack to resolve every item slot from. Propagated to every
-         * {@link MinecraftItemGenerator.Builder} built while rendering item slots. Null renders
-         * vanilla-only, exactly as before.
+         * {@link MinecraftItemGenerator.Builder} built while rendering item slots. Null or
+         * {@link PackId#VANILLA} renders from the built-in vanilla spritesheet exactly as before.
          */
         public Builder withPack(@Nullable PackId packId) {
             this.packId = packId;

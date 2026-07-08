@@ -69,4 +69,20 @@ class MinecraftInventoryGeneratorPackTest {
             .generate();
         assertNotNull(inventory.getImage());
     }
+
+    /**
+     * Pins the retained 7-arg public constructor: it must keep delegating to the extended
+     * constructor with a null pack (vanilla rendering). Guards against a future refactor
+     * silently breaking the delegation line.
+     */
+    @Test
+    void legacySevenArgConstructorRendersVanilla() {
+        MinecraftInventoryGenerator generator =
+            new MinecraftInventoryGenerator(1, 1, null, "stone:1", true, true, false);
+        GeneratedObject inventory = generator.generate();
+        BufferedImage image = inventory.getImage();
+        assertNotNull(image);
+        assertTrue(image.getWidth() > 0, "rendered inventory has a positive width");
+        assertTrue(image.getHeight() > 0, "rendered inventory has a positive height");
+    }
 }
