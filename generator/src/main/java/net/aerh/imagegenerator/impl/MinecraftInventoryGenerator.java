@@ -10,6 +10,8 @@ import net.aerh.imagegenerator.builder.ClassBuilder;
 import net.aerh.imagegenerator.image.ImageCoordinates;
 import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.item.InventoryItem;
+import net.aerh.imagegenerator.pack.PackId;
+import net.aerh.imagegenerator.pack.PackRepository;
 import net.aerh.imagegenerator.parser.inventory.InventoryStringParser;
 import net.aerh.imagegenerator.spritesheet.Spritesheet;
 import net.aerh.imagegenerator.util.MinecraftFonts;
@@ -80,6 +82,10 @@ public class MinecraftInventoryGenerator implements Generator {
     private final int totalSlots;
     private final String inventoryString;
     private final boolean animateGlint;
+    @Nullable
+    private final PackId packId;
+    @ToString.Exclude
+    private final transient PackRepository packRepository;
 
     private BufferedImage inventoryImage;
     private Graphics2D g2d;
@@ -88,7 +94,14 @@ public class MinecraftInventoryGenerator implements Generator {
     private List<ImageCoordinates> slotCoordinates;
     private GeneratedObject generatedObject;
 
-    public MinecraftInventoryGenerator(int rows, int slotsPerRow, String containerTitle, String inventoryString, boolean drawBorder, boolean drawBackground, boolean animateGlint) {
+    public MinecraftInventoryGenerator(int rows, int slotsPerRow, String containerTitle, String inventoryString,
+                                        boolean drawBorder, boolean drawBackground, boolean animateGlint) {
+        this(rows, slotsPerRow, containerTitle, inventoryString, drawBorder, drawBackground, animateGlint, null, null);
+    }
+
+    public MinecraftInventoryGenerator(int rows, int slotsPerRow, String containerTitle, String inventoryString,
+                                        boolean drawBorder, boolean drawBackground, boolean animateGlint,
+                                        @Nullable PackId packId, @Nullable PackRepository packRepository) {
         this.rows = rows;
         this.slotsPerRow = slotsPerRow;
         this.containerTitle = containerTitle;
@@ -98,6 +111,8 @@ public class MinecraftInventoryGenerator implements Generator {
         this.drawBackground = drawBackground;
         this.totalSlots = rows * slotsPerRow;
         this.animateGlint = animateGlint;
+        this.packId = packId;
+        this.packRepository = packRepository != null ? packRepository : PackRepository.global();
 
         initializeImage();
     }
@@ -341,7 +356,11 @@ public class MinecraftInventoryGenerator implements Generator {
                 .isEnchanted(contentLower != null && contentLower.contains("enchant"))
                 .withHoverEffect(contentLower != null && contentLower.contains("hover"))
                 .withData(item.getExtraContent());
-            
+
+            if (packId != null) {
+                itemBuilder.withPack(packId).withPackRepository(packRepository);
+            }
+
             if (item.getDurabilityPercent() != null) {
                 itemBuilder.withDurability(item.getDurabilityPercent());
             }
@@ -489,6 +508,8 @@ public class MinecraftInventoryGenerator implements Generator {
         private boolean drawBackground = true;
         private String inventoryString;
         private boolean animateGlint;
+        private PackId packId;
+        private PackRepository packRepository;
 
         public Builder withRows(int rows) {
             if (rows <= 0) {
@@ -531,6 +552,22 @@ public class MinecraftInventoryGenerator implements Generator {
             return this;
         }
 
+        /**
+         * Selects the resource pack to resolve every item slot from. Propagated to every
+         * {@link MinecraftItemGenerator.Builder} built while rendering item slots. Null renders
+         * vanilla-only, exactly as before.
+         */
+        public Builder withPack(@Nullable PackId packId) {
+            this.packId = packId;
+            return this;
+        }
+
+        /** Inject a custom pack repository (tests); defaults to {@link PackRepository#global()}. */
+        public Builder withPackRepository(PackRepository packRepository) {
+            this.packRepository = packRepository;
+            return this;
+        }
+
         @Override
         protected void validate() {
             if (rows <= 0 || slotsPerRow <= 0) {
@@ -540,7 +577,8 @@ public class MinecraftInventoryGenerator implements Generator {
 
         @Override
         protected MinecraftInventoryGenerator construct() {
-            return new MinecraftInventoryGenerator(rows, slotsPerRow, containerTitle, inventoryString, drawBorder, drawBackground, animateGlint);
+            return new MinecraftInventoryGenerator(rows, slotsPerRow, containerTitle, inventoryString, drawBorder,
+                drawBackground, animateGlint, packId, packRepository);
         }
     }
 }
