@@ -5,6 +5,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
+import com.google.gson.Strictness;
+import com.google.gson.stream.JsonReader;
 import lombok.experimental.UtilityClass;
 import net.aerh.imagegenerator.exception.PackLoadException;
 
@@ -55,34 +57,32 @@ public class PackJsonParser {
             JsonObject caseObject = asObject(caseElement, "select case");
             Set<String> when = new LinkedHashSet<>();
             JsonElement whenElement = caseObject.get("when");
-            if (whenElement == null) {
+            if (whenElement == null || whenElement.isJsonNull()) {
                 throw new PackLoadException("Select case is missing 'when'");
             }
             if (whenElement.isJsonArray()) {
-                whenElement.getAsJsonArray().forEach(value -> when.add(value.getAsString()));
+                whenElement.getAsJsonArray().forEach(value -> when.add(asString(value, "select case 'when' value")));
             } else {
-                when.add(whenElement.getAsString());
+                when.add(asString(whenElement, "select case 'when' value"));
             }
-            cases.add(new ItemModelNode.SelectNode.Case(when, parseNode(requireObject(caseObject, "model"))));
+            cases.add(new ItemModelNode.SelectNode.Case(Set.copyOf(when), parseNode(requireObject(caseObject, "model"))));
         }
-        ItemModelNode fallback = node.has("fallback") ? parseNode(requireObject(node, "fallback")) : null;
-        return new ItemModelNode.SelectNode(property, List.copyOf(cases), fallback);
+        return new ItemModelNode.SelectNode(property, List.copyOf(cases), parseFallback(node));
     }
 
     private static ItemModelNode parseRangeDispatch(JsonObject node) {
         String property = normalize(requireString(node, "property"));
-        double scale = node.has("scale") ? node.get("scale").getAsDouble() : 1.0;
+        double scale = node.has("scale") ? requireNumber(node, "scale") : 1.0;
         List<ItemModelNode.RangeDispatchNode.Entry> entries = new ArrayList<>();
         if (node.has("entries")) {
             for (JsonElement entryElement : requireArray(node, "entries")) {
                 JsonObject entryObject = asObject(entryElement, "range_dispatch entry");
                 entries.add(new ItemModelNode.RangeDispatchNode.Entry(
-                    entryObject.get("threshold").getAsDouble(),
+                    requireNumber(entryObject, "threshold"),
                     parseNode(requireObject(entryObject, "model"))));
             }
         }
-        ItemModelNode fallback = node.has("fallback") ? parseNode(requireObject(node, "fallback")) : null;
-        return new ItemModelNode.RangeDispatchNode(property, scale, List.copyOf(entries), fallback);
+        return new ItemModelNode.RangeDispatchNode(property, scale, List.copyOf(entries), parseFallback(node));
     }
 
     private static ItemModelNode parseComposite(JsonObject node) {
@@ -95,7 +95,9 @@ public class PackJsonParser {
 
     static JsonObject parseObject(byte[] json) {
         try (InputStreamReader reader = new InputStreamReader(new ByteArrayInputStream(json), StandardCharsets.UTF_8)) {
-            JsonElement element = JsonParser.parseReader(reader);
+            JsonReader jsonReader = new JsonReader(reader);
+            jsonReader.setStrictness(Strictness.STRICT);
+            JsonElement element = JsonParser.parseReader(jsonReader);
             if (!element.isJsonObject()) {
                 throw new PackLoadException("Expected a JSON object at pack file root");
             }
@@ -103,6 +105,10 @@ public class PackJsonParser {
         } catch (JsonSyntaxException | java.io.IOException | IllegalStateException e) {
             throw new PackLoadException("Malformed pack JSON", e);
         }
+    }
+
+    private static ItemModelNode parseFallback(JsonObject node) {
+        return node.has("fallback") ? parseNode(requireObject(node, "fallback")) : null;
     }
 
     private static String normalize(String type) {
@@ -113,6 +119,21 @@ public class PackJsonParser {
         JsonElement element = node.get(member);
         if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString()) {
             throw new PackLoadException("Item definition node is missing string member '%s'", member);
+        }
+        return element.getAsString();
+    }
+
+    private static double requireNumber(JsonObject node, String member) {
+        JsonElement element = node.get(member);
+        if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isNumber()) {
+            throw new PackLoadException("Item definition node is missing numeric member '%s'", member);
+        }
+        return element.getAsDouble();
+    }
+
+    private static String asString(JsonElement element, String description) {
+        if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString()) {
+            throw new PackLoadException("Expected string for %s", description);
         }
         return element.getAsString();
     }

@@ -93,4 +93,44 @@ class PackJsonParserTest {
     void rejectsNodeWithoutType() {
         assertThrows(PackLoadException.class, () -> parse("{\"model\":{\"model\":\"testpack:item/x\"}}"));
     }
+
+    @Test
+    void selectWhenNullIsRejected() {
+        assertThrows(PackLoadException.class, () -> parse("""
+            {"model":{"type":"select","property":"display_context",
+              "cases":[{"when":null,"model":{"type":"model","model":"t:x"}}]}}"""));
+    }
+
+    @Test
+    void selectWhenObjectIsRejected() {
+        assertThrows(PackLoadException.class, () -> parse("""
+            {"model":{"type":"select","property":"display_context",
+              "cases":[{"when":{},"model":{"type":"model","model":"t:x"}}]}}"""));
+    }
+
+    @Test
+    void selectWhenArrayWithNullElementIsRejected() {
+        assertThrows(PackLoadException.class, () -> parse("""
+            {"model":{"type":"select","property":"display_context",
+              "cases":[{"when":["gui",null],"model":{"type":"model","model":"t:x"}}]}}"""));
+    }
+
+    @Test
+    void rangeDispatchMissingThresholdIsRejected() {
+        assertThrows(PackLoadException.class, () -> parse("""
+            {"model":{"type":"range_dispatch","property":"cooldown",
+              "entries":[{"model":{"type":"model","model":"t:x"}}]}}"""));
+    }
+
+    @Test
+    void rangeDispatchWrongTypedScaleIsRejected() {
+        assertThrows(PackLoadException.class, () -> parse("""
+            {"model":{"type":"range_dispatch","property":"cooldown","scale":{},
+              "entries":[{"threshold":0.5,"model":{"type":"model","model":"t:x"}}]}}"""));
+    }
+
+    @Test
+    void lenientJsonIsRejected() {
+        assertThrows(PackLoadException.class, () -> parse("{model: {type: 'model', model: 'x'}}"));
+    }
 }
