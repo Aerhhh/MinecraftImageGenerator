@@ -16,7 +16,8 @@ import java.util.zip.ZipFile;
 /**
  * {@link PackSource} over a pack ZIP. Entry names are validated once at construction (zip-slip,
  * entry-count cap); reads enforce the byte cap on actual decompressed bytes because ZIP size
- * headers can lie.
+ * headers can lie. The entry-count cap bounds total central-directory records iterated (files
+ * AND directory entries), so a ZIP padded with directory records cannot bypass it.
  */
 @Slf4j
 final class ZipPackSource implements PackSource {
@@ -34,7 +35,7 @@ final class ZipPackSource implements PackSource {
         }
         try {
             this.entryNames = indexEntries();
-        } catch (PackLoadException e) {
+        } catch (RuntimeException e) {
             closeQuietly();
             throw e;
         }
@@ -43,8 +44,14 @@ final class ZipPackSource implements PackSource {
     private Set<String> indexEntries() {
         Set<String> names = new HashSet<>();
         Enumeration<? extends ZipEntry> entries = zipFile.entries();
+        int recordCount = 0;
         while (entries.hasMoreElements()) {
             ZipEntry entry = entries.nextElement();
+            recordCount++;
+            if (recordCount > limits.maxEntries()) {
+                throw new PackLoadException("Pack ZIP exceeds max entry count (%s)",
+                    String.valueOf(limits.maxEntries()));
+            }
             if (entry.isDirectory()) {
                 continue;
             }
@@ -53,10 +60,6 @@ final class ZipPackSource implements PackSource {
                 throw new PackLoadException("Pack ZIP contains unsafe entry name: %s", name);
             }
             names.add(name);
-            if (names.size() > limits.maxEntries()) {
-                throw new PackLoadException("Pack ZIP exceeds max entry count (%s)",
-                    String.valueOf(limits.maxEntries()));
-            }
         }
         return names;
     }

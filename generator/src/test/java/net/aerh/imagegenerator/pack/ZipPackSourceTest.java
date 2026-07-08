@@ -8,11 +8,13 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -61,6 +63,22 @@ class ZipPackSourceTest {
     void rejectsTooManyEntries() throws IOException {
         Path zip = writeZip(Map.of("a", new byte[1], "b", new byte[1], "c", new byte[1], "d", new byte[1]));
         assertThrows(PackLoadException.class, () -> PackSource.zip(zip, LIMITS));
+    }
+
+    @Test
+    void rejectsDirectoryPaddedZipExceedingEntryCap() throws IOException {
+        Path zip = writeZip(Map.of(
+            "a", new byte[1],
+            "d1/", new byte[0], "d2/", new byte[0], "d3/", new byte[0], "d4/", new byte[0]));
+        assertThrows(PackLoadException.class, () -> PackSource.zip(zip, LIMITS));
+    }
+
+    @Test
+    void acceptsZipWithExactlyMaxEntries() throws IOException {
+        Path zip = writeZip(Map.of("a", new byte[1], "b", new byte[1], "c", new byte[1]));
+        try (PackSource source = PackSource.zip(zip, LIMITS)) {
+            assertEquals(List.of("a", "b", "c"), source.list(""));
+        }
     }
 
     @Test
