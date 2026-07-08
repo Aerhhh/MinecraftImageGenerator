@@ -28,4 +28,8 @@ public interface PackSource extends Closeable {
     static PackSource directory(Path root, PackLimits limits) {
         return new DirectoryPackSource(root, limits);
     }
+
+    static PackSource zip(Path zipFile, PackLimits limits) {
+        return new ZipPackSource(zipFile, limits);
+    }
 }

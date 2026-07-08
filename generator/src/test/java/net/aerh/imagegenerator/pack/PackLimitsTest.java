@@ -36,4 +36,14 @@ class PackLimitsTest {
         assertEquals(64, limits.maxTextureDim());
         assertEquals(2048L, limits.textureCacheMaxBytes());
     }
+
+    @Test
+    void boundedReadLimitIsCapPlusOne() {
+        assertEquals(33, new PackLimits(1, 32, 1, 1).boundedReadLimit());
+    }
+
+    @Test
+    void boundedReadLimitClampsHugeCaps() {
+        assertEquals(Integer.MAX_VALUE - 8, new PackLimits(1, Long.MAX_VALUE, 1, 1).boundedReadLimit());
+    }
 }

@@ -14,4 +14,13 @@ public record PackLimits(int maxEntries, long maxEntryBytes, int maxTextureDim, 
             Long.getLong("generator.pack.textureCache.maxBytes", 64L * 1024 * 1024)
         );
     }
+
+    /**
+     * The array-safe number of bytes to request when enforcing {@link #maxEntryBytes()} with a
+     * single bounded read: cap + 1 so an over-limit entry is detectable, clamped to the maximum
+     * JVM array size for huge caps.
+     */
+    public int boundedReadLimit() {
+        return maxEntryBytes() >= Integer.MAX_VALUE - 8 ? Integer.MAX_VALUE - 8 : (int) maxEntryBytes() + 1;
+    }
 }

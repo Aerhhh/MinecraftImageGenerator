@@ -44,9 +44,7 @@ final class DirectoryPackSource implements PackSource {
                 throw new PackLoadException("Pack path escapes pack root: %s", assetPath);
             }
             try (InputStream in = Files.newInputStream(resolved)) {
-                long cap = limits.maxEntryBytes();
-                int readLimit = cap >= Integer.MAX_VALUE - 8 ? Integer.MAX_VALUE - 8 : (int) cap + 1;
-                byte[] data = in.readNBytes(readLimit);
+                byte[] data = in.readNBytes(limits.boundedReadLimit());
                 if (data.length > limits.maxEntryBytes()) {
                     throw new PackLoadException("Pack file %s exceeds max entry size (%s bytes)",
                         assetPath, String.valueOf(limits.maxEntryBytes()));
