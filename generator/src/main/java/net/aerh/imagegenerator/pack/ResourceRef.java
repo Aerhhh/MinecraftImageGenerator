@@ -14,7 +14,7 @@ public record ResourceRef(String namespace, String path) {
     private static final Pattern PATH = Pattern.compile("[a-z0-9_.-]+(/[a-z0-9_.-]+)*");
 
     public ResourceRef {
-        if (namespace == null || !NAMESPACE.matcher(namespace).matches()) {
+        if (namespace == null || !NAMESPACE.matcher(namespace).matches() || namespace.contains("..")) {
             throw new IllegalArgumentException("Invalid resource namespace: " + namespace);
         }
         if (path == null || !PATH.matcher(path).matches() || path.contains("..")) {
