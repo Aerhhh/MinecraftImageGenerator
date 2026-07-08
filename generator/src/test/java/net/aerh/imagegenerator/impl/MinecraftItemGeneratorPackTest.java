@@ -1,7 +1,9 @@
 package net.aerh.imagegenerator.impl;
 
 import net.aerh.imagegenerator.cache.GeneratorCacheKey;
+import net.aerh.imagegenerator.effect.EffectPipeline;
 import net.aerh.imagegenerator.exception.GeneratorException;
+import net.aerh.imagegenerator.exception.PackResolveException;
 import net.aerh.imagegenerator.pack.PackId;
 import net.aerh.imagegenerator.pack.PackLimits;
 import net.aerh.imagegenerator.pack.PackRepository;
@@ -77,6 +79,18 @@ class MinecraftItemGeneratorPackTest {
     }
 
     @Test
+    void unregisteredPackThrowsNamingThePack() {
+        MinecraftItemGenerator generator = new MinecraftItemGenerator.Builder()
+            .withPack(PackId.parse("ghost:pack"))
+            .withPackRepository(new PackRepository())
+            .withItem("stone")
+            .build();
+        PackResolveException exception = assertThrows(PackResolveException.class, generator::generate);
+        assertTrue(exception.getMessage().contains("ghost:pack"),
+            "unregistered packs fail fast at render time, never silently fall back to vanilla");
+    }
+
+    @Test
     void enchantEffectAppliesToPackSprites() {
         var generated = packBuilder("testpack:item/simple").isEnchanted(true).build().generate();
         assertTrue(generated.isAnimated(), "glint pipeline runs on pack sprites too");
@@ -102,5 +116,26 @@ class MinecraftItemGeneratorPackTest {
         MinecraftItemGenerator withoutPack = new MinecraftItemGenerator.Builder()
             .withItem("testpack:item/simple").build();
         assertNotEquals(GeneratorCacheKey.fromGenerator(withPack), GeneratorCacheKey.fromGenerator(withoutPack));
+    }
+
+    @Test
+    void cacheKeysIgnoreRepositoryInstance() {
+        // Hold the effect pipeline constant: GeneratorCacheKey stringifies it via identity hash
+        // (pre-existing behavior), so a shared instance isolates the repository as the only variable.
+        EffectPipeline sharedPipeline = new EffectPipeline.Builder().build();
+        MinecraftItemGenerator first = new MinecraftItemGenerator.Builder()
+            .withPack(packId)
+            .withPackRepository(repository)
+            .withEffectPipeline(sharedPipeline)
+            .withItem("testpack:item/simple")
+            .build();
+        MinecraftItemGenerator second = new MinecraftItemGenerator.Builder()
+            .withPack(packId)
+            .withPackRepository(new PackRepository())
+            .withEffectPipeline(sharedPipeline)
+            .withItem("testpack:item/simple")
+            .build();
+        assertEquals(GeneratorCacheKey.fromGenerator(first), GeneratorCacheKey.fromGenerator(second),
+            "the transient repository seam must not split the cache key");
     }
 }

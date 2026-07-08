@@ -115,7 +115,8 @@ public class MinecraftItemGenerator implements Generator {
     }
 
     private BufferedImage resolveBaseTexture() {
-        if (packId != null && !PackId.VANILLA.equals(packId)) {
+        boolean usingPack = packId != null && !PackId.VANILLA.equals(packId);
+        if (usingPack) {
             var packSprite = packRepository.resolve(packId, itemId);
             if (packSprite.isPresent()) {
                 return PackSprites.scaleToCanvas(packSprite.get(), 256);
@@ -123,7 +124,7 @@ public class MinecraftItemGenerator implements Generator {
         }
         BufferedImage vanilla = Spritesheet.getTexture(itemId.toLowerCase());
         if (vanilla == null) {
-            if (packId != null && !PackId.VANILLA.equals(packId)) {
+            if (usingPack) {
                 throw new GeneratorException("Item with ID `%s` not found in pack `%s` or vanilla",
                     itemId, packId.toString());
             }
