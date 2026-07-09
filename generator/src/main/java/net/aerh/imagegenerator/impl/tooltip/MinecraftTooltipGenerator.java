@@ -22,6 +22,7 @@ import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.pack.PackId;
 import net.aerh.imagegenerator.pack.PackRepository;
 import net.aerh.imagegenerator.pack.TooltipSprites;
+import net.aerh.imagegenerator.text.TextColorRemap;
 import net.aerh.imagegenerator.parser.text.RarityFooterParser;
 import net.aerh.imagegenerator.text.ChatFormat;
 import net.aerh.imagegenerator.text.segment.LineSegment;
@@ -54,10 +55,11 @@ public class MinecraftTooltipGenerator implements Generator {
     private final int maxLineLength;
     private final boolean renderBorder;
     private final int scaleFactor;
-    // packId and tooltipStyle are final non-transient so they enter the render cache key;
-    // the repository reference is transient so instances never split it (item generator seam).
+    // packId, tooltipStyle, and textColorRemap are final non-transient so they enter the render
+    // cache key; the repository reference is transient so instances never split it.
     private final PackId packId;
     private final String tooltipStyle;
+    private final TextColorRemap textColorRemap;
     private final transient PackRepository packRepository;
 
     @Override
@@ -114,7 +116,8 @@ public class MinecraftTooltipGenerator implements Generator {
             .withAlpha(Range.between(0, 255).fit(settings.getAlpha()))
             .withScaleFactor(settings.getScaleFactor())
             .withAprilFools(settings.isAprilFools())
-            .withThemeSprites(resolveThemeSprites());
+            .withThemeSprites(resolveThemeSprites())
+            .withTextColorRemap(textColorRemap);
 
         if (settings.getName() != null && !settings.getName().isEmpty()) {
             String name = settings.getName();
@@ -188,10 +191,12 @@ public class MinecraftTooltipGenerator implements Generator {
         private boolean renderBorder = true;
         private transient int scaleFactor = 1;
         // pack and tooltipStyle are non-transient on purpose: buildSlashCommand round-trips them
-        // as "pack:" and "tooltip_style:" options; the repository seam must never leak there.
+        // as "pack:" and "tooltip_style:" options. The repository seam and the color remap are
+        // transient: neither is a user-facing command option.
         private PackId pack;
         private String tooltipStyle;
         private transient PackRepository packRepository;
+        private transient TextColorRemap textColorRemap;
 
         public MinecraftTooltipGenerator.Builder withName(String itemName) {
             this.itemName = itemName;
@@ -274,6 +279,16 @@ public class MinecraftTooltipGenerator implements Generator {
 
         public MinecraftTooltipGenerator.Builder withPackRepository(PackRepository packRepository) {
             this.packRepository = packRepository;
+            return this;
+        }
+
+        /**
+         * Applies a shader-equivalent text color replacement table to every drawn segment
+         * (text, shadow, strikethrough, underline). Consumers own the table; it typically
+         * mirrors the selected pack's core text shader palette swap.
+         */
+        public MinecraftTooltipGenerator.Builder withTextColorRemap(TextColorRemap textColorRemap) {
+            this.textColorRemap = textColorRemap;
             return this;
         }
 
@@ -495,6 +510,7 @@ public class MinecraftTooltipGenerator implements Generator {
                 scaleFactor,
                 pack,
                 tooltipStyle,
+                textColorRemap,
                 packRepository
             );
         }

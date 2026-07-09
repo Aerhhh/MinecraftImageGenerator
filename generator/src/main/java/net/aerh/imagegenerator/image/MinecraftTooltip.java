@@ -8,6 +8,7 @@ import net.aerh.imagegenerator.builder.ClassBuilder;
 import net.aerh.imagegenerator.pack.GuiSpriteRenderer;
 import net.aerh.imagegenerator.pack.TooltipSprites;
 import net.aerh.imagegenerator.text.ChatFormat;
+import net.aerh.imagegenerator.text.TextColorRemap;
 import net.aerh.imagegenerator.text.MinecraftFont;
 import net.aerh.imagegenerator.text.segment.ColorSegment;
 import net.aerh.imagegenerator.text.segment.LineSegment;
@@ -67,6 +68,7 @@ public class MinecraftTooltip {
     private final int scaleFactor;
     private final boolean aprilFools;
     private final TooltipSprites themeSprites;
+    private final TextColorRemap textColorRemap;
 
     // Scaled values based on scale factor
     private final int pixelSize;
@@ -104,8 +106,9 @@ public class MinecraftTooltip {
      * @param scaleFactor         The scale factor to apply to all pixel sizes.
      * @param aprilFools          Whether to randomly swap characters to alternate fonts.
      * @param themeSprites        Pack tooltip sprites replacing the programmatic chrome, or null.
+     * @param textColorRemap      Shader-equivalent text color replacement table, or null.
      */
-    private MinecraftTooltip(List<LineSegment> lines, ChatFormat defaultColor, int alpha, int padding, boolean firstLinePadding, boolean renderBorder, boolean centeredText, int frameDelayMs, int animationFrameCount, int scaleFactor, boolean aprilFools, TooltipSprites themeSprites) {
+    private MinecraftTooltip(List<LineSegment> lines, ChatFormat defaultColor, int alpha, int padding, boolean firstLinePadding, boolean renderBorder, boolean centeredText, int frameDelayMs, int animationFrameCount, int scaleFactor, boolean aprilFools, TooltipSprites themeSprites, TextColorRemap textColorRemap) {
         this.lines = lines;
         this.currentColor = defaultColor;
         this.alpha = alpha;
@@ -118,6 +121,7 @@ public class MinecraftTooltip {
         this.scaleFactor = scaleFactor;
         this.aprilFools = aprilFools;
         this.themeSprites = themeSprites;
+        this.textColorRemap = textColorRemap;
 
         this.pixelSize = DEFAULT_PIXEL_SIZE * scaleFactor;
         // Themed tooltips use the vanilla sprite-rect model: background and frame cover ONE rect
@@ -588,11 +592,11 @@ public class MinecraftTooltip {
         }
 
         // Draw Drop Shadow Text
-        frameGraphics.setColor(this.currentColor.getBackgroundColor());
+        frameGraphics.setColor(shadowColor());
         frameGraphics.drawString(textToDraw, this.locationX + pixelSize, this.locationY + pixelSize);
 
         // Draw Text
-        frameGraphics.setColor(this.currentColor.getColor());
+        frameGraphics.setColor(foregroundColor());
         frameGraphics.drawString(textToDraw, this.locationX, this.locationY);
 
         // Draw Strikethrough
@@ -620,9 +624,21 @@ public class MinecraftTooltip {
             yPosition += pixelSize;
         }
 
-        frameGraphics.setColor(dropShadow ? this.currentColor.getBackgroundColor() : this.currentColor.getColor());
+        frameGraphics.setColor(dropShadow ? shadowColor() : foregroundColor());
         frameGraphics.drawLine(xPosition1, yPosition, xPosition2, yPosition);
         frameGraphics.drawLine(xPosition1, yPosition + 1, xPosition2, yPosition + 1);
+    }
+
+    /** Single source for drawn text color, with the shader-equivalent remap applied when present. */
+    private Color foregroundColor() {
+        Color color = this.currentColor.getColor();
+        return this.textColorRemap != null ? this.textColorRemap.foreground(color) : color;
+    }
+
+    /** Single source for drawn shadow color; remapped shadows derive from the remapped foreground. */
+    private Color shadowColor() {
+        Color shadow = this.currentColor.getBackgroundColor();
+        return this.textColorRemap != null ? this.textColorRemap.shadow(this.currentColor.getColor(), shadow) : shadow;
     }
 
     /**
@@ -753,6 +769,7 @@ public class MinecraftTooltip {
         private int scaleFactor = 1;
         private boolean aprilFools = false;
         private TooltipSprites themeSprites;
+        private TextColorRemap textColorRemap;
 
         public Builder hasFirstLinePadding() {
             return this.hasFirstLinePadding(true);
@@ -842,6 +859,11 @@ public class MinecraftTooltip {
             return this;
         }
 
+        public Builder withTextColorRemap(TextColorRemap textColorRemap) {
+            this.textColorRemap = textColorRemap;
+            return this;
+        }
+
         @Override
         public @NotNull MinecraftTooltip build() {
             return new MinecraftTooltip(
@@ -856,7 +878,8 @@ public class MinecraftTooltip {
                 this.animationFrameCount,
                 this.scaleFactor,
                 this.aprilFools,
-                this.themeSprites
+                this.themeSprites,
+                this.textColorRemap
             );
         }
     }
