@@ -5,6 +5,7 @@ import net.aerh.imagegenerator.exception.PackResolveException;
 
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -83,12 +84,49 @@ public final class PackRepository {
      * @throws PackResolveException when the pack is not registered, or the item exists but is broken
      */
     public Optional<BufferedImage> resolve(PackId packId, String itemRef) {
+        return requireRegistered(packId).resolveSprite(itemRef);
+    }
+
+    /**
+     * Resolves a tooltip style ref (the {@code minecraft:tooltip_style} component value) against
+     * a registered pack.
+     *
+     * @return empty when the pack defines no such style - callers decide the fallback policy
+     * @throws IllegalArgumentException when the style ref itself is malformed
+     * @throws PackResolveException     when the pack is not registered, or the style exists but
+     *                                  is broken (missing sprite, malformed gui scaling mcmeta)
+     */
+    public Optional<TooltipSprites> resolveTooltipSprites(PackId packId, String styleRef) {
+        return requireRegistered(packId).resolveTooltipSprites(styleRef);
+    }
+
+    /**
+     * Resolves a registered pack's override of the styleless default tooltip
+     * ({@code minecraft:tooltip/background} + {@code frame}).
+     *
+     * @return empty when the pack does not override the default tooltip
+     * @throws PackResolveException when the pack is not registered, or only one sprite is present
+     */
+    public Optional<TooltipSprites> resolveDefaultTooltipSprites(PackId packId) {
+        return requireRegistered(packId).resolveDefaultTooltipSprites();
+    }
+
+    /**
+     * Sorted tooltip style refs defined by a registered pack, for discovery/autocomplete.
+     *
+     * @throws PackResolveException when the pack is not registered
+     */
+    public List<String> tooltipStyles(PackId packId) {
+        return requireRegistered(packId).tooltipStyleRefs();
+    }
+
+    private LoadedPack requireRegistered(PackId packId) {
         LoadedPack pack = packs.get(packId);
         if (pack == null) {
             throw new PackResolveException("Pack `%s` is not registered (registered: %s)",
                 packId.toString(), registeredPacks().toString());
         }
-        return pack.resolveSprite(itemRef);
+        return pack;
     }
 
     public Set<PackId> registeredPacks() {

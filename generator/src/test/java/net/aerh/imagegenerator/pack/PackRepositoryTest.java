@@ -78,6 +78,23 @@ class PackRepositoryTest {
     }
 
     @Test
+    void resolvesTooltipStylesThroughRegisteredPack() {
+        PackId id = repository.register("test:pack", fixtureSource());
+        assertTrue(repository.resolveTooltipSprites(id, "testpack:fancy").isPresent());
+        assertTrue(repository.tooltipStyles(id).contains("testpack:fancy"));
+        assertEquals(Optional.empty(), repository.resolveDefaultTooltipSprites(id),
+            "fixture pack does not override the vanilla default tooltip");
+    }
+
+    @Test
+    void tooltipResolutionOnUnregisteredPackThrows() {
+        PackId id = PackId.parse("no:pack");
+        assertThrows(PackResolveException.class, () -> repository.resolveTooltipSprites(id, "testpack:fancy"));
+        assertThrows(PackResolveException.class, () -> repository.resolveDefaultTooltipSprites(id));
+        assertThrows(PackResolveException.class, () -> repository.tooltipStyles(id));
+    }
+
+    @Test
     void registerNullSourceThrowsNpe() {
         assertThrows(NullPointerException.class, () -> repository.register("x:y", null));
     }

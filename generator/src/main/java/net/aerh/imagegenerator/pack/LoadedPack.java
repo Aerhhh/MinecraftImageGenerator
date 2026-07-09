@@ -27,9 +27,22 @@ final class LoadedPack {
 
     private static final Pattern ITEM_PATH = Pattern.compile("assets/([^/]+)/items/(.+)\\.json");
     private static final Pattern MODEL_PATH = Pattern.compile("assets/([^/]+)/models/(.+)\\.json");
+    private static final Pattern TOOLTIP_SPRITE_PATH =
+        Pattern.compile("assets/([^/]+)/textures/gui/sprites/tooltip/(.+)\\.png");
+    private static final String BACKGROUND_SUFFIX = "_background";
+    private static final String FRAME_SUFFIX = "_frame";
+    // The styleless default tooltip is the fixed minecraft:tooltip/background + frame sprite
+    // pair, not a <style>_background naming-convention entry.
+    private static final String DEFAULT_BACKGROUND_PATH = "assets/minecraft/textures/gui/sprites/tooltip/background.png";
+    private static final String DEFAULT_FRAME_PATH = "assets/minecraft/textures/gui/sprites/tooltip/frame.png";
     private static final int MAX_PARENT_DEPTH = 8;
 
     private record ItemEntry(ItemModelNode node, String error) {
+    }
+
+    private static final class TooltipStyleEntry {
+        private String backgroundPath;
+        private String framePath;
     }
 
     private final PackId id;
@@ -38,6 +51,8 @@ final class LoadedPack {
     private final Set<String> namespaces = new HashSet<>();
     private final Map<String, ItemEntry> items = new HashMap<>();
     private final Map<String, ModelInfo> models = new HashMap<>();
+    private final Map<String, TooltipStyleEntry> tooltipStyles = new HashMap<>();
+    private boolean hasTooltipSprites;
     private final LoadingCache<String, BufferedImage> textureCache;
 
     LoadedPack(PackId id, PackSource source, PackLimits limits) {
@@ -89,10 +104,18 @@ final class LoadedPack {
                     errors++;
                     log.warn("Pack {}: skipping malformed model {}: {}", id, path, e.getMessage());
                 }
+                continue;
+            }
+            Matcher tooltipMatcher = TOOLTIP_SPRITE_PATH.matcher(path);
+            if (tooltipMatcher.matches()) {
+                hasTooltipSprites = true;
+                indexTooltipSprite(tooltipMatcher.group(1), tooltipMatcher.group(2), path);
             }
         }
-        if (items.isEmpty()) {
-            throw new PackLoadException("Pack %s contains no item definitions under assets/*/items/", id.toString());
+        if (items.isEmpty() && !hasTooltipSprites) {
+            throw new PackLoadException(
+                "Pack %s contains no item definitions under assets/*/items/ and no tooltip sprites under assets/*/textures/gui/sprites/tooltip/",
+                id.toString());
         }
         if (errors > 0) {
             log.warn("Pack {}: indexed {} items and {} models with {} malformed entries",
@@ -100,6 +123,106 @@ final class LoadedPack {
         } else {
             log.info("Pack {}: indexed {} items and {} models", id, items.size(), models.size());
         }
+    }
+
+    private void indexTooltipSprite(String namespace, String spriteName, String path) {
+        String styleName;
+        boolean isBackground;
+        if (spriteName.endsWith(BACKGROUND_SUFFIX)) {
+            styleName = spriteName.substring(0, spriteName.length() - BACKGROUND_SUFFIX.length());
+            isBackground = true;
+        } else if (spriteName.endsWith(FRAME_SUFFIX)) {
+            styleName = spriteName.substring(0, spriteName.length() - FRAME_SUFFIX.length());
+            isBackground = false;
+        } else {
+            return;
+        }
+        if (styleName.isEmpty()) {
+            log.warn("Pack {}: ignoring tooltip sprite with empty style name: {}", id, path);
+            return;
+        }
+        TooltipStyleEntry entry = tooltipStyles.computeIfAbsent(namespace + ":" + styleName,
+            key -> new TooltipStyleEntry());
+        if (isBackground) {
+            entry.backgroundPath = path;
+        } else {
+            entry.framePath = path;
+        }
+    }
+
+    /**
+     * Resolves a tooltip style ref (the {@code minecraft:tooltip_style} component value, e.g.
+     * {@code hypixel_skyblock:epic}; a bare ref defaults to the {@code minecraft} namespace) to
+     * its background and frame sprites.
+     *
+     * @return empty when the pack defines no such style - callers decide the fallback policy
+     * @throws IllegalArgumentException when the style ref itself is malformed (caller input)
+     * @throws PackResolveException     when the style exists but is broken (a sprite is missing
+     *                                  or its gui scaling mcmeta is malformed)
+     */
+    public Optional<TooltipSprites> resolveTooltipSprites(String styleRef) {
+        ResourceRef ref = ResourceRef.parse(styleRef, "minecraft");
+        TooltipStyleEntry entry = tooltipStyles.get(ref.toString());
+        if (entry == null) {
+            return Optional.empty();
+        }
+        if (entry.backgroundPath == null || entry.framePath == null) {
+            throw new PackResolveException("Tooltip style `%s` in pack `%s` is missing its %s sprite",
+                ref.toString(), id.toString(), entry.backgroundPath == null ? "background" : "frame");
+        }
+        return Optional.of(new TooltipSprites(loadGuiSprite(entry.backgroundPath), loadGuiSprite(entry.framePath)));
+    }
+
+    /**
+     * Resolves the pack's override of the styleless default tooltip
+     * ({@code minecraft:tooltip/background} + {@code frame}).
+     *
+     * @return empty when the pack does not override the default tooltip
+     * @throws PackResolveException when only one of the two sprites is present
+     */
+    public Optional<TooltipSprites> resolveDefaultTooltipSprites() {
+        boolean hasBackground = source.exists(DEFAULT_BACKGROUND_PATH);
+        boolean hasFrame = source.exists(DEFAULT_FRAME_PATH);
+        if (!hasBackground && !hasFrame) {
+            return Optional.empty();
+        }
+        if (!hasBackground || !hasFrame) {
+            throw new PackResolveException("Pack `%s` overrides only the default tooltip %s sprite; both are required",
+                id.toString(), hasBackground ? "background" : "frame");
+        }
+        return Optional.of(new TooltipSprites(loadGuiSprite(DEFAULT_BACKGROUND_PATH), loadGuiSprite(DEFAULT_FRAME_PATH)));
+    }
+
+    /**
+     * Style refs with both sprites present, sorted, for discovery/autocomplete. A style listed
+     * here can still fail at resolve time (e.g. malformed gui scaling mcmeta) - loudly.
+     */
+    public List<String> tooltipStyleRefs() {
+        return tooltipStyles.entrySet().stream()
+            .filter(entry -> entry.getValue().backgroundPath != null && entry.getValue().framePath != null)
+            .map(Map.Entry::getKey)
+            .sorted()
+            .toList();
+    }
+
+    private GuiSprite loadGuiSprite(String texturePath) {
+        // Defensive copy: the cache instance is shared and GuiSprite hands the image to callers.
+        return new GuiSprite(copy(textureCache.get(texturePath)), guiScalingFor(texturePath));
+    }
+
+    private GuiScaling guiScalingFor(String texturePath) {
+        String mcmetaPath = texturePath + ".mcmeta";
+        if (!source.exists(mcmetaPath)) {
+            return new GuiScaling.Stretch();
+        }
+        McMeta meta;
+        try {
+            meta = PackJsonParser.parseMcmeta(source.read(mcmetaPath));
+        } catch (PackLoadException e) {
+            throw new PackResolveException(GeneratorException.formatMessage(
+                "Gui sprite mcmeta `%s` in pack `%s` is malformed: %s", mcmetaPath, id.toString(), e.getMessage()), e);
+        }
+        return meta.guiScaling() != null ? meta.guiScaling() : new GuiScaling.Stretch();
     }
 
     /**
@@ -196,7 +319,10 @@ final class LoadedPack {
         String mcmetaPath = texturePath + ".mcmeta";
         if (source.exists(mcmetaPath)) {
             try {
-                return TextureDecoder.firstFrame(image, PackJsonParser.parseAnimationMeta(source.read(mcmetaPath)));
+                McMeta meta = PackJsonParser.parseMcmeta(source.read(mcmetaPath));
+                if (meta.animation() != null) {
+                    return TextureDecoder.firstFrame(image, meta.animation());
+                }
             } catch (PackLoadException e) {
                 log.warn("Pack {}: ignoring malformed mcmeta for {}: {}", id, texturePath, e.getMessage());
             }
