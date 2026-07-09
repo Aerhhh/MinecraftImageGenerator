@@ -120,8 +120,17 @@ class PackJsonParser {
         return new ModelInfo(parent, layer0);
     }
 
-    public static AnimationMeta parseAnimationMeta(byte[] json) {
+    public static McMeta parseMcmeta(byte[] json) {
         JsonObject root = parseObject(json);
+        AnimationMeta animation = root.has("animation") ? parseAnimationSection(root) : null;
+        return new McMeta(animation, parseGuiSection(root));
+    }
+
+    public static AnimationMeta parseAnimationMeta(byte[] json) {
+        return parseAnimationSection(parseObject(json));
+    }
+
+    private static AnimationMeta parseAnimationSection(JsonObject root) {
         if (!root.has("animation") || !root.get("animation").isJsonObject()) {
             throw new PackLoadException("Texture mcmeta has no 'animation' section");
         }
@@ -136,6 +145,98 @@ class PackJsonParser {
         Integer width = optionalInt(animation, "width");
         Integer height = optionalInt(animation, "height");
         return new AnimationMeta(firstFrameIndex, width, height);
+    }
+
+    private static GuiScaling parseGuiSection(JsonObject root) {
+        if (!root.has("gui")) {
+            return null;
+        }
+        JsonElement guiElement = root.get("gui");
+        if (!guiElement.isJsonObject()) {
+            throw new PackLoadException("Texture mcmeta 'gui' section must be an object");
+        }
+        JsonObject gui = guiElement.getAsJsonObject();
+        if (!gui.has("scaling")) {
+            return new GuiScaling.Stretch();
+        }
+        JsonElement scalingElement = gui.get("scaling");
+        if (!scalingElement.isJsonObject()) {
+            throw new PackLoadException("Texture mcmeta 'gui.scaling' must be an object");
+        }
+        JsonObject scaling = scalingElement.getAsJsonObject();
+        String type = normalize(requireScalingString(scaling));
+        try {
+            return switch (type) {
+                case "stretch" -> new GuiScaling.Stretch();
+                case "tile" -> new GuiScaling.Tile(
+                    requireScalingInt(scaling, "width"),
+                    requireScalingInt(scaling, "height"));
+                case "nine_slice" -> new GuiScaling.NineSlice(
+                    requireScalingInt(scaling, "width"),
+                    requireScalingInt(scaling, "height"),
+                    parseNineSliceBorder(scaling),
+                    optionalBoolean(scaling, "stretch_inner"));
+                default -> throw new PackLoadException("Unsupported gui scaling type '%s'", type);
+            };
+        } catch (IllegalArgumentException e) {
+            throw new PackLoadException("Invalid gui scaling values: " + e.getMessage(), e);
+        }
+    }
+
+    private static GuiScaling.NineSlice.Border parseNineSliceBorder(JsonObject scaling) {
+        JsonElement element = scaling.get("border");
+        if (element == null || element.isJsonNull()) {
+            throw new PackLoadException("nine_slice gui scaling is missing 'border'");
+        }
+        if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isNumber()) {
+            int uniform = integralInt(element, "border");
+            return new GuiScaling.NineSlice.Border(uniform, uniform, uniform, uniform);
+        }
+        if (element.isJsonObject()) {
+            JsonObject border = element.getAsJsonObject();
+            return new GuiScaling.NineSlice.Border(
+                requireScalingInt(border, "left"),
+                requireScalingInt(border, "top"),
+                requireScalingInt(border, "right"),
+                requireScalingInt(border, "bottom"));
+        }
+        throw new PackLoadException("nine_slice 'border' must be a number or an object with left/top/right/bottom");
+    }
+
+    private static String requireScalingString(JsonObject scaling) {
+        JsonElement element = scaling.get("type");
+        if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString()) {
+            throw new PackLoadException("gui scaling is missing string member 'type'");
+        }
+        return element.getAsString();
+    }
+
+    private static int requireScalingInt(JsonObject node, String member) {
+        JsonElement element = node.get(member);
+        if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isNumber()) {
+            throw new PackLoadException("gui scaling is missing numeric member '%s'", member);
+        }
+        return integralInt(element, member);
+    }
+
+    private static int integralInt(JsonElement element, String member) {
+        double value = element.getAsDouble();
+        int intValue = (int) value;
+        if (value != intValue) {
+            throw new PackLoadException("gui scaling member '%s' must be an integer, got %s", member, String.valueOf(value));
+        }
+        return intValue;
+    }
+
+    private static boolean optionalBoolean(JsonObject node, String member) {
+        JsonElement element = node.get(member);
+        if (element == null || element.isJsonNull()) {
+            return false;
+        }
+        if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isBoolean()) {
+            throw new PackLoadException("Expected boolean for member '%s'", member);
+        }
+        return element.getAsBoolean();
     }
 
     private static int firstFrameIndex(JsonElement first) {
