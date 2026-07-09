@@ -39,7 +39,7 @@ class ResourceRefTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"", "ns:", ":path", "ns:a:b", "NS:path", "ns:pa th", "ns:../escape", "ns:a//b", "ns:/abs",
-            "..:path", "a..b:x"})
+            "..:path", "a..b:x", "ns:./x", "ns:a/./b", "ns:."})
     void rejectsMalformedRefs(String input) {
         assertThrows(IllegalArgumentException.class, () -> ResourceRef.parse(input, null));
     }

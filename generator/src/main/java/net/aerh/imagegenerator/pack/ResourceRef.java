@@ -12,6 +12,11 @@ public record ResourceRef(String namespace, String path) {
     // Path segments: lowercase, digits, _ . -, separated by single slashes; no leading slash,
     // no '..'.
     private static final Pattern PATH = Pattern.compile("[a-z0-9_.-]+(/[a-z0-9_.-]+)*");
+    // A segment made up of nothing but dots ("." or "..") is a directory-traversal alias on both
+    // filesystems and inside ZIP archives; reject it explicitly so ZIP-backed and directory-backed
+    // packs enforce the same path rules (the plain ".." substring check above only catches the
+    // two-dot case, not a lone "." segment).
+    private static final Pattern DOT_ONLY_SEGMENT = Pattern.compile("\\.+");
 
     public ResourceRef {
         if (namespace == null || !NAMESPACE.matcher(namespace).matches() || namespace.contains("..")) {
@@ -19,6 +24,11 @@ public record ResourceRef(String namespace, String path) {
         }
         if (path == null || !PATH.matcher(path).matches() || path.contains("..")) {
             throw new IllegalArgumentException("Invalid resource path: " + path);
+        }
+        for (String segment : path.split("/")) {
+            if (DOT_ONLY_SEGMENT.matcher(segment).matches()) {
+                throw new IllegalArgumentException("Invalid resource path: " + path);
+            }
         }
     }
 

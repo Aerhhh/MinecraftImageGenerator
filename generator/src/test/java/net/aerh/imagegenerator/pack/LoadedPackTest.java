@@ -133,6 +133,13 @@ class LoadedPackTest {
     }
 
     @Test
+    void emptyCompositeThrowsInsteadOfSilentVanillaFallback() {
+        PackResolveException exception = assertThrows(PackResolveException.class,
+            () -> pack.resolveSprite("testpack:item/empty_composite"));
+        assertTrue(exception.getMessage().contains("empty_composite"));
+    }
+
+    @Test
     void resolvesBigTextureAtFullSize() {
         BufferedImage sprite = pack.resolveSprite("testpack:item/big").orElseThrow();
         assertEquals(32, sprite.getWidth());

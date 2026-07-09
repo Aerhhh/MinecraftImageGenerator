@@ -137,7 +137,14 @@ public final class LoadedPack {
             BufferedImage layer = textureCache.get(resolveLayer0(modelRef));
             sprite = sprite == null ? copy(layer) : stack(sprite, layer);
         }
-        return Optional.ofNullable(sprite);
+        if (modelRefs.isEmpty() || sprite == null) {
+            // An empty composite (or any resolution path that yields no layers) must fail loudly
+            // rather than silently falling back to vanilla: the item DOES exist in the pack, it is
+            // just broken, and that distinction matters to callers.
+            throw new PackResolveException("Item `%s` in pack `%s` resolved to zero renderable layers",
+                itemRef, id.toString());
+        }
+        return Optional.of(sprite);
     }
 
     private String resolveLayer0(String modelRefValue) {

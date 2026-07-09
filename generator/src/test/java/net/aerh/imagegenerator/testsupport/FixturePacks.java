@@ -122,6 +122,10 @@ public final class FixturePacks {
             // Malformed item JSON (indexed as an error entry)
             write(root, "assets/testpack/items/item/malformed.json", "{nope");
 
+            // Composite with zero models: resolves to zero renderable layers
+            item(root, "empty_composite", """
+                {"model":{"type":"composite","models":[]}}""");
+
             return root;
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to write fixture pack", e);

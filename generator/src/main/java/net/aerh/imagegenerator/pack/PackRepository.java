@@ -80,10 +80,17 @@ public final class PackRepository {
         return Set.copyOf(packs.keySet());
     }
 
+    /**
+     * Closes a pack source that failed registration, swallowing any failure from {@code close()}
+     * itself. Catches {@link Exception} rather than the declared {@link IOException}: a
+     * caller-supplied {@link PackSource} implementation whose {@code close()} throws an unchecked
+     * exception must not mask (or replace) the original registration failure that triggered this
+     * cleanup.
+     */
     private static void closeQuietly(PackSource source) {
         try {
             source.close();
-        } catch (IOException e) {
+        } catch (Exception e) {
             log.warn("Failed to close pack source after failed registration", e);
         }
     }

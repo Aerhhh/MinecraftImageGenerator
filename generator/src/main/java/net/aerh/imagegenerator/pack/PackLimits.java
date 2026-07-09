@@ -6,6 +6,25 @@ package net.aerh.imagegenerator.pack;
  */
 public record PackLimits(int maxEntries, long maxEntryBytes, int maxTextureDim, long textureCacheMaxBytes) {
 
+    public PackLimits {
+        if (maxEntries <= 0) {
+            throw new IllegalArgumentException(
+                "generator.pack.maxEntries must be positive, got: " + maxEntries);
+        }
+        if (maxEntryBytes <= 0) {
+            throw new IllegalArgumentException(
+                "generator.pack.maxEntryBytes must be positive, got: " + maxEntryBytes);
+        }
+        if (maxTextureDim <= 0) {
+            throw new IllegalArgumentException(
+                "generator.pack.maxTextureDim must be positive, got: " + maxTextureDim);
+        }
+        if (textureCacheMaxBytes <= 0) {
+            throw new IllegalArgumentException(
+                "generator.pack.textureCache.maxBytes must be positive, got: " + textureCacheMaxBytes);
+        }
+    }
+
     public static PackLimits fromSystemProperties() {
         return new PackLimits(
             Integer.getInteger("generator.pack.maxEntries", 20_000),
