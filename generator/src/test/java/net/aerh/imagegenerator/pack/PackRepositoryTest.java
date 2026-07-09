@@ -83,6 +83,26 @@ class PackRepositoryTest {
     }
 
     @Test
+    void registerWithCustomLimitsGovernsTextureDecodeForThatPack() {
+        // maxTextureDim=8 is smaller than the fixture pack's 16x16 "simple" item texture: proves
+        // the limits passed to THIS register() call - not the global default - reach the pack's
+        // texture decode path.
+        PackLimits tinyTextureLimits = new PackLimits(100, 1024, 8, 1024);
+        PackSource source = PackSource.directory(packDir, tinyTextureLimits);
+        PackId id = repository.register("test:tinylimits", source, tinyTextureLimits);
+        PackResolveException exception = assertThrows(PackResolveException.class,
+            () -> repository.resolve(id, "testpack:item/simple"));
+        assertTrue(exception.getMessage().contains("simple"));
+    }
+
+    @Test
+    void twoArgRegisterDelegatesToSystemPropertyDefaults() {
+        PackId id = repository.register("test:pack", fixtureSource());
+        assertTrue(repository.resolve(id, "testpack:item/simple").isPresent(),
+            "16x16 fixture texture resolves fine under the default 1024px maxTextureDim");
+    }
+
+    @Test
     void duplicateRegistrationClosesTheLosingSource() {
         repository.register("test:pack", fixtureSource());
         AtomicInteger closeCount = new AtomicInteger();

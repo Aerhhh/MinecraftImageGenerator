@@ -11,7 +11,7 @@ import java.util.List;
  * properties false, numeric properties 0), producing the ordered list of model refs to composite.
  */
 @UtilityClass
-public class GuiModelResolver {
+class GuiModelResolver {
 
     public static List<String> resolveGui(ItemModelNode root) {
         List<String> modelRefs = new ArrayList<>();

@@ -14,6 +14,7 @@ import java.awt.image.BufferedImage;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MinecraftInventoryGeneratorPackTest {
@@ -68,6 +69,12 @@ class MinecraftInventoryGeneratorPackTest {
             .build()
             .generate();
         assertNotNull(inventory.getImage());
+    }
+
+    @Test
+    void withPackStringParses() {
+        assertThrows(IllegalArgumentException.class,
+            () -> new MinecraftInventoryGenerator.Builder().withPack("not-a-pack-id"));
     }
 
     /**

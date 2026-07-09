@@ -23,7 +23,7 @@ import java.util.Set;
  * item models, and texture animation mcmeta.
  */
 @UtilityClass
-public class PackJsonParser {
+class PackJsonParser {
 
     private static final String MINECRAFT_PREFIX = "minecraft:";
 

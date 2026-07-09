@@ -32,15 +32,30 @@ public final class PackRepository {
     }
 
     /**
-     * Loads and registers a pack. Eager and fail-fast: indexing errors that make the whole pack
-     * unusable throw {@link net.aerh.imagegenerator.exception.PackLoadException} here, not at render.
-     * On any failure the source is closed before the exception propagates; on success the
-     * repository owns the source for the lifetime of the process.
+     * Loads and registers a pack using {@link PackLimits#fromSystemProperties()} for texture
+     * decode and cache limits. See {@link #register(String, PackSource, PackLimits)}.
      *
      * @throws IllegalArgumentException on duplicate registration or the reserved vanilla ID
      */
     public PackId register(String packId, PackSource source) {
+        return register(packId, source, PackLimits.fromSystemProperties());
+    }
+
+    /**
+     * Loads and registers a pack with explicit limits. Eager and fail-fast: indexing errors that
+     * make the whole pack unusable throw {@link net.aerh.imagegenerator.exception.PackLoadException}
+     * here, not at render. On any failure the source is closed before the exception propagates; on
+     * success the repository owns the source for the lifetime of the process.
+     *
+     * <p>{@code limits} governs texture decode and the per-pack texture cache for this pack only;
+     * pass the same instance you gave the {@link PackSource} factory ({@link PackSource#directory}
+     * / {@link PackSource#zip}) so read-time and decode-time limits agree.
+     *
+     * @throws IllegalArgumentException on duplicate registration or the reserved vanilla ID
+     */
+    public PackId register(String packId, PackSource source, PackLimits limits) {
         Objects.requireNonNull(source, "source");
+        Objects.requireNonNull(limits, "limits");
         PackId id;
         LoadedPack loaded;
         try {
@@ -49,7 +64,7 @@ public final class PackRepository {
                 throw new IllegalArgumentException(
                     "minecraft:minecraft is the built-in vanilla pack and cannot be registered");
             }
-            loaded = new LoadedPack(id, source, PackLimits.fromSystemProperties());
+            loaded = new LoadedPack(id, source, limits);
             if (packs.putIfAbsent(id, loaded) != null) {
                 throw new IllegalArgumentException("Pack already registered: " + id);
             }

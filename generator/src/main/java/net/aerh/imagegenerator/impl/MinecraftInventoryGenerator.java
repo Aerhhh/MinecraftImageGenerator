@@ -556,10 +556,17 @@ public class MinecraftInventoryGenerator implements Generator {
          * Selects the resource pack to resolve every item slot from. Propagated to every
          * {@link MinecraftItemGenerator.Builder} built while rendering item slots. Null or
          * {@link PackId#VANILLA} renders from the built-in vanilla spritesheet exactly as before.
+         * Rendering with a pack that was never registered, or an item the pack cannot resolve,
+         * throws PackResolveException from {@code generate()}.
          */
         public Builder withPack(@Nullable PackId packId) {
             this.packId = packId;
             return this;
+        }
+
+        /** Convenience overload accepting {@code "namespace:name"}. */
+        public Builder withPack(String packId) {
+            return withPack(PackId.parse(packId));
         }
 
         /** Inject a custom pack repository (tests); defaults to {@link PackRepository#global()}. */

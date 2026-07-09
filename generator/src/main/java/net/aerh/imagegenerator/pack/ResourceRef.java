@@ -6,7 +6,7 @@ import java.util.regex.Pattern;
  * A namespaced resource location ({@code namespace:path}) as used by the modern resource pack
  * format, plus mapping to the concrete asset file paths inside a pack.
  */
-public record ResourceRef(String namespace, String path) {
+record ResourceRef(String namespace, String path) {
 
     private static final Pattern NAMESPACE = Pattern.compile("[a-z0-9_.-]{1,64}");
     // Path segments: lowercase, digits, _ . -, separated by single slashes; no leading slash,

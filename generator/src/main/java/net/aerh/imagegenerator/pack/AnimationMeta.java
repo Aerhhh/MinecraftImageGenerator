@@ -7,5 +7,5 @@ import org.jetbrains.annotations.Nullable;
  * frame from a vertical flipbook. The first frame is the first entry of the frames list, which is
  * not always index 0.
  */
-public record AnimationMeta(int firstFrameIndex, @Nullable Integer frameWidth, @Nullable Integer frameHeight) {
+record AnimationMeta(int firstFrameIndex, @Nullable Integer frameWidth, @Nullable Integer frameHeight) {
 }

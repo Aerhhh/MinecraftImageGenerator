@@ -18,7 +18,7 @@ import java.util.Iterator;
  * alpha encoding and static first-frame extraction from animated flipbooks.
  */
 @UtilityClass
-public class TextureDecoder {
+class TextureDecoder {
 
     private static final int EMISSIVE_OPAQUE_ALPHA = 252;
 

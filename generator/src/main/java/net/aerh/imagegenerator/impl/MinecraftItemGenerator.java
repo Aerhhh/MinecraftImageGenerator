@@ -215,7 +215,9 @@ public class MinecraftItemGenerator implements Generator {
 
         /**
          * Selects the resource pack to resolve this item from. Null or {@link PackId#VANILLA}
-         * renders from the built-in vanilla spritesheet exactly as before.
+         * renders from the built-in vanilla spritesheet exactly as before. Rendering with a pack
+         * that was never registered, or an item the pack cannot resolve, throws
+         * PackResolveException from {@code generate()}.
          */
         public MinecraftItemGenerator.Builder withPack(@Nullable PackId packId) {
             this.packId = packId;
@@ -227,7 +229,12 @@ public class MinecraftItemGenerator implements Generator {
             return withPack(PackId.parse(packId));
         }
 
-        /** Inject a custom pack repository (tests); defaults to {@link PackRepository#global()}. */
+        /**
+         * Inject a custom pack repository (tests); defaults to {@link PackRepository#global()}.
+         * Cache note: the repository instance is not part of the render cache key; do not share
+         * {@code generator.cache.enabled=true} across repositories holding different content
+         * under the same pack ID.
+         */
         public MinecraftItemGenerator.Builder withPackRepository(PackRepository packRepository) {
             this.packRepository = packRepository;
             return this;

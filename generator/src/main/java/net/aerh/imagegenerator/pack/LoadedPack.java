@@ -23,7 +23,7 @@ import java.util.regex.Pattern;
  * construction, per-item errors tolerated), with textures decoded lazily through a bounded cache.
  */
 @Slf4j
-public final class LoadedPack {
+final class LoadedPack {
 
     private static final Pattern ITEM_PATH = Pattern.compile("assets/([^/]+)/items/(.+)\\.json");
     private static final Pattern MODEL_PATH = Pattern.compile("assets/([^/]+)/models/(.+)\\.json");
@@ -40,7 +40,7 @@ public final class LoadedPack {
     private final Map<String, ModelInfo> models = new HashMap<>();
     private final LoadingCache<String, BufferedImage> textureCache;
 
-    public LoadedPack(PackId id, PackSource source, PackLimits limits) {
+    LoadedPack(PackId id, PackSource source, PackLimits limits) {
         this.id = id;
         this.source = source;
         this.limits = limits;

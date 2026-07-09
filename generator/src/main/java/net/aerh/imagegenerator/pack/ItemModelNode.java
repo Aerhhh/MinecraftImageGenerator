@@ -8,7 +8,7 @@ import java.util.Set;
  * static GUI rendering are modeled; everything else parses to {@link UnsupportedNode} and fails
  * loudly at resolve time.
  */
-public sealed interface ItemModelNode
+sealed interface ItemModelNode
     permits ItemModelNode.ModelLeaf, ItemModelNode.ConditionNode, ItemModelNode.SelectNode,
     ItemModelNode.RangeDispatchNode, ItemModelNode.CompositeNode, ItemModelNode.UnsupportedNode {
 
