@@ -325,7 +325,8 @@ public class MinecraftInventoryGenerator implements Generator {
         return filteredItems;
     }
 
-    private void processItem(InventoryItem item, @Nullable GenerationContext generationContext) {
+    // Package-private for tests pinning the retained per-slot frame resolution.
+    void processItem(InventoryItem item, @Nullable GenerationContext generationContext) {
         if (item.getItemName().contains("player_head")) {
             String skinValue = item.getExtraContent();
             if (skinValue != null && skinValue.contains(",")) {
@@ -346,9 +347,7 @@ public class MinecraftInventoryGenerator implements Generator {
                 .withSkin(skinValue)
                 .build()
                 .generate(generationContext);
-            item.setItemImage(playerHeadObject.getImage());
-            item.setAnimationFrames(playerHeadObject.getAnimationFrames());
-            item.setFrameDelayMs(playerHeadObject.getFrameDelayMs() > 0 ? playerHeadObject.getFrameDelayMs() : null);
+            applyGeneratedVisual(item, playerHeadObject);
         } else if (!item.getItemName().equalsIgnoreCase("null")) {
             String contentLower = item.getExtraContent() != null ? item.getExtraContent().toLowerCase() : null;
             MinecraftItemGenerator.Builder itemBuilder = new MinecraftItemGenerator.Builder()
@@ -366,10 +365,49 @@ public class MinecraftInventoryGenerator implements Generator {
             }
 
             GeneratedObject generatedItem = itemBuilder.build().generate(generationContext);
-            item.setItemImage(generatedItem.getImage());
-            item.setAnimationFrames(generatedItem.getAnimationFrames());
-            item.setFrameDelayMs(generatedItem.getFrameDelayMs() > 0 ? generatedItem.getFrameDelayMs() : null);
+            applyGeneratedVisual(item, generatedItem);
         }
+    }
+
+    private static void applyGeneratedVisual(InventoryItem item, GeneratedObject generated) {
+        item.setItemImage(downscaleToCompositeResolution(generated.getImage()));
+        item.setAnimationFrames(downscaleFramesToCompositeResolution(generated.getAnimationFrames()));
+        item.setFrameDelayMs(generated.getFrameDelayMs() > 0 ? generated.getFrameDelayMs() : null);
+    }
+
+    /**
+     * Bounds a retained slot image to the resolution the composite actually draws at:
+     * {@link #drawItem} always scales slot imagery to {@code itemSize} x {@code itemSize} with
+     * nearest-neighbor sampling, so pre-scaling here keeps the composed output pixel-identical
+     * while retaining a fraction of the memory per animation frame. {@link AlphaComposite#Src}
+     * copies the sampled pixels exactly, avoiding SrcOver rounding drift on partially
+     * transparent pixels.
+     */
+    static BufferedImage downscaleToCompositeResolution(BufferedImage image) {
+        if (image == null || (image.getWidth() <= itemSize && image.getHeight() <= itemSize)) {
+            return image;
+        }
+
+        BufferedImage scaled = new BufferedImage(itemSize, itemSize, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = scaled.createGraphics();
+        graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
+        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+        graphics.setComposite(AlphaComposite.Src);
+        graphics.drawImage(image, 0, 0, itemSize, itemSize, null);
+        graphics.dispose();
+        return scaled;
+    }
+
+    static List<BufferedImage> downscaleFramesToCompositeResolution(List<BufferedImage> frames) {
+        if (frames == null || frames.isEmpty()) {
+            return frames;
+        }
+
+        List<BufferedImage> scaledFrames = new ArrayList<>(frames.size());
+        for (BufferedImage frame : frames) {
+            scaledFrames.add(downscaleToCompositeResolution(frame));
+        }
+        return scaledFrames;
     }
 
     private void drawItem(Graphics2D target, InventoryItem item) {
