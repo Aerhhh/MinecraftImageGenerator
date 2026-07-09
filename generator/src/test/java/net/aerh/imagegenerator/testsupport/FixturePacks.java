@@ -127,11 +127,12 @@ public final class FixturePacks {
             item(root, "empty_composite", """
                 {"model":{"type":"composite","models":[]}}""");
 
-            // Tooltip style with nine-slice mcmeta on both sprites
+            // Tooltip style with nine-slice mcmeta on both sprites; the frame has a transparent
+            // center like real tooltip frames, so layering over the background is observable
             tooltipSprite(root, NAMESPACE, "fancy_background", solid(8, 8, 0xFF112233));
             write(root, "assets/testpack/textures/gui/sprites/tooltip/fancy_background.png.mcmeta", """
                 {"gui":{"scaling":{"type":"nine_slice","width":8,"height":8,"border":2}}}""");
-            tooltipSprite(root, NAMESPACE, "fancy_frame", solid(8, 8, 0xFF445566));
+            tooltipSprite(root, NAMESPACE, "fancy_frame", ring(8, 8, 3, 0xFF445566));
             write(root, "assets/testpack/textures/gui/sprites/tooltip/fancy_frame.png.mcmeta", """
                 {"gui":{"scaling":{"type":"nine_slice","width":8,"height":8,"border":3,"stretch_inner":true}}}""");
 
@@ -230,6 +231,17 @@ public final class FixturePacks {
 
     private static BufferedImage transparent(int width, int height) {
         return new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+    }
+
+    /** Solid image whose interior (inside {@code border} px on every side) is transparent. */
+    private static BufferedImage ring(int width, int height, int border, int argb) {
+        BufferedImage image = solid(width, height, argb);
+        for (int y = border; y < height - border; y++) {
+            for (int x = border; x < width - border; x++) {
+                image.setRGB(x, y, 0);
+            }
+        }
+        return image;
     }
 
     private static void fill(BufferedImage flipbook, int frameIndex, int argb) {

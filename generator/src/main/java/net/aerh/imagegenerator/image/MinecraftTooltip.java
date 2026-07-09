@@ -5,6 +5,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.aerh.imagegenerator.builder.ClassBuilder;
+import net.aerh.imagegenerator.pack.GuiSpriteRenderer;
+import net.aerh.imagegenerator.pack.TooltipSprites;
 import net.aerh.imagegenerator.text.ChatFormat;
 import net.aerh.imagegenerator.text.MinecraftFont;
 import net.aerh.imagegenerator.text.segment.ColorSegment;
@@ -47,27 +49,6 @@ public class MinecraftTooltip {
         precomputeCharacterWidths();
     }
 
-    private void drawSolidBorder(Graphics2D graphics, int width, int height, int inset, int stroke) {
-        if (stroke <= 0) {
-            return;
-        }
-
-        int horizontalLength = width - inset * 2;
-        int verticalLength = height - inset * 2;
-        if (horizontalLength <= 0 || verticalLength <= 0) {
-            return;
-        }
-
-        // Top
-        graphics.fillRect(inset, inset, horizontalLength, stroke);
-        // Bottom
-        graphics.fillRect(inset, height - inset - stroke, horizontalLength, stroke);
-        // Left
-        graphics.fillRect(inset, inset + stroke, stroke, verticalLength - stroke * 2);
-        // Right
-        graphics.fillRect(width - inset - stroke, inset + stroke, stroke, verticalLength - stroke * 2);
-    }
-
     @Getter
     private List<BufferedImage> animationFrames = new ArrayList<>();
 
@@ -85,6 +66,7 @@ public class MinecraftTooltip {
     @Getter
     private final int scaleFactor;
     private final boolean aprilFools;
+    private final TooltipSprites themeSprites;
 
     // Scaled values based on scale factor
     private final int pixelSize;
@@ -121,8 +103,9 @@ public class MinecraftTooltip {
      * @param animationFrameCount The number of frames to generate for the animation.
      * @param scaleFactor         The scale factor to apply to all pixel sizes.
      * @param aprilFools          Whether to randomly swap characters to alternate fonts.
+     * @param themeSprites        Pack tooltip sprites replacing the programmatic chrome, or null.
      */
-    private MinecraftTooltip(List<LineSegment> lines, ChatFormat defaultColor, int alpha, int padding, boolean firstLinePadding, boolean renderBorder, boolean centeredText, int frameDelayMs, int animationFrameCount, int scaleFactor, boolean aprilFools) {
+    private MinecraftTooltip(List<LineSegment> lines, ChatFormat defaultColor, int alpha, int padding, boolean firstLinePadding, boolean renderBorder, boolean centeredText, int frameDelayMs, int animationFrameCount, int scaleFactor, boolean aprilFools, TooltipSprites themeSprites) {
         this.lines = lines;
         this.currentColor = defaultColor;
         this.alpha = alpha;
@@ -134,13 +117,22 @@ public class MinecraftTooltip {
         this.animationFrameCount = animationFrameCount;
         this.scaleFactor = scaleFactor;
         this.aprilFools = aprilFools;
+        this.themeSprites = themeSprites;
 
         this.pixelSize = DEFAULT_PIXEL_SIZE * scaleFactor;
-        this.startXY = pixelSize * 5;
+        // Themed tooltips use the vanilla sprite-rect model: background and frame cover ONE rect
+        // expanded 12 GUI px (padding 3 + margin 9) on every side of the text, with 1 GUI px equal
+        // to one pixelSize unit. Pack art may legitimately extend past the classic tooltip box.
+        this.startXY = pixelSize * (isThemed() ? 12 : 5);
         this.yIncrement = pixelSize * 10;
 
         this.locationX = startXY;
         this.locationY = startXY + pixelSize * 2 + yIncrement / 2;
+    }
+
+    /** Sprite chrome applies only when a theme is present AND the border is enabled; renderBorder=false means no chrome at all. */
+    private boolean isThemed() {
+        return themeSprites != null && renderBorder;
     }
 
     /**
@@ -651,34 +643,45 @@ public class MinecraftTooltip {
         int finalWidth = startXY + this.largestWidth + startXY;
         int finalHeight = measuredHeight - (yIncrement + (this.lines.isEmpty() || !this.firstLinePadding ? 0 : pixelSize * 2)) + startXY + pixelSize * 2;
 
+        if (isThemed()) {
+            // Sprite texels map 1:pixelSize, so the themed canvas must be a whole number of GUI px.
+            finalWidth = ceilToMultiple(finalWidth, pixelSize);
+            finalHeight = ceilToMultiple(finalHeight, pixelSize);
+        }
+
         // Determine if we need to animate the image beforehand
         this.isAnimated = this.lines.stream()
             .flatMap(line -> line.getSegments().stream())
             .anyMatch(ColorSegment::isObfuscated);
 
         int framesToGenerate = this.isAnimated ? this.animationFrameCount : 1;
+        int frameWidth = Math.max(1, finalWidth);
+        int frameHeight = Math.max(1, finalHeight);
+        BufferedImage themeLayer = isThemed() ? buildThemeLayer(frameWidth, frameHeight) : null;
 
         for (int i = 0; i < framesToGenerate; i++) {
-            // Use the final calculated dimensions for the frame
-            int frameWidth = Math.max(1, finalWidth);
-            int frameHeight = Math.max(1, finalHeight);
             BufferedImage frameImage = new BufferedImage(frameWidth, frameHeight, BufferedImage.TYPE_INT_ARGB);
             Graphics2D graphics = frameImage.createGraphics();
             graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
 
-            // Draw background first
-            graphics.setColor(new Color(18, 3, 18, this.isAnimated ? 255 : this.getAlpha()));
-            graphics.fillRect(
-                pixelSize * 2, // Inner edge of border
-                pixelSize * 2,
-                frameWidth - pixelSize * 4, // Width inside borders
-                frameHeight - pixelSize * 4 // Height inside borders
-            );
+            if (themeLayer != null) {
+                // Background and frame sprites carry their own alpha; the alpha knob is not applied.
+                graphics.drawImage(themeLayer, 0, 0, null);
+            } else {
+                // Draw background first
+                graphics.setColor(new Color(18, 3, 18, this.isAnimated ? 255 : this.getAlpha()));
+                graphics.fillRect(
+                    pixelSize * 2, // Inner edge of border
+                    pixelSize * 2,
+                    frameWidth - pixelSize * 4, // Width inside borders
+                    frameHeight - pixelSize * 4 // Height inside borders
+                );
+            }
 
             drawLinesInternal(graphics);
 
             // Draw borders onto the frame
-            if (this.renderBorder) {
+            if (this.renderBorder && themeLayer == null) {
                 this.drawBorders(graphics, frameWidth, frameHeight);
             }
 
@@ -697,6 +700,44 @@ public class MinecraftTooltip {
         return this;
     }
 
+    /**
+     * Composes the sprite chrome for one canvas: background rendered first, frame blitted over
+     * the identical rect (vanilla layering; any apparent inset is transparent pixels in the art),
+     * both at GUI-px resolution and then upscaled so one texel covers pixelSize canvas px.
+     */
+    private BufferedImage buildThemeLayer(int width, int height) {
+        int guiWidth = width / pixelSize;
+        int guiHeight = height / pixelSize;
+        BufferedImage layer = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = layer.createGraphics();
+        try {
+            graphics.drawImage(upscale(GuiSpriteRenderer.render(
+                themeSprites.background().texture(), themeSprites.background().scaling(), guiWidth, guiHeight), pixelSize), 0, 0, null);
+            graphics.drawImage(upscale(GuiSpriteRenderer.render(
+                themeSprites.frame().texture(), themeSprites.frame().scaling(), guiWidth, guiHeight), pixelSize), 0, 0, null);
+        } finally {
+            graphics.dispose();
+        }
+        return layer;
+    }
+
+    private static BufferedImage upscale(BufferedImage source, int factor) {
+        if (factor <= 1) {
+            return source;
+        }
+        BufferedImage scaled = new BufferedImage(source.getWidth() * factor, source.getHeight() * factor, BufferedImage.TYPE_INT_ARGB);
+        for (int y = 0; y < scaled.getHeight(); y++) {
+            for (int x = 0; x < scaled.getWidth(); x++) {
+                scaled.setRGB(x, y, source.getRGB(x / factor, y / factor));
+            }
+        }
+        return scaled;
+    }
+
+    private static int ceilToMultiple(int value, int unit) {
+        return (value + unit - 1) / unit * unit;
+    }
+
     @NoArgsConstructor(access = AccessLevel.PRIVATE)
     public static class Builder implements ClassBuilder<MinecraftTooltip> {
         @Getter
@@ -711,6 +752,7 @@ public class MinecraftTooltip {
         private int animationFrameCount = 10;
         private int scaleFactor = 1;
         private boolean aprilFools = false;
+        private TooltipSprites themeSprites;
 
         public Builder hasFirstLinePadding() {
             return this.hasFirstLinePadding(true);
@@ -790,6 +832,16 @@ public class MinecraftTooltip {
             return this;
         }
 
+        /**
+         * Replaces the programmatic background and borders with pack tooltip sprites. Only
+         * applies while the border is enabled; the sprites carry their own alpha, so the alpha
+         * knob is ignored in themed renders.
+         */
+        public Builder withThemeSprites(TooltipSprites themeSprites) {
+            this.themeSprites = themeSprites;
+            return this;
+        }
+
         @Override
         public @NotNull MinecraftTooltip build() {
             return new MinecraftTooltip(
@@ -803,7 +855,8 @@ public class MinecraftTooltip {
                 this.frameDelayMs,
                 this.animationFrameCount,
                 this.scaleFactor,
-                this.aprilFools
+                this.aprilFools,
+                this.themeSprites
             );
         }
     }

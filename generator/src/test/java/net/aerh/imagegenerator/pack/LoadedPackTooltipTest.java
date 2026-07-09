@@ -48,7 +48,8 @@ class LoadedPackTooltipTest {
         assertEquals(new GuiScaling.NineSlice(8, 8, new GuiScaling.NineSlice.Border(3, 3, 3, 3), true),
             sprites.frame().scaling());
         assertEquals(0xFF112233, sprites.background().texture().getRGB(4, 4));
-        assertEquals(0xFF445566, sprites.frame().texture().getRGB(4, 4));
+        assertEquals(0xFF445566, sprites.frame().texture().getRGB(0, 0));
+        assertEquals(0, sprites.frame().texture().getRGB(4, 4), "frame center is transparent");
     }
 
     @Test

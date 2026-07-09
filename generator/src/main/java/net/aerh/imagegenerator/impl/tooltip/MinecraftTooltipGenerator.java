@@ -19,6 +19,9 @@ import net.aerh.imagegenerator.exception.GeneratorException;
 import net.aerh.imagegenerator.image.MinecraftTooltip;
 import net.aerh.imagegenerator.impl.nbt.NbtTextComponentUtil;
 import net.aerh.imagegenerator.item.GeneratedObject;
+import net.aerh.imagegenerator.pack.PackId;
+import net.aerh.imagegenerator.pack.PackRepository;
+import net.aerh.imagegenerator.pack.TooltipSprites;
 import net.aerh.imagegenerator.parser.text.RarityFooterParser;
 import net.aerh.imagegenerator.text.ChatFormat;
 import net.aerh.imagegenerator.text.segment.LineSegment;
@@ -51,6 +54,11 @@ public class MinecraftTooltipGenerator implements Generator {
     private final int maxLineLength;
     private final boolean renderBorder;
     private final int scaleFactor;
+    // packId and tooltipStyle are final non-transient so they enter the render cache key;
+    // the repository reference is transient so instances never split it (item generator seam).
+    private final PackId packId;
+    private final String tooltipStyle;
+    private final transient PackRepository packRepository;
 
     @Override
     public @NotNull GeneratedObject render(@Nullable GenerationContext generationContext) throws GeneratorException {
@@ -105,7 +113,8 @@ public class MinecraftTooltipGenerator implements Generator {
             .isTextCentered(settings.isCenteredText())
             .withAlpha(Range.between(0, 255).fit(settings.getAlpha()))
             .withScaleFactor(settings.getScaleFactor())
-            .withAprilFools(settings.isAprilFools());
+            .withAprilFools(settings.isAprilFools())
+            .withThemeSprites(resolveThemeSprites());
 
         if (settings.getName() != null && !settings.getName().isEmpty()) {
             String name = settings.getName();
@@ -135,6 +144,29 @@ public class MinecraftTooltipGenerator implements Generator {
         return builder.build();
     }
 
+    /**
+     * Resolves the pack tooltip sprites for this render. Missing-style policy is loud: a style
+     * that the pack does not define throws instead of silently falling back (vanilla would render
+     * the missing texture). A pack without an explicit style still themes the styleless tooltip
+     * through its {@code minecraft:tooltip/background} + {@code frame} override when present.
+     */
+    private TooltipSprites resolveThemeSprites() {
+        if (packId == null || PackId.VANILLA.equals(packId)) {
+            if (tooltipStyle != null) {
+                throw new GeneratorException("Tooltip style `%s` requires a resource pack; select one with withPack",
+                    tooltipStyle);
+            }
+            return null;
+        }
+        PackRepository repository = packRepository != null ? packRepository : PackRepository.global();
+        if (tooltipStyle != null) {
+            return repository.resolveTooltipSprites(packId, tooltipStyle)
+                .orElseThrow(() -> new GeneratorException("Tooltip style `%s` not found in pack `%s`",
+                    tooltipStyle, packId.toString()));
+        }
+        return repository.resolveDefaultTooltipSprites(packId).orElse(null);
+    }
+
     public enum TooltipSide {
         LEFT,
         RIGHT
@@ -155,6 +187,11 @@ public class MinecraftTooltipGenerator implements Generator {
         private boolean centered;
         private boolean renderBorder = true;
         private transient int scaleFactor = 1;
+        // pack and tooltipStyle are non-transient on purpose: buildSlashCommand round-trips them
+        // as "pack:" and "tooltip_style:" options; the repository seam must never leak there.
+        private PackId pack;
+        private String tooltipStyle;
+        private transient PackRepository packRepository;
 
         public MinecraftTooltipGenerator.Builder withName(String itemName) {
             this.itemName = itemName;
@@ -212,6 +249,31 @@ public class MinecraftTooltipGenerator implements Generator {
 
         public MinecraftTooltipGenerator.Builder withRenderBorder(boolean renderBorder) {
             this.renderBorder = renderBorder;
+            return this;
+        }
+
+        public MinecraftTooltipGenerator.Builder withPack(String pack) {
+            this.pack = pack != null ? PackId.parse(pack) : null;
+            return this;
+        }
+
+        public MinecraftTooltipGenerator.Builder withPack(PackId packId) {
+            this.pack = packId;
+            return this;
+        }
+
+        /**
+         * Selects the tooltip style to render with, as the {@code minecraft:tooltip_style}
+         * component value (any resource location, e.g. {@code hypixel_skyblock:epic}; a bare
+         * ref defaults to the {@code minecraft} namespace). Requires a pack.
+         */
+        public MinecraftTooltipGenerator.Builder withTooltipStyle(String tooltipStyle) {
+            this.tooltipStyle = tooltipStyle;
+            return this;
+        }
+
+        public MinecraftTooltipGenerator.Builder withPackRepository(PackRepository packRepository) {
+            this.packRepository = packRepository;
             return this;
         }
 
@@ -430,7 +492,10 @@ public class MinecraftTooltipGenerator implements Generator {
                 centered,
                 maxLineLength,
                 renderBorder,
-                scaleFactor
+                scaleFactor,
+                pack,
+                tooltipStyle,
+                packRepository
             );
         }
     }
