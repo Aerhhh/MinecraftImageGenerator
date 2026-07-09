@@ -16,6 +16,9 @@ import net.aerh.imagegenerator.effect.impl.HoverImageEffect;
 import net.aerh.imagegenerator.effect.impl.OverlayApplicationEffect;
 import net.aerh.imagegenerator.exception.GeneratorException;
 import net.aerh.imagegenerator.item.GeneratedObject;
+import net.aerh.imagegenerator.pack.PackId;
+import net.aerh.imagegenerator.pack.PackRepository;
+import net.aerh.imagegenerator.pack.PackSprites;
 import net.aerh.imagegenerator.spritesheet.OverlayLoader;
 import net.aerh.imagegenerator.spritesheet.Spritesheet;
 import org.jetbrains.annotations.NotNull;
@@ -41,17 +44,17 @@ public class MinecraftItemGenerator implements Generator {
     private final Integer durabilityPercent;
     private final OverlayLoader overlayLoader;
     private final EffectPipeline effectPipeline;
+    @Nullable
+    private final PackId packId;
+    @ToString.Exclude
+    private final transient PackRepository packRepository;
 
     @Override
     public @NotNull GeneratedObject render(@Nullable GenerationContext generationContext) {
         log.debug("Rendering item '{}' ({})", itemId, this);
 
-        // Load base item texture
-        BufferedImage itemImage = Spritesheet.getTexture(itemId.toLowerCase());
-
-        if (itemImage == null) {
-            throw new GeneratorException("Item with ID `%s` not found", itemId);
-        }
+        // Load base item texture: selected pack first, then the vanilla spritesheet
+        BufferedImage itemImage = resolveBaseTexture();
 
         // Create initial effect context
         EffectContext.Builder contextBuilder = new EffectContext.Builder()
@@ -111,6 +114,25 @@ public class MinecraftItemGenerator implements Generator {
         return new GeneratedObject(finalImage);
     }
 
+    private BufferedImage resolveBaseTexture() {
+        boolean usingPack = packId != null && !PackId.VANILLA.equals(packId);
+        if (usingPack) {
+            var packSprite = packRepository.resolve(packId, itemId);
+            if (packSprite.isPresent()) {
+                return PackSprites.scaleToCanvas(packSprite.get(), 256);
+            }
+        }
+        BufferedImage vanilla = Spritesheet.getTexture(itemId.toLowerCase());
+        if (vanilla == null) {
+            if (usingPack) {
+                throw new GeneratorException("Item with ID `%s` not found in pack `%s` or vanilla",
+                    itemId, packId.toString());
+            }
+            throw new GeneratorException("Item with ID `%s` not found", itemId);
+        }
+        return vanilla;
+    }
+
     public static class Builder extends net.hypixel.nerdbot.marmalade.pattern.Builder<MinecraftItemGenerator> implements ClassBuilder<MinecraftItemGenerator> {
         private String itemId;
         private String data;
@@ -121,6 +143,8 @@ public class MinecraftItemGenerator implements Generator {
         private Integer durabilityPercent;
         private OverlayLoader overlayLoader;
         private EffectPipeline effectPipeline;
+        private PackId packId;
+        private PackRepository packRepository;
 
         public MinecraftItemGenerator.Builder withItem(String itemId) {
             if (itemId == null || itemId.isBlank()) {
@@ -189,6 +213,33 @@ public class MinecraftItemGenerator implements Generator {
             return this;
         }
 
+        /**
+         * Selects the resource pack to resolve this item from. Null or {@link PackId#VANILLA}
+         * renders from the built-in vanilla spritesheet exactly as before. Rendering with a pack
+         * that was never registered, or an item the pack cannot resolve, throws
+         * PackResolveException from {@code generate()}.
+         */
+        public MinecraftItemGenerator.Builder withPack(@Nullable PackId packId) {
+            this.packId = packId;
+            return this;
+        }
+
+        /** Convenience overload accepting {@code "namespace:name"}. */
+        public MinecraftItemGenerator.Builder withPack(String packId) {
+            return withPack(PackId.parse(packId));
+        }
+
+        /**
+         * Inject a custom pack repository (tests); defaults to {@link PackRepository#global()}.
+         * Cache note: the repository instance is not part of the render cache key; do not share
+         * {@code generator.cache.enabled=true} across repositories holding different content
+         * under the same pack ID.
+         */
+        public MinecraftItemGenerator.Builder withPackRepository(PackRepository packRepository) {
+            this.packRepository = packRepository;
+            return this;
+        }
+
         @Override
         protected void validate() {
             if (itemId == null || itemId.isBlank()) {
@@ -208,9 +259,13 @@ public class MinecraftItemGenerator implements Generator {
                 effectPipeline = buildDefaultEffectPipeline();
             }
 
+            if (packRepository == null) {
+                packRepository = PackRepository.global();
+            }
+
             return new MinecraftItemGenerator(
                 itemId, data, color, enchanted, hoverEffect, bigImage,
-                durabilityPercent, overlayLoader, effectPipeline
+                durabilityPercent, overlayLoader, effectPipeline, packId, packRepository
             );
         }
 
