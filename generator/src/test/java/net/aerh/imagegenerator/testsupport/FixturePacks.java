@@ -14,6 +14,7 @@ import java.nio.file.Path;
 public final class FixturePacks {
 
     public static final String NAMESPACE = "testpack";
+    public static final String THEME_NAMESPACE = "themepack";
 
     private FixturePacks() {
     }
@@ -126,9 +127,68 @@ public final class FixturePacks {
             item(root, "empty_composite", """
                 {"model":{"type":"composite","models":[]}}""");
 
+            // Tooltip style with nine-slice mcmeta on both sprites; the frame has a transparent
+            // center like real tooltip frames, so layering over the background is observable
+            tooltipSprite(root, NAMESPACE, "fancy_background", solid(8, 8, 0xFF112233));
+            write(root, "assets/testpack/textures/gui/sprites/tooltip/fancy_background.png.mcmeta", """
+                {"gui":{"scaling":{"type":"nine_slice","width":8,"height":8,"border":2}}}""");
+            tooltipSprite(root, NAMESPACE, "fancy_frame", ring(8, 8, 3, 0xFF445566));
+            write(root, "assets/testpack/textures/gui/sprites/tooltip/fancy_frame.png.mcmeta", """
+                {"gui":{"scaling":{"type":"nine_slice","width":8,"height":8,"border":3,"stretch_inner":true}}}""");
+
+            // Tooltip style without mcmeta: scaling defaults to stretch
+            tooltipSprite(root, NAMESPACE, "plain_background", solid(4, 4, 0xFF224466));
+            tooltipSprite(root, NAMESPACE, "plain_frame", solid(4, 4, 0xFF664422));
+
+            // Incomplete tooltip style: background sprite only
+            tooltipSprite(root, NAMESPACE, "half_background", solid(4, 4, 0xFF808080));
+
+            // Complete tooltip style whose background mcmeta declares an unknown scaling type
+            tooltipSprite(root, NAMESPACE, "brokenmeta_background", solid(4, 4, 0xFF010101));
+            write(root, "assets/testpack/textures/gui/sprites/tooltip/brokenmeta_background.png.mcmeta", """
+                {"gui":{"scaling":{"type":"twelve_slice","width":4,"height":4}}}""");
+            tooltipSprite(root, NAMESPACE, "brokenmeta_frame", solid(4, 4, 0xFF020202));
+
+            // Animated tooltip background: flipbook and gui scaling in one mcmeta
+            BufferedImage themeFlipbook = transparent(8, 24);
+            fillFrame(themeFlipbook, 0, 8, 0xFFFF0000);
+            fillFrame(themeFlipbook, 1, 8, 0xFF00FF00);
+            fillFrame(themeFlipbook, 2, 8, 0xFF0000FF);
+            tooltipSprite(root, NAMESPACE, "anim_background", themeFlipbook);
+            write(root, "assets/testpack/textures/gui/sprites/tooltip/anim_background.png.mcmeta", """
+                {"animation":{"frametime":2,"frames":[2,0,1]},
+                 "gui":{"scaling":{"type":"nine_slice","width":8,"height":8,"border":1}}}""");
+            tooltipSprite(root, NAMESPACE, "anim_frame", solid(8, 8, 0xFF030303));
+
             return root;
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to write fixture pack", e);
+        }
+    }
+
+    /**
+     * Writes a pack containing ONLY tooltip theming (no item definitions): one complete style in
+     * the {@code themepack} namespace plus a vanilla default-tooltip override, exactly how packs
+     * restyle styleless tooltips in game.
+     */
+    public static Path writeTooltipOnlyPack(Path root) {
+        try {
+            write(root, "pack.mcmeta", """
+                {"pack":{"pack_format":88,"description":"tooltip-only test fixture"}}""");
+
+            tooltipSprite(root, THEME_NAMESPACE, "ruby_background", solid(8, 8, 0xFF990011));
+            write(root, "assets/" + THEME_NAMESPACE + "/textures/gui/sprites/tooltip/ruby_background.png.mcmeta", """
+                {"gui":{"scaling":{"type":"nine_slice","width":8,"height":8,"border":2}}}""");
+            tooltipSprite(root, THEME_NAMESPACE, "ruby_frame", solid(8, 8, 0xFF660022));
+
+            tooltipSprite(root, "minecraft", "background", solid(8, 8, 0xFF101010));
+            write(root, "assets/minecraft/textures/gui/sprites/tooltip/background.png.mcmeta", """
+                {"gui":{"scaling":{"type":"nine_slice","width":8,"height":8,"border":2}}}""");
+            tooltipSprite(root, "minecraft", "frame", solid(8, 8, 0xFF202020));
+
+            return root;
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to write tooltip-only fixture pack", e);
         }
     }
 
@@ -143,6 +203,12 @@ public final class FixturePacks {
 
     private static void texture(Path root, String name, BufferedImage image) throws IOException {
         Path path = root.resolve("assets/testpack/textures/item/" + name + ".png");
+        Files.createDirectories(path.getParent());
+        ImageIO.write(image, "png", path.toFile());
+    }
+
+    private static void tooltipSprite(Path root, String namespace, String name, BufferedImage image) throws IOException {
+        Path path = root.resolve("assets/" + namespace + "/textures/gui/sprites/tooltip/" + name + ".png");
         Files.createDirectories(path.getParent());
         ImageIO.write(image, "png", path.toFile());
     }
@@ -167,9 +233,24 @@ public final class FixturePacks {
         return new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
     }
 
+    /** Solid image whose interior (inside {@code border} px on every side) is transparent. */
+    private static BufferedImage ring(int width, int height, int border, int argb) {
+        BufferedImage image = solid(width, height, argb);
+        for (int y = border; y < height - border; y++) {
+            for (int x = border; x < width - border; x++) {
+                image.setRGB(x, y, 0);
+            }
+        }
+        return image;
+    }
+
     private static void fill(BufferedImage flipbook, int frameIndex, int argb) {
-        for (int y = frameIndex * 16; y < (frameIndex + 1) * 16; y++) {
-            for (int x = 0; x < 16; x++) {
+        fillFrame(flipbook, frameIndex, 16, argb);
+    }
+
+    private static void fillFrame(BufferedImage flipbook, int frameIndex, int frameSize, int argb) {
+        for (int y = frameIndex * frameSize; y < (frameIndex + 1) * frameSize; y++) {
+            for (int x = 0; x < frameSize; x++) {
                 flipbook.setRGB(x, y, argb);
             }
         }

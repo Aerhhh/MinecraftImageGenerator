@@ -54,8 +54,19 @@ public class Rarity {
     private final String display;
     private final ChatFormat color;
 
+    /**
+     * Looks a rarity up by its {@code name} field ({@code very_special}, {@code none}, ...),
+     * case-insensitively, falling back to the {@code display} field ({@code VERY SPECIAL}) for
+     * callers that pass footer text. Blank input never matches (the NONE rarity has an empty
+     * display).
+     */
     public static Rarity byName(String name) {
-        return REGISTRY.findFirst(rarity -> rarity.getDisplay().equalsIgnoreCase(name)).orElse(null);
+        if (name == null || name.isBlank()) {
+            return null;
+        }
+        return REGISTRY.findFirst(rarity -> rarity.getName().equalsIgnoreCase(name))
+            .or(() -> REGISTRY.findFirst(rarity -> rarity.getDisplay().equalsIgnoreCase(name)))
+            .orElse(null);
     }
 
     public static List<String> getRarityNames() {

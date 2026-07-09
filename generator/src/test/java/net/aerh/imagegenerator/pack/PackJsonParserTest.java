@@ -219,4 +219,162 @@ class PackJsonParserTest {
         ModelInfo model = PackJsonParser.parseModel("{\"parent\":null}".getBytes(StandardCharsets.UTF_8));
         assertEquals(null, model.parentRef());
     }
+
+    private static McMeta parseMcmeta(String json) {
+        return PackJsonParser.parseMcmeta(json.getBytes(StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void mcmetaNineSliceWithIntBorderParses() {
+        McMeta meta = parseMcmeta("""
+            {"gui":{"scaling":{"type":"nine_slice","width":100,"height":100,"border":9}}}""");
+        assertEquals(new GuiScaling.NineSlice(100, 100,
+            new GuiScaling.NineSlice.Border(9, 9, 9, 9), false), meta.guiScaling());
+        assertEquals(null, meta.animation());
+    }
+
+    @Test
+    void mcmetaNineSliceWithPerSideBorderAndStretchInnerParses() {
+        McMeta meta = parseMcmeta("""
+            {"gui":{"scaling":{"type":"minecraft:nine_slice","width":32,"height":32,
+              "border":{"left":1,"top":2,"right":3,"bottom":4},"stretch_inner":true}}}""");
+        assertEquals(new GuiScaling.NineSlice(32, 32,
+            new GuiScaling.NineSlice.Border(1, 2, 3, 4), true), meta.guiScaling());
+    }
+
+    @Test
+    void mcmetaTileParses() {
+        McMeta meta = parseMcmeta("""
+            {"gui":{"scaling":{"type":"tile","width":16,"height":8}}}""");
+        assertEquals(new GuiScaling.Tile(16, 8), meta.guiScaling());
+    }
+
+    @Test
+    void mcmetaExplicitStretchParses() {
+        McMeta meta = parseMcmeta("""
+            {"gui":{"scaling":{"type":"stretch"}}}""");
+        assertEquals(new GuiScaling.Stretch(), meta.guiScaling());
+    }
+
+    @Test
+    void mcmetaGuiSectionWithoutScalingDefaultsToStretch() {
+        McMeta meta = parseMcmeta("""
+            {"gui":{}}""");
+        assertEquals(new GuiScaling.Stretch(), meta.guiScaling());
+    }
+
+    @Test
+    void mcmetaWithoutGuiSectionHasNullScaling() {
+        McMeta meta = parseMcmeta("""
+            {"animation":{"frametime":2}}""");
+        assertEquals(null, meta.guiScaling());
+        assertEquals(0, meta.animation().firstFrameIndex());
+    }
+
+    @Test
+    void mcmetaCarriesBothAnimationAndGuiSections() {
+        McMeta meta = parseMcmeta("""
+            {"animation":{"frames":[4,0,1]},
+             "gui":{"scaling":{"type":"nine_slice","width":100,"height":100,"border":24,"stretch_inner":true}}}""");
+        assertEquals(4, meta.animation().firstFrameIndex());
+        assertEquals(new GuiScaling.NineSlice(100, 100,
+            new GuiScaling.NineSlice.Border(24, 24, 24, 24), true), meta.guiScaling());
+    }
+
+    @Test
+    void mcmetaWithNeitherSectionParsesToEmpty() {
+        McMeta meta = parseMcmeta("{}");
+        assertEquals(null, meta.animation());
+        assertEquals(null, meta.guiScaling());
+    }
+
+    @Test
+    void mcmetaUnknownScalingTypeIsRejected() {
+        assertThrows(PackLoadException.class, () -> parseMcmeta("""
+            {"gui":{"scaling":{"type":"twelve_slice","width":100,"height":100}}}"""));
+    }
+
+    @Test
+    void mcmetaScalingMissingTypeIsRejected() {
+        assertThrows(PackLoadException.class, () -> parseMcmeta("""
+            {"gui":{"scaling":{"width":100,"height":100,"border":9}}}"""));
+    }
+
+    @Test
+    void mcmetaNineSliceMissingDimensionsIsRejected() {
+        assertThrows(PackLoadException.class, () -> parseMcmeta("""
+            {"gui":{"scaling":{"type":"nine_slice","border":9}}}"""));
+        assertThrows(PackLoadException.class, () -> parseMcmeta("""
+            {"gui":{"scaling":{"type":"nine_slice","width":100,"border":9}}}"""));
+    }
+
+    @Test
+    void mcmetaNineSliceMissingBorderIsRejected() {
+        assertThrows(PackLoadException.class, () -> parseMcmeta("""
+            {"gui":{"scaling":{"type":"nine_slice","width":100,"height":100}}}"""));
+    }
+
+    @Test
+    void mcmetaZeroOrNegativeDimensionsAreRejected() {
+        assertThrows(PackLoadException.class, () -> parseMcmeta("""
+            {"gui":{"scaling":{"type":"nine_slice","width":0,"height":100,"border":9}}}"""));
+        assertThrows(PackLoadException.class, () -> parseMcmeta("""
+            {"gui":{"scaling":{"type":"tile","width":16,"height":-8}}}"""));
+    }
+
+    @Test
+    void mcmetaNegativeBorderIsRejected() {
+        assertThrows(PackLoadException.class, () -> parseMcmeta("""
+            {"gui":{"scaling":{"type":"nine_slice","width":100,"height":100,"border":-1}}}"""));
+        assertThrows(PackLoadException.class, () -> parseMcmeta("""
+            {"gui":{"scaling":{"type":"nine_slice","width":100,"height":100,
+              "border":{"left":-1,"top":9,"right":9,"bottom":9}}}}"""));
+    }
+
+    @Test
+    void mcmetaBorderExceedingTextureIsRejected() {
+        assertThrows(PackLoadException.class, () -> parseMcmeta("""
+            {"gui":{"scaling":{"type":"nine_slice","width":100,"height":100,"border":51}}}"""));
+    }
+
+    @Test
+    void mcmetaPerSideBorderMissingASideIsRejected() {
+        assertThrows(PackLoadException.class, () -> parseMcmeta("""
+            {"gui":{"scaling":{"type":"nine_slice","width":100,"height":100,
+              "border":{"left":9,"top":9,"right":9}}}}"""));
+    }
+
+    @Test
+    void mcmetaFractionalDimensionOrBorderIsRejected() {
+        assertThrows(PackLoadException.class, () -> parseMcmeta("""
+            {"gui":{"scaling":{"type":"nine_slice","width":100.5,"height":100,"border":9}}}"""));
+        assertThrows(PackLoadException.class, () -> parseMcmeta("""
+            {"gui":{"scaling":{"type":"nine_slice","width":100,"height":100,"border":9.5}}}"""));
+    }
+
+    @Test
+    void mcmetaNonBooleanStretchInnerIsRejected() {
+        assertThrows(PackLoadException.class, () -> parseMcmeta("""
+            {"gui":{"scaling":{"type":"nine_slice","width":100,"height":100,"border":9,"stretch_inner":"yes"}}}"""));
+    }
+
+    @Test
+    void mcmetaWrongTypedSectionsAreRejected() {
+        assertThrows(PackLoadException.class, () -> parseMcmeta("""
+            {"gui":[]}"""));
+        assertThrows(PackLoadException.class, () -> parseMcmeta("""
+            {"gui":{"scaling":"nine_slice"}}"""));
+    }
+
+    @Test
+    void mcmetaMalformedAnimationSectionIsRejected() {
+        assertThrows(PackLoadException.class, () -> parseMcmeta("""
+            {"animation":{"frames":["a"]},"gui":{"scaling":{"type":"stretch"}}}"""));
+    }
+
+    @Test
+    void mcmetaDimensionBeyondHardCapIsRejected() {
+        assertThrows(PackLoadException.class, () -> parseMcmeta("""
+            {"gui":{"scaling":{"type":"tile","width":65537,"height":8}}}"""));
+    }
 }
