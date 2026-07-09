@@ -26,7 +26,9 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @ToString
@@ -93,6 +95,27 @@ public class MinecraftInventoryGenerator implements Generator {
     private int titleHeight;
     private List<ImageCoordinates> slotCoordinates;
     private GeneratedObject generatedObject;
+    /**
+     * Deduplicates identical slot item specs within this render. Individually specified
+     * duplicates ("iron_block,enchant:1%%iron_block,enchant:2%%...") would otherwise each
+     * re-run the full item pipeline - for enchanted items that is 182 glint frames per slot,
+     * which made large individually-specified inventories time out while the equivalent bulk
+     * range rendered fine. Scoped to the generator instance, so the global GeneratorCache's
+     * cross-repository key concerns do not apply.
+     */
+    private final Map<SlotVisualKey, SlotVisual> slotVisualCache = new HashMap<>();
+
+    /**
+     * Everything that determines a slot item's rendered appearance: the material, the raw
+     * modifier string (enchant/hover flags, skin value, overlay data) and durability. Amount
+     * is deliberately absent - it only affects the stack count drawn per slot, not the visual.
+     */
+    private record SlotVisualKey(String itemName, String extraContent, Integer durabilityPercent) {
+    }
+
+    /** Downscaled per-slot imagery shared by every slot item with the same spec. */
+    private record SlotVisual(BufferedImage itemImage, List<BufferedImage> animationFrames, Integer frameDelayMs) {
+    }
 
     public MinecraftInventoryGenerator(int rows, int slotsPerRow, String containerTitle, String inventoryString,
                                         boolean drawBorder, boolean drawBackground, boolean animateGlint) {
@@ -325,8 +348,29 @@ public class MinecraftInventoryGenerator implements Generator {
         return filteredItems;
     }
 
-    // Package-private for tests pinning the retained per-slot frame resolution.
+    // Package-private for tests pinning the retained per-slot frame resolution and dedupe.
     void processItem(InventoryItem item, @Nullable GenerationContext generationContext) {
+        if (item.getItemName().equalsIgnoreCase("null")) {
+            return;
+        }
+
+        SlotVisualKey cacheKey = new SlotVisualKey(item.getItemName(), item.getExtraContent(), item.getDurabilityPercent());
+        SlotVisual visual = slotVisualCache.get(cacheKey);
+        if (visual == null) {
+            GeneratedObject generated = generateSlotObject(item, generationContext);
+            visual = new SlotVisual(
+                downscaleToCompositeResolution(generated.getImage()),
+                downscaleFramesToCompositeResolution(generated.getAnimationFrames()),
+                generated.getFrameDelayMs() > 0 ? generated.getFrameDelayMs() : null);
+            slotVisualCache.put(cacheKey, visual);
+        }
+
+        item.setItemImage(visual.itemImage());
+        item.setAnimationFrames(visual.animationFrames());
+        item.setFrameDelayMs(visual.frameDelayMs());
+    }
+
+    private GeneratedObject generateSlotObject(InventoryItem item, @Nullable GenerationContext generationContext) {
         if (item.getItemName().contains("player_head")) {
             String skinValue = item.getExtraContent();
             if (skinValue != null && skinValue.contains(",")) {
@@ -343,36 +387,28 @@ public class MinecraftInventoryGenerator implements Generator {
                 skinValue = skinValue.substring(skinValue.indexOf('=') + 1).trim();
             }
 
-            GeneratedObject playerHeadObject = new MinecraftPlayerHeadGenerator.Builder()
+            return new MinecraftPlayerHeadGenerator.Builder()
                 .withSkin(skinValue)
                 .build()
                 .generate(generationContext);
-            applyGeneratedVisual(item, playerHeadObject);
-        } else if (!item.getItemName().equalsIgnoreCase("null")) {
-            String contentLower = item.getExtraContent() != null ? item.getExtraContent().toLowerCase() : null;
-            MinecraftItemGenerator.Builder itemBuilder = new MinecraftItemGenerator.Builder()
-                .withItem(item.getItemName())
-                .isEnchanted(contentLower != null && contentLower.contains("enchant"))
-                .withHoverEffect(contentLower != null && contentLower.contains("hover"))
-                .withData(item.getExtraContent());
-
-            if (packId != null) {
-                itemBuilder.withPack(packId).withPackRepository(packRepository);
-            }
-
-            if (item.getDurabilityPercent() != null) {
-                itemBuilder.withDurability(item.getDurabilityPercent());
-            }
-
-            GeneratedObject generatedItem = itemBuilder.build().generate(generationContext);
-            applyGeneratedVisual(item, generatedItem);
         }
-    }
 
-    private static void applyGeneratedVisual(InventoryItem item, GeneratedObject generated) {
-        item.setItemImage(downscaleToCompositeResolution(generated.getImage()));
-        item.setAnimationFrames(downscaleFramesToCompositeResolution(generated.getAnimationFrames()));
-        item.setFrameDelayMs(generated.getFrameDelayMs() > 0 ? generated.getFrameDelayMs() : null);
+        String contentLower = item.getExtraContent() != null ? item.getExtraContent().toLowerCase() : null;
+        MinecraftItemGenerator.Builder itemBuilder = new MinecraftItemGenerator.Builder()
+            .withItem(item.getItemName())
+            .isEnchanted(contentLower != null && contentLower.contains("enchant"))
+            .withHoverEffect(contentLower != null && contentLower.contains("hover"))
+            .withData(item.getExtraContent());
+
+        if (packId != null) {
+            itemBuilder.withPack(packId).withPackRepository(packRepository);
+        }
+
+        if (item.getDurabilityPercent() != null) {
+            itemBuilder.withDurability(item.getDurabilityPercent());
+        }
+
+        return itemBuilder.build().generate(generationContext);
     }
 
     /**

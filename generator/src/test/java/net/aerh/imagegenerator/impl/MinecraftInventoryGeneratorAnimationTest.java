@@ -3,6 +3,7 @@ package net.aerh.imagegenerator.impl;
 import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.item.InventoryItem;
 import net.aerh.imagegenerator.spritesheet.Spritesheet;
+import net.aerh.imagegenerator.testsupport.ImageAssertions;
 import org.junit.jupiter.api.Test;
 
 import java.awt.Graphics2D;
@@ -15,7 +16,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * Pins the animated (animateGlint) inventory output pixel-exactly against a reference composed
@@ -70,7 +70,7 @@ class MinecraftInventoryGeneratorAnimationTest {
 
         for (int frameIndex = 0; frameIndex < GLINT_FRAME_COUNT; frameIndex++) {
             BufferedImage expected = composeReferenceFrame(emptyInventory, fullResolutionFrames.get(frameIndex), itemX, itemY, itemSize);
-            assertFramePixelsEqual(expected, inventory.getAnimationFrames().get(frameIndex), frameIndex);
+            ImageAssertions.assertPixelsEqual(expected, inventory.getAnimationFrames().get(frameIndex), "frame " + frameIndex);
         }
     }
 
@@ -141,21 +141,4 @@ class MinecraftInventoryGeneratorAnimationTest {
         return frame;
     }
 
-    private static void assertFramePixelsEqual(BufferedImage expected, BufferedImage actual, int frameIndex) {
-        assertEquals(expected.getWidth(), actual.getWidth(), "frame " + frameIndex + " width");
-        assertEquals(expected.getHeight(), actual.getHeight(), "frame " + frameIndex + " height");
-
-        int width = expected.getWidth();
-        int height = expected.getHeight();
-        int[] expectedPixels = expected.getRGB(0, 0, width, height, null, 0, width);
-        int[] actualPixels = actual.getRGB(0, 0, width, height, null, 0, width);
-
-        for (int index = 0; index < expectedPixels.length; index++) {
-            if (expectedPixels[index] != actualPixels[index]) {
-                fail("frame " + frameIndex + " pixel mismatch at (" + (index % width) + "," + (index / width)
-                    + "): expected " + Integer.toHexString(expectedPixels[index])
-                    + " but was " + Integer.toHexString(actualPixels[index]));
-            }
-        }
-    }
 }
