@@ -3,10 +3,10 @@ package net.aerh.imagegenerator.parser.text;
 import lombok.extern.slf4j.Slf4j;
 import net.aerh.imagegenerator.data.Gemstone;
 import net.aerh.imagegenerator.data.Flavor;
-import net.aerh.imagegenerator.data.Icon;
 import net.aerh.imagegenerator.data.PackGlyphIndex;
 import net.aerh.imagegenerator.data.ParseType;
 import net.aerh.imagegenerator.data.Stat;
+import net.aerh.imagegenerator.parser.Parser;
 import net.aerh.imagegenerator.text.ChatFormat;
 import net.aerh.imagegenerator.text.wrapper.TextWrapper;
 import org.jetbrains.annotations.Nullable;
@@ -48,6 +48,7 @@ public class PlaceholderReverseMapper {
         this.rules.addAll(buildStatRules());
         this.rules.addAll(buildGemstoneRules());
         this.rules.addAll(buildIconRules(glyphIndex));
+        this.rules.addAll(buildStatIconRules(glyphIndex));
         this.rules.addAll(buildFlavorRules());
 
         log.info("Initialized PlaceholderReverseMapper with {} rules", rules.size());
@@ -201,25 +202,33 @@ public class PlaceholderReverseMapper {
         // One rule per bare character (base icons AND icon pack-override characters), each owned by
         // exactly one canonical entry, so contested characters map deterministically.
         return glyphIndex.getBareCharacterOwners().entrySet().stream()
-            .map(entry -> {
-                String iconText = entry.getKey();
-                Icon icon = entry.getValue();
-                String regex = "(" + Pattern.quote(iconText) + ")+";
-                Pattern pattern = Pattern.compile(regex);
-
-                return new ReplacementRule(pattern, matcher -> {
-                    String matched = matcher.group(0);
-                    int count = matched.length() / iconText.length();
-                    String placeholder = "%%" + icon.getName();
-
-                    if (count > 1) {
-                        placeholder += ":" + count;
-                    }
-
-                    return placeholder + "%%";
-                });
-            })
+            .map(entry -> bareCharacterRule(entry.getKey(), entry.getValue().getName()))
             .collect(Collectors.toList());
+    }
+
+    private List<ReplacementRule> buildStatIconRules(PackGlyphIndex glyphIndex) {
+        // Stat characters not claimed by any icon regenerate through the icon-only reference form
+        // (%%icon:health%%); these rules run after icon rules and after stat format rules, so they
+        // only catch stat glyphs standing outside formatted stat text.
+        return glyphIndex.getStatBareCharacterOwners().entrySet().stream()
+            .map(entry -> bareCharacterRule(entry.getKey(),
+                Parser.ICON_REFERENCE_NAME + ":" + entry.getValue().getName()))
+            .collect(Collectors.toList());
+    }
+
+    private ReplacementRule bareCharacterRule(String iconText, String placeholderName) {
+        Pattern pattern = Pattern.compile("(" + Pattern.quote(iconText) + ")+");
+
+        return new ReplacementRule(pattern, matcher -> {
+            int count = matcher.group(0).length() / iconText.length();
+            String placeholder = "%%" + placeholderName;
+
+            if (count > 1) {
+                placeholder += ":" + count;
+            }
+
+            return placeholder + "%%";
+        });
     }
 
     private List<ReplacementRule> buildGemstoneRules() {

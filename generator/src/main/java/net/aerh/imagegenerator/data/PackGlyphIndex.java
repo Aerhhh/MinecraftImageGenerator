@@ -1,6 +1,7 @@
 package net.aerh.imagegenerator.data;
 
 import net.aerh.imagegenerator.pack.PackId;
+import net.aerh.imagegenerator.parser.Parser;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -17,16 +18,18 @@ import java.util.regex.Pattern;
  * Validates the pack-glyph data ({@code packOverrides}) across icons.json and stats.json, and
  * resolves which icon entry owns each bare character for reverse mapping.
  * <p>
- * The bare-character domain covers icons.json entries only (base characters plus their override
- * characters): an icon placeholder regenerates the bare character faithfully, whereas a stat
- * placeholder expands to formatted stat text. Stats' override characters are therefore reverse
- * mapped through pack-variant stat <em>format</em> rules, never through bare-character rules.
- * A character claimed by multiple icon entries resolves to the first entry in file order.
+ * The bare-character domain has two tiers. Icons.json entries (base characters plus their override
+ * characters) own bare characters first: an icon placeholder regenerates the bare character
+ * faithfully. Stat characters not claimed by any icon form a second tier that regenerates through
+ * the icon-only {@code %%icon:<stat>%%} form; formatted stat text still reverse maps through stat
+ * <em>format</em> rules, which run before any bare-character rule. Within a tier, a character
+ * claimed by multiple entries resolves to the first entry in file order.
  * <p>
  * Validation fails fast with an {@link IllegalStateException} listing every violation:
  * <ul>
  *     <li>entry names must match {@code [a-zA-Z_]+} (the placeholder pattern),</li>
  *     <li>icon names must not shadow stat/flavor/gemstone placeholder names,</li>
+ *     <li>no entry may claim the reserved {@code %%icon:<name>%%} keyword as its name,</li>
  *     <li>{@code packOverrides} keys must parse as {@link PackId},</li>
  *     <li>{@code packOverrides} values must be exactly one code point.</li>
  * </ul>
@@ -40,9 +43,11 @@ public final class PackGlyphIndex {
     private static volatile PackGlyphIndex cachedRegistryIndex;
 
     private final Map<String, Icon> bareCharacterOwners;
+    private final Map<String, Stat> statBareCharacterOwners;
 
-    private PackGlyphIndex(Map<String, Icon> bareCharacterOwners) {
+    private PackGlyphIndex(Map<String, Icon> bareCharacterOwners, Map<String, Stat> statBareCharacterOwners) {
         this.bareCharacterOwners = bareCharacterOwners;
+        this.statBareCharacterOwners = statBareCharacterOwners;
     }
 
     /**
@@ -110,6 +115,7 @@ public final class PackGlyphIndex {
 
         for (Icon icon : icons) {
             validateName(icon.getName(), "icons.json", violations);
+            validateReservedKeyword(icon.getName(), "icons.json", violations);
             validateOverrides(icon.getName(), icon.getPackOverrides(), "icons.json", violations);
 
             if (icon.getIcon() == null || icon.getIcon().isEmpty()) {
@@ -129,8 +135,11 @@ public final class PackGlyphIndex {
 
         for (Stat stat : stats) {
             validateName(stat.getName(), "stats.json", violations);
+            validateReservedKeyword(stat.getName(), "stats.json", violations);
             validateOverrides(stat.getName(), stat.getPackOverrides(), "stats.json", violations);
         }
+
+        reservedNames.forEach((name, file) -> validateReservedKeyword(name, file, violations));
 
         Map<String, List<Icon>> claims = new LinkedHashMap<>();
         for (Icon icon : icons) {
@@ -153,11 +162,31 @@ public final class PackGlyphIndex {
         Map<String, Icon> owners = new LinkedHashMap<>();
         claims.forEach((character, claimants) -> owners.put(character, claimants.getFirst()));
 
+        // Stat characters not claimed by any icon form the second bare-character tier; they
+        // regenerate through %%icon:<stat>%%, so icons keep precedence for contested characters.
+        Map<String, Stat> statOwners = new LinkedHashMap<>();
+        for (Stat stat : stats) {
+            Set<String> characters = new LinkedHashSet<>();
+
+            if (stat.getIcon() != null && !stat.getIcon().isEmpty()) {
+                characters.add(stat.getIcon());
+            }
+            if (stat.getPackOverrides() != null) {
+                characters.addAll(stat.getPackOverrides().values());
+            }
+
+            for (String character : characters) {
+                if (!owners.containsKey(character)) {
+                    statOwners.putIfAbsent(character, stat);
+                }
+            }
+        }
+
         if (!violations.isEmpty()) {
             throw new IllegalStateException("Invalid pack glyph data:\n - " + String.join("\n - ", violations));
         }
 
-        return new PackGlyphIndex(owners);
+        return new PackGlyphIndex(owners, statOwners);
     }
 
     /**
@@ -165,6 +194,21 @@ public final class PackGlyphIndex {
      */
     public Map<String, Icon> getBareCharacterOwners() {
         return Collections.unmodifiableMap(bareCharacterOwners);
+    }
+
+    /**
+     * @return every bare character owned by a stat (none claimed by an icon), mapped to the stat
+     *     whose {@code %%icon:<name>%%} form regenerates it
+     */
+    public Map<String, Stat> getStatBareCharacterOwners() {
+        return Collections.unmodifiableMap(statBareCharacterOwners);
+    }
+
+    private static void validateReservedKeyword(@Nullable String name, String file, List<String> violations) {
+        if (Parser.ICON_REFERENCE_NAME.equalsIgnoreCase(name)) {
+            violations.add(file + " entry '" + name + "' collides with the reserved %%"
+                + Parser.ICON_REFERENCE_NAME + ":<name>%% placeholder keyword");
+        }
     }
 
     private static void validateName(@Nullable String name, String file, List<String> violations) {

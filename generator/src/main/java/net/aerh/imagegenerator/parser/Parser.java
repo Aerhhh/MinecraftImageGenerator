@@ -12,6 +12,13 @@ public interface Parser<T> {
     Pattern VARIABLE_PATTERN = Pattern.compile("%%([a-zA-Z_]+):?(.*?)%%(?!%)", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
     /**
+     * Reserved placeholder name for icon-only references: {@code %%icon:<name>%%} renders just the
+     * icon character of the named stat, icon, or flavor entry (optionally repeated, e.g.
+     * {@code %%icon:health:3%%}). No registry entry may claim this name.
+     */
+    String ICON_REFERENCE_NAME = "icon";
+
+    /**
      * Parses a string using a list of parsers.
      *
      * @param input   The string to parse.
