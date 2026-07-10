@@ -13,9 +13,12 @@ import org.jetbrains.annotations.Nullable;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.MatchResult;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -44,11 +47,15 @@ public class PlaceholderReverseMapper {
     public PlaceholderReverseMapper() {
         PackGlyphIndex glyphIndex = PackGlyphIndex.fromRegistries();
 
+        // Format rules (stat, gemstone, flavor) must run before bare-character icon rules:
+        // pack-override characters double as icons.json base characters (e.g. U+E084 is both the
+        // undead flavor's override and mob_undead's base), and only the surrounding format text
+        // can disambiguate them.
         this.rules = new ArrayList<>();
         this.rules.addAll(buildStatRules());
         this.rules.addAll(buildGemstoneRules());
-        this.rules.addAll(buildIconRules(glyphIndex));
         this.rules.addAll(buildFlavorRules());
+        this.rules.addAll(buildIconRules(glyphIndex));
 
         log.info("Initialized PlaceholderReverseMapper with {} rules", rules.size());
     }
@@ -139,20 +146,33 @@ public class PlaceholderReverseMapper {
                 continue;
             }
 
-            if (parseType.getFormatWithDetails() != null) {
-                flavorRules.add(buildFlavorRule(flavor, parseType.getFormatWithDetails()));
+            // One rule per format template with the base icon, plus a variant per distinct
+            // pack-override character so pack-rendered lore reverse maps too.
+            List<String> iconVariants = new ArrayList<>();
+            iconVariants.add(null); // base icon
+            if (flavor.getPackOverrides() != null) {
+                flavor.getPackOverrides().values().stream()
+                    .distinct()
+                    .filter(character -> !character.equals(flavor.getIcon()))
+                    .forEach(iconVariants::add);
             }
 
-            if (parseType.getFormatWithoutDetails() != null) {
-                flavorRules.add(buildFlavorRule(flavor, parseType.getFormatWithoutDetails()));
+            for (String iconVariant : iconVariants) {
+                if (parseType.getFormatWithDetails() != null) {
+                    flavorRules.add(buildFlavorRule(flavor, parseType.getFormatWithDetails(), iconVariant));
+                }
+
+                if (parseType.getFormatWithoutDetails() != null) {
+                    flavorRules.add(buildFlavorRule(flavor, parseType.getFormatWithoutDetails(), iconVariant));
+                }
             }
         }
 
         return flavorRules;
     }
 
-    private ReplacementRule buildFlavorRule(Flavor flavor, String format) {
-        PatternBuildResult result = buildPattern(format, token -> resolveFlavorToken(flavor, token));
+    private ReplacementRule buildFlavorRule(Flavor flavor, String format, @Nullable String iconOverride) {
+        PatternBuildResult result = buildPattern(format, token -> resolveFlavorToken(flavor, token, iconOverride));
 
         return new ReplacementRule(result.pattern(), matcher -> {
             List<String> parts = new ArrayList<>();
@@ -229,6 +249,19 @@ public class PlaceholderReverseMapper {
             String icon = safeString(gemstone.getIcon());
             String formattedIcon = safeString(gemstone.getFormattedIcon());
 
+            // Formatted variants first (they carry a color-code prefix), then bare characters;
+            // pack-override characters join both groups so pack-rendered slots reverse map too.
+            Set<String> iconAlternatives = new LinkedHashSet<>();
+            iconAlternatives.add(formattedIcon);
+            if (gemstone.getPackOverrides() != null && !icon.isEmpty()) {
+                gemstone.getPackOverrides().values()
+                    .forEach(override -> iconAlternatives.add(formattedIcon.replace(icon, override)));
+            }
+            iconAlternatives.add(icon);
+            if (gemstone.getPackOverrides() != null) {
+                iconAlternatives.addAll(gemstone.getPackOverrides().values());
+            }
+
             for (Map.Entry<String, String> entry : safeMap(gemstone.getFormattedTiers()).entrySet()) {
                 String tierName = entry.getKey();
                 String format = entry.getValue();
@@ -236,12 +269,16 @@ public class PlaceholderReverseMapper {
                     continue;
                 }
 
-                String iconPattern = Pattern.quote(icon);
-                String formattedIconPattern = Pattern.quote(formattedIcon.replace(ChatFormat.SECTION_SYMBOL, ChatFormat.AMPERSAND_SYMBOL));
-                String replaced = format.replace(ChatFormat.SECTION_SYMBOL, ChatFormat.AMPERSAND_SYMBOL)
-                    .replace("%s", "(?:" + formattedIconPattern + "|" + iconPattern + ")");
+                String alternation = iconAlternatives.stream()
+                    .map(alternative -> Pattern.quote(alternative.replace(ChatFormat.SECTION_SYMBOL, ChatFormat.AMPERSAND_SYMBOL)))
+                    .collect(Collectors.joining("|"));
+                // The tier format is literal text (brackets included), so every segment around
+                // the icon placeholder must be regex-quoted.
+                String regex = Arrays.stream(format.replace(ChatFormat.SECTION_SYMBOL, ChatFormat.AMPERSAND_SYMBOL).split("%s", -1))
+                    .map(segment -> segment.isEmpty() ? "" : Pattern.quote(segment))
+                    .collect(Collectors.joining("(?:" + alternation + ")"));
 
-                Pattern pattern = Pattern.compile(escapeAmpersands(replaced));
+                Pattern pattern = Pattern.compile(regex);
                 gemstoneRules.add(new ReplacementRule(pattern, matcher -> "%%" + gemstone.getName() + ":" + tierName + "%%"));
             }
         }
@@ -288,6 +325,20 @@ public class PlaceholderReverseMapper {
 
     private static String escapeLiteral(String text) {
         return Pattern.quote(text);
+    }
+
+    private String resolveFlavorToken(Flavor flavor, String token, @Nullable String iconOverride) {
+        String value = resolveFlavorToken(flavor, token);
+
+        // Icon, stat and display values may embed the icon character anywhere (e.g. "This armor
+        // piece is undead X!"), so pack variants swap every occurrence.
+        if (iconOverride != null && value != null
+            && flavor.getIcon() != null && !flavor.getIcon().isEmpty()
+            && ("icon".equalsIgnoreCase(token) || "stat".equalsIgnoreCase(token) || "display".equalsIgnoreCase(token))) {
+            return value.replace(flavor.getIcon(), iconOverride);
+        }
+
+        return value;
     }
 
     private String resolveFlavorToken(Flavor flavor, String token) {

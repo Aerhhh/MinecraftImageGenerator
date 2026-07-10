@@ -79,9 +79,10 @@ public final class ParseTypeFormatter {
         placeholders.put("color", String.valueOf(entry.getColor().getCode()));
         placeholders.put("subColor", String.valueOf(entry.getSecondaryColor().getCode()));
         String icon = entry.getIcon(context.packId());
+        String stat = entry.getStat(context.packId());
         String display = entry.getDisplay(context.packId());
         placeholders.put("icon", icon != null ? icon : "");
-        placeholders.put("stat", entry.getStat() != null ? entry.getStat() : "");
+        placeholders.put("stat", stat != null ? stat : "");
         placeholders.put("display", display != null ? display : "");
         placeholders.put("extraDetails", hasExtra ? extraDetails : "");
 

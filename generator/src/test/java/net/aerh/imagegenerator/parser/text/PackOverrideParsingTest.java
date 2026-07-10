@@ -60,6 +60,36 @@ class PackOverrideParsingTest {
     }
 
     @Test
+    void gemstoneParserUsesOverrideForActivePack() {
+        GemstoneParser parser = new GemstoneParser();
+
+        assertEquals("&8[\u2764]&r", parser.parse("%%gem_ruby%%"));
+        assertEquals("&8[\uE010]&r", parser.parse("%%gem_ruby%%", HYPIXEL));
+        // "unlocked" carries its own color code, so the bare override character is used
+        assertEquals("&8[&7\uE010&8]&r", parser.parse("%%gem_ruby:unlocked%%", HYPIXEL));
+        // other tiers use the formatted icon; the override keeps the hand-tuned color code
+        assertEquals("&9[&c\uE010&9]&r", parser.parse("%%gem_ruby:fine%%", HYPIXEL));
+        assertEquals("&9[&c\u2764&9]&r", parser.parse("%%gem_ruby:fine%%"));
+    }
+
+    @Test
+    void flavorParserUsesOverrideIcon() {
+        FlavorParser parser = new FlavorParser();
+
+        assertTrue(parser.parse("%%undead%%").contains("\u0F15 Undead"));
+        assertTrue(parser.parse("%%undead%%", HYPIXEL).contains("\uE084 Undead"));
+        assertTrue(parser.parse("%%undead%%", ParseContext.empty()).contains("\u0F15 Undead"));
+    }
+
+    @Test
+    void flavorParserSwapsEmbeddedIconCharacters() {
+        String packed = new FlavorParser().parse("%%undead_item%%", HYPIXEL);
+
+        assertTrue(packed.contains("This armor piece is undead \uE084!"), packed);
+        assertFalse(packed.contains("\u0F15"), packed);
+    }
+
+    @Test
     void vanillaPackNormalizesToNoOverrides() {
         assertNull(ParseContext.of(PackId.VANILLA).packId());
         assertEquals("\u23E3", new IconParser().parse("%%zone%%", ParseContext.of(PackId.VANILLA)));

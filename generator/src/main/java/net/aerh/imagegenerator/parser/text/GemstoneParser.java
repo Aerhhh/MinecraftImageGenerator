@@ -2,6 +2,8 @@ package net.aerh.imagegenerator.parser.text;
 
 import lombok.extern.slf4j.Slf4j;
 import net.aerh.imagegenerator.data.Gemstone;
+import net.aerh.imagegenerator.pack.PackId;
+import net.aerh.imagegenerator.parser.ParseContext;
 import net.aerh.imagegenerator.parser.StringParser;
 import org.jetbrains.annotations.Nullable;
 
@@ -13,6 +15,11 @@ public class GemstoneParser implements StringParser {
 
     @Override
     public String parse(String input) {
+        return parse(input, ParseContext.empty());
+    }
+
+    @Override
+    public String parse(String input, ParseContext context) {
         if (input.isBlank()) {
             return input;
         }
@@ -29,7 +36,7 @@ public class GemstoneParser implements StringParser {
                 continue;
             }
 
-            input = input.replace(match, parseAsTier(gemstone, extraData));
+            input = input.replace(match, parseAsTier(gemstone, extraData, context.packId()));
         }
 
         return input;
@@ -40,14 +47,15 @@ public class GemstoneParser implements StringParser {
      *
      * @param gemstone the {@link Gemstone} to parse
      * @param extra    the type of {@link Gemstone} to parse (tier)
+     * @param packId   the active pack whose icon overrides apply, or {@code null} for none
      *
      * @return the formatted string
      */
-    private String parseAsTier(Gemstone gemstone, @Nullable String extra) {
+    private String parseAsTier(Gemstone gemstone, @Nullable String extra, @Nullable PackId packId) {
         Map<String, String> formattedTiers = gemstone.getFormattedTiers();
 
         if (extra == null) {
-            return "&8[" + gemstone.getIcon() + "]&r";
+            return "&8[" + gemstone.getIcon(packId) + "]&r";
         }
 
         String tierFormat = formattedTiers.get(extra.toLowerCase());
@@ -60,12 +68,12 @@ public class GemstoneParser implements StringParser {
                 tierFormat.charAt(indexOfPlaceholder - 2) == '&' &&
                 isValidColorCode(tierFormat.charAt(indexOfPlaceholder - 1));
 
-            String icon = hasValidColorCode ? gemstone.getIcon() : gemstone.getFormattedIcon();
+            String icon = hasValidColorCode ? gemstone.getIcon(packId) : gemstone.getFormattedIcon(packId);
 
             return tierFormat.formatted(icon);
         }
 
-        return "&8[" + gemstone.getIcon() + "]&r";  // Default fallback
+        return "&8[" + gemstone.getIcon(packId) + "]&r";  // Default fallback
     }
 
     /**
