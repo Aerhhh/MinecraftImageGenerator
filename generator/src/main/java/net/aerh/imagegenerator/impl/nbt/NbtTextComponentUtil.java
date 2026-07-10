@@ -6,6 +6,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
 import net.aerh.imagegenerator.text.ChatFormat;
+import net.aerh.imagegenerator.text.TextColor;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Locale;
@@ -230,9 +231,10 @@ public final class NbtTextComponentUtil {
     private static FormattingState resolveFormatting(JsonObject component, FormattingState inherited) {
         String color = inherited.colorCode();
         if (component.has("color")) {
-            ChatFormat colorFormat = ChatFormat.of(component.get("color").getAsString());
-            if (colorFormat != null && colorFormat.isColor()) {
-                color = "&" + colorFormat.getCode();
+            // Named colors and vanilla 1.16+ hex colors; unrecognized values inherit the parent's color.
+            TextColor textColor = TextColor.fromJsonString(component.get("color").getAsString());
+            if (textColor != null) {
+                color = "&" + textColor.getLegacyCode();
             }
         }
 
