@@ -5,12 +5,14 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import net.aerh.imagegenerator.pack.PackId;
 import net.aerh.imagegenerator.text.ChatFormat;
 import net.hypixel.nerdbot.marmalade.registry.DataRegistry;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 
 @Slf4j
@@ -59,6 +61,51 @@ public class Stat implements FormattableEntry {
     private String parseType;
     @Nullable
     private Float powerScalingMultiplier;
+    /**
+     * Pack-conditional replacement icon characters keyed by pack ID string
+     * (e.g. {@code "hypixel:skyblock"}). Icon-only: no other field is overridable.
+     */
+    @Nullable
+    private Map<String, String> packOverrides;
+
+    /**
+     * Resolves the icon character for the given pack: the exact-pack-ID override when one exists,
+     * otherwise the base {@link #icon}.
+     *
+     * @param packId the active pack, or {@code null} for none
+     *
+     * @return the icon character to render
+     */
+    @Override
+    public String getIcon(@Nullable PackId packId) {
+        if (packId != null && packOverrides != null) {
+            String override = packOverrides.get(packId.toString());
+            if (override != null) {
+                return override;
+            }
+        }
+        return icon;
+    }
+
+    /**
+     * Resolves the display text for the given pack. When an icon override is active the display is
+     * derived as {@code overrideIcon + " " + stat} so it stays consistent with the swapped icon;
+     * otherwise the stored hand-tuned {@link #display} is returned unchanged.
+     *
+     * @param packId the active pack, or {@code null} for none
+     *
+     * @return the display text
+     */
+    @Override
+    public String getDisplay(@Nullable PackId packId) {
+        if (packId != null && packOverrides != null) {
+            String override = packOverrides.get(packId.toString());
+            if (override != null) {
+                return stat != null ? override + " " + stat : override;
+            }
+        }
+        return display;
+    }
 
     public static Stat byName(String name) {
         return REGISTRY.byName(name).orElse(null);

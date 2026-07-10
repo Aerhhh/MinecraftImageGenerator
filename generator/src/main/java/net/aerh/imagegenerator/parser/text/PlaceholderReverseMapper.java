@@ -4,10 +4,12 @@ import lombok.extern.slf4j.Slf4j;
 import net.aerh.imagegenerator.data.Gemstone;
 import net.aerh.imagegenerator.data.Flavor;
 import net.aerh.imagegenerator.data.Icon;
+import net.aerh.imagegenerator.data.PackGlyphIndex;
 import net.aerh.imagegenerator.data.ParseType;
 import net.aerh.imagegenerator.data.Stat;
 import net.aerh.imagegenerator.text.ChatFormat;
 import net.aerh.imagegenerator.text.wrapper.TextWrapper;
+import org.jetbrains.annotations.Nullable;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -38,10 +40,12 @@ public class PlaceholderReverseMapper {
     private final List<ReplacementRule> rules;
 
     public PlaceholderReverseMapper() {
+        PackGlyphIndex glyphIndex = PackGlyphIndex.fromRegistries();
+
         this.rules = new ArrayList<>();
         this.rules.addAll(buildStatRules());
         this.rules.addAll(buildGemstoneRules());
-        this.rules.addAll(buildIconRules());
+        this.rules.addAll(buildIconRules(glyphIndex));
         this.rules.addAll(buildFlavorRules());
 
         log.info("Initialized PlaceholderReverseMapper with {} rules", rules.size());
@@ -97,12 +101,25 @@ public class PlaceholderReverseMapper {
                 continue;
             }
 
-            if (parseType.getFormatWithDetails() != null) {
-                statRules.add(buildStatRule(stat, parseType.getFormatWithDetails()));
+            // One rule per format template with the base icon, plus a variant per distinct
+            // pack-override character so pack-rendered lore reverse maps too.
+            List<String> iconVariants = new ArrayList<>();
+            iconVariants.add(null); // base icon
+            if (stat.getPackOverrides() != null) {
+                stat.getPackOverrides().values().stream()
+                    .distinct()
+                    .filter(character -> !character.equals(stat.getIcon()))
+                    .forEach(iconVariants::add);
             }
 
-            if (parseType.getFormatWithoutDetails() != null) {
-                statRules.add(buildStatRule(stat, parseType.getFormatWithoutDetails()));
+            for (String iconVariant : iconVariants) {
+                if (parseType.getFormatWithDetails() != null) {
+                    statRules.add(buildStatRule(stat, parseType.getFormatWithDetails(), iconVariant));
+                }
+
+                if (parseType.getFormatWithoutDetails() != null) {
+                    statRules.add(buildStatRule(stat, parseType.getFormatWithoutDetails(), iconVariant));
+                }
             }
         }
 
@@ -155,8 +172,8 @@ public class PlaceholderReverseMapper {
         });
     }
 
-    private ReplacementRule buildStatRule(Stat stat, String format) {
-        PatternBuildResult result = buildPattern(format, token -> resolveStatToken(stat, token));
+    private ReplacementRule buildStatRule(Stat stat, String format, @Nullable String iconOverride) {
+        PatternBuildResult result = buildPattern(format, token -> resolveStatToken(stat, token, iconOverride));
 
         return new ReplacementRule(result.pattern(), matcher -> {
             List<String> parts = new ArrayList<>();
@@ -178,10 +195,13 @@ public class PlaceholderReverseMapper {
         });
     }
 
-    private List<ReplacementRule> buildIconRules() {
-        return Icon.getIcons().stream()
-            .map(icon -> {
-                String iconText = safeString(icon.getIcon());
+    private List<ReplacementRule> buildIconRules(PackGlyphIndex glyphIndex) {
+        // One rule per bare character (base icons AND icon pack-override characters), each owned by
+        // exactly one canonical entry, so contested characters map deterministically.
+        return glyphIndex.getBareCharacterOwners().entrySet().stream()
+            .map(entry -> {
+                String iconText = entry.getKey();
+                Icon icon = entry.getValue();
                 String regex = "(" + Pattern.quote(iconText) + ")+";
                 Pattern pattern = Pattern.compile(regex);
 
@@ -296,6 +316,19 @@ public class PlaceholderReverseMapper {
     @FunctionalInterface
     private interface TokenResolver {
         String resolve(String token);
+    }
+
+    private String resolveStatToken(Stat stat, String token, @Nullable String iconOverride) {
+        if (iconOverride != null) {
+            if ("icon".equalsIgnoreCase(token)) {
+                return iconOverride;
+            }
+            if ("display".equalsIgnoreCase(token)) {
+                return stat.getStat() != null ? iconOverride + " " + stat.getStat() : iconOverride;
+            }
+        }
+
+        return resolveStatToken(stat, token);
     }
 
     private String resolveStatToken(Stat stat, String token) {

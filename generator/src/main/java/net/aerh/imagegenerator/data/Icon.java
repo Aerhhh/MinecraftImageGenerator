@@ -5,10 +5,13 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import net.aerh.imagegenerator.pack.PackId;
 import net.hypixel.nerdbot.marmalade.registry.DataRegistry;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 
 @Slf4j
@@ -50,6 +53,30 @@ public class Icon {
 
     private String name;
     private String icon;
+    /**
+     * Pack-conditional replacement characters keyed by pack ID string (e.g. {@code "hypixel:skyblock"}).
+     * When the keyed pack is active, {@link #getIcon(PackId)} returns the override instead of {@link #icon}.
+     */
+    @Nullable
+    private Map<String, String> packOverrides;
+
+    /**
+     * Resolves the icon character for the given pack: the exact-pack-ID override when one exists,
+     * otherwise the base {@link #icon}.
+     *
+     * @param packId the active pack, or {@code null} for none
+     *
+     * @return the icon character to render
+     */
+    public String getIcon(@Nullable PackId packId) {
+        if (packId != null && packOverrides != null) {
+            String override = packOverrides.get(packId.toString());
+            if (override != null) {
+                return override;
+            }
+        }
+        return icon;
+    }
 
     public static Icon byName(String name) {
         return REGISTRY.byName(name).orElse(null);

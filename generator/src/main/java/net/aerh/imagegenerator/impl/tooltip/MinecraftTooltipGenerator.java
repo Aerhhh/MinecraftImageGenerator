@@ -22,6 +22,7 @@ import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.pack.PackId;
 import net.aerh.imagegenerator.pack.PackRepository;
 import net.aerh.imagegenerator.pack.TooltipSprites;
+import net.aerh.imagegenerator.parser.ParseContext;
 import net.aerh.imagegenerator.text.TextColorRemap;
 import net.aerh.imagegenerator.parser.text.RarityFooterParser;
 import net.aerh.imagegenerator.text.ChatFormat;
@@ -108,6 +109,8 @@ public class MinecraftTooltipGenerator implements Generator {
     public MinecraftTooltip parseLore(String input, TooltipSettings settings) {
         log.debug("Parsing lore for item: {} with TooltipSettings: {}", name, settings);
 
+        ParseContext parseContext = ParseContext.of(packId);
+
         MinecraftTooltip.Builder builder = MinecraftTooltip.builder()
             .withPadding(settings.getPadding())
             .hasFirstLinePadding(settings.hasFirstLinePadding())
@@ -126,12 +129,12 @@ public class MinecraftTooltipGenerator implements Generator {
                 name = rarity.getColorCode() + name;
             }
 
-            builder.withLines(LineSegment.fromLegacy(TextWrapper.parseLine(name), '&'));
+            builder.withLines(LineSegment.fromLegacy(TextWrapper.parseLine(name, parseContext), '&'));
         }
 
         List<List<LineSegment>> segments = new ArrayList<>();
 
-        for (String line : TextWrapper.wrapString(input, settings.getMaxLineLength())) {
+        for (String line : TextWrapper.wrapString(input, settings.getMaxLineLength(), parseContext)) {
             segments.add(LineSegment.fromLegacy(line, '&'));
         }
 

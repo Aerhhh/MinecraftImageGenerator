@@ -7,7 +7,10 @@
         "color": "RED",
         "subColor": null,
         "parseType": "NORMAL",
-        "powerScalingMultiplier": 1
+        "powerScalingMultiplier": 1,
+        "packOverrides": {
+            "hypixel:skyblock": "\uE00D"
+        }
     },
     {
         "icon": "❁",
@@ -16,7 +19,10 @@
         "display": "❁ Damage",
         "color": "RED",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE050"
+        }
     },
     {
         "icon": "❤",
@@ -26,7 +32,10 @@
         "color": "RED",
         "subColor": "GREEN",
         "parseType": "NORMAL",
-        "powerScalingMultiplier": 1.4
+        "powerScalingMultiplier": 1.4,
+        "packOverrides": {
+            "hypixel:skyblock": "\uE010"
+        }
     },
     {
         "icon": "❈",
@@ -36,7 +45,10 @@
         "color": "GREEN",
         "subColor": null,
         "parseType": "NORMAL",
-        "powerScalingMultiplier": 1
+        "powerScalingMultiplier": 1,
+        "packOverrides": {
+            "hypixel:skyblock": "\uE008"
+        }
     },
     {
         "icon": "❂",
@@ -46,7 +58,10 @@
         "color": "WHITE",
         "subColor": null,
         "parseType": "NORMAL",
-        "powerScalingMultiplier": 0.27
+        "powerScalingMultiplier": 0.27,
+        "packOverrides": {
+            "hypixel:skyblock": "\uE027"
+        }
     },
     {
         "icon": "✦",
@@ -56,7 +71,10 @@
         "color": "WHITE",
         "subColor": "GREEN",
         "parseType": "NORMAL",
-        "powerScalingMultiplier": 0.5
+        "powerScalingMultiplier": 0.5,
+        "packOverrides": {
+            "hypixel:skyblock": "\uE022"
+        }
     },
     {
         "icon": "✎",
@@ -66,7 +84,10 @@
         "color": "AQUA",
         "subColor": null,
         "parseType": "NORMAL",
-        "powerScalingMultiplier": 1.5
+        "powerScalingMultiplier": 1.5,
+        "packOverrides": {
+            "hypixel:skyblock": "\uE003"
+        }
     },
     {
         "icon": "☣",
@@ -76,7 +97,10 @@
         "color": "BLUE",
         "subColor": null,
         "parseType": "NORMAL",
-        "powerScalingMultiplier": 0.4
+        "powerScalingMultiplier": 0.4,
+        "packOverrides": {
+            "hypixel:skyblock": "\uE02C"
+        }
     },
     {
         "icon": "☠",
@@ -86,7 +110,10 @@
         "color": "BLUE",
         "subColor": null,
         "parseType": "NORMAL",
-        "powerScalingMultiplier": 1
+        "powerScalingMultiplier": 1,
+        "packOverrides": {
+            "hypixel:skyblock": "\uE007"
+        }
     },
     {
         "icon": "⚔",
@@ -96,7 +123,10 @@
         "color": "YELLOW",
         "subColor": "GREEN",
         "parseType": "NORMAL",
-        "powerScalingMultiplier": 0.3
+        "powerScalingMultiplier": 0.3,
+        "packOverrides": {
+            "hypixel:skyblock": "\uE001"
+        }
     },
     {
         "icon": "⫽",
@@ -105,7 +135,10 @@
         "display": "⫽ Ferocity",
         "color": "RED",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE00B"
+        }
     },
     {
         "icon": "☄",
@@ -115,7 +148,10 @@
         "color": "GREEN",
         "subColor": null,
         "parseType": "NORMAL",
-        "powerScalingMultiplier": 0.25
+        "powerScalingMultiplier": 0.25,
+        "packOverrides": {
+            "hypixel:skyblock": "\uE014"
+        }
     },
     {
         "icon": "♨",
@@ -125,7 +161,10 @@
         "color": "DARK_RED",
         "subColor": null,
         "parseType": "NORMAL",
-        "powerScalingMultiplier": 0.333
+        "powerScalingMultiplier": 0.333,
+        "packOverrides": {
+            "hypixel:skyblock": "\uE028"
+        }
     },
     {
         "icon": "❣",
@@ -134,7 +173,10 @@
         "display": "❣ Health Regen",
         "color": "RED",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE011"
+        }
     },
     {
         "icon": "✯",
@@ -143,7 +185,10 @@
         "display": "✯ Magic Find",
         "color": "AQUA",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE01A"
+        }
     },
     {
         "icon": "♣",
@@ -152,7 +197,10 @@
         "display": "♣ Pet Luck",
         "color": "LIGHT_PURPLE",
         "subColor": "WHITE",
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE013"
+        }
     },
     {
         "icon": "α",
@@ -161,7 +209,10 @@
         "display": "α Sea Creature Chance",
         "color": "DARK_AQUA",
         "subColor": null,
-        "parseType": "BOLD_ICON"
+        "parseType": "BOLD_ICON",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE021"
+        }
     },
     {
         "icon": "☂",
@@ -170,7 +221,10 @@
         "display": "☂ Fishing Speed",
         "color": "AQUA",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE00C"
+        }
     },
     {
         "icon": "๑",
@@ -179,7 +233,10 @@
         "display": "๑ Ability Damage",
         "color": "RED",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE002"
+        }
     },
     {
         "icon": "⸕",
@@ -188,7 +245,10 @@
         "display": "⸕ Mining Speed",
         "color": "GOLD",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE015"
+        }
     },
     {
         "icon": "Ⓟ",
@@ -197,7 +257,10 @@
         "display": "Ⓟ Breaking Power",
         "color": "DARK_GREEN",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE005"
+        }
     },
     {
         "icon": "✧",
@@ -206,7 +269,10 @@
         "display": "✧ Pristine",
         "color": "DARK_PURPLE",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE01C"
+        }
     },
     {
         "icon": "☘",
@@ -215,7 +281,10 @@
         "display": "☘ Mining Fortune",
         "color": "GOLD",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE053"
+        }
     },
     {
         "icon": "☘",
@@ -224,7 +293,10 @@
         "display": "☘ Farming Fortune",
         "color": "GOLD",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE051"
+        }
     },
     {
         "icon": "☘",
@@ -233,7 +305,10 @@
         "display": "☘ Foraging Fortune",
         "color": "GOLD",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE054"
+        }
     },
     {
         "icon": "⸎",
@@ -251,7 +326,10 @@
         "display": "ʬ Overflow Mana",
         "color": "DARK_AQUA",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE017"
+        }
     },
     {
         "icon": "Ⓢ",
@@ -260,7 +338,10 @@
         "display": "Ⓢ Swing Range",
         "color": "YELLOW",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE024"
+        }
     },
     {
         "icon": "☯",
@@ -377,7 +458,10 @@
         "display": "ф Rift Time",
         "color": "GREEN",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE020"
+        }
     },
     {
         "icon": "❁",
@@ -386,7 +470,10 @@
         "display": "❁ Rift Damage",
         "color": "DARK_PURPLE",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE01E"
+        }
     },
     {
         "icon": "⚡",
@@ -395,7 +482,10 @@
         "display": "⚡ Mana Regen",
         "color": "AQUA",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE004"
+        }
     },
     {
         "icon": "☘",
@@ -413,7 +503,10 @@
         "display": "☘ Wheat Fortune",
         "color": "GOLD",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE051"
+        }
     },
     {
         "icon": "☘",
@@ -422,7 +515,10 @@
         "display": "☘ Carrot Fortune",
         "color": "GOLD",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE051"
+        }
     },
     {
         "icon": "☘",
@@ -431,7 +527,10 @@
         "display": "☘ Potato Fortune",
         "color": "GOLD",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE051"
+        }
     },
     {
         "icon": "☘",
@@ -440,7 +539,10 @@
         "display": "☘ Pumpkin Fortune",
         "color": "GOLD",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE051"
+        }
     },
     {
         "icon": "☘",
@@ -449,7 +551,10 @@
         "display": "☘ Melon Slice Fortune",
         "color": "GOLD",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE051"
+        }
     },
     {
         "icon": "☘",
@@ -458,7 +563,10 @@
         "display": "☘ Melon Slice Fortune",
         "color": "GOLD",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE051"
+        }
     },
     {
         "icon": "☘",
@@ -467,7 +575,10 @@
         "display": "☘ Mushroom Fortune",
         "color": "GOLD",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE051"
+        }
     },
     {
         "icon": "☘",
@@ -476,7 +587,10 @@
         "display": "☘ Cactus Fortune",
         "color": "GOLD",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE051"
+        }
     },
     {
         "icon": "☘",
@@ -485,7 +599,10 @@
         "display": "☘ Sugar Cane Fortune",
         "color": "GOLD",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE051"
+        }
     },
     {
         "icon": "☘",
@@ -494,7 +611,10 @@
         "display": "☘ Nether Wart Fortune",
         "color": "GOLD",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE051"
+        }
     },
     {
         "icon": "☘",
@@ -503,7 +623,10 @@
         "display": "☘ Cocoa Beans Fortune",
         "color": "GOLD",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE051"
+        }
     },
     {
         "icon": "▚",
@@ -512,7 +635,10 @@
         "display": "▚ Mining Spread",
         "color": "YELLOW",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE016"
+        }
     },
     {
         "icon": "▚",
@@ -521,7 +647,10 @@
         "display": "▚ Gemstone Spread",
         "color": "YELLOW",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE00F"
+        }
     },
     {
         "icon": "☘",
@@ -530,7 +659,10 @@
         "display": "☘ Ore Fortune",
         "color": "GOLD",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE053"
+        }
     },
     {
         "icon": "☘",
@@ -539,7 +671,10 @@
         "display": "☘ Block Fortune",
         "color": "GOLD",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE053"
+        }
     },
     {
         "icon": "☘",
@@ -548,7 +683,10 @@
         "display": "☘ Dwarven Metal Fortune",
         "color": "GOLD",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE053"
+        }
     },
     {
         "icon": "☘",
@@ -557,7 +695,10 @@
         "display": "☘ Gemstone Fortune",
         "color": "GOLD",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE053"
+        }
     },
     {
         "icon": "⚓",
@@ -566,7 +707,10 @@
         "display": "⚓ Double Hook Chance",
         "color": "BLUE",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE009"
+        }
     },
     {
         "icon": "♔",
@@ -575,7 +719,10 @@
         "display": "♔ Trophy Chance",
         "color": "GOLD",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE02A"
+        }
     },
     {
         "icon": "ൠ",
@@ -584,7 +731,10 @@
         "display": "ൠ Bonus Pest Chance",
         "color": "DARK_GREEN",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE019"
+        }
     },
     {
         "icon": "⛃",
@@ -593,7 +743,10 @@
         "display": "⛃ Treasure Chance",
         "color": "GOLD",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE025"
+        }
     },
     {
         "icon": "♨",
@@ -602,7 +755,10 @@
         "display": "♨ Heat Resistance",
         "color": "RED",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE012"
+        }
     },
     {
         "icon": "❄",
@@ -611,7 +767,10 @@
         "display": "❄ Cold Resistance",
         "color": "AQUA",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE006"
+        }
     },
     {
         "icon": "☠",
@@ -620,7 +779,10 @@
         "display": "☠ Fear",
         "color": "DARK_PURPLE",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE00A"
+        }
     },
     {
         "icon": "☘",
@@ -629,7 +791,10 @@
         "display": "☘ Fig Fortune",
         "color": "GOLD",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE054"
+        }
     },
     {
         "icon": "☘",
@@ -638,7 +803,10 @@
         "display": "☘ Mangrove Fortune",
         "color": "GOLD",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE054"
+        }
     },
     {
         "icon": "☘",
@@ -647,7 +815,10 @@
         "display": "☘ Hunter Fortune",
         "color": "LIGHT_PURPLE",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE05B"
+        }
     },
     {
         "icon": "☘",
@@ -665,7 +836,10 @@
         "display": "∮ Sweep",
         "color": "DARK_GREEN",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE023"
+        }
     },
     {
         "icon": "⚶",
@@ -674,7 +848,10 @@
         "display": "⚶ Respiration",
         "color": "DARK_AQUA",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE01D"
+        }
     },
     {
         "icon": "❍",
@@ -683,7 +860,10 @@
         "display": "❍ Pressure Resistance",
         "color": "BLUE",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE01B"
+        }
     },
     {
         "icon": "ᛷ",
@@ -692,7 +872,10 @@
         "display": "ᛷ Pull",
         "color": "AQUA",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE02D"
+        }
     },
     {
         "icon": "❃",
@@ -701,7 +884,10 @@
         "display": "❃ Tracking",
         "color": "LIGHT_PURPLE",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE077"
+        }
     },
     {
         "icon": "❤",
@@ -719,6 +905,9 @@
         "display": "☀ Overbloom",
         "color": "YELLOW",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE02B"
+        }
     }
 ]

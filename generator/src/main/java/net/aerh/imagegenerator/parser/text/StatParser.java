@@ -3,6 +3,7 @@ package net.aerh.imagegenerator.parser.text;
 import lombok.extern.slf4j.Slf4j;
 import net.aerh.imagegenerator.data.ParseType;
 import net.aerh.imagegenerator.data.Stat;
+import net.aerh.imagegenerator.parser.ParseContext;
 import net.aerh.imagegenerator.parser.StringParser;
 import net.aerh.imagegenerator.text.ChatFormat;
 
@@ -13,6 +14,11 @@ public class StatParser implements StringParser {
 
     @Override
     public String parse(String input) {
+        return parse(input, ParseContext.empty());
+    }
+
+    @Override
+    public String parse(String input, ParseContext context) {
         if (input == null || input.isBlank()) {
             return input;
         }
@@ -37,7 +43,7 @@ public class StatParser implements StringParser {
                 continue;
             }
 
-            String formatted = ParseTypeFormatter.format(stat, parseType, extraData);
+            String formatted = ParseTypeFormatter.format(stat, parseType, extraData, context);
 
             if (!formatted.startsWith("[")) {
                 formatted += String.valueOf(ChatFormat.SECTION_SYMBOL) + ChatFormat.RESET.getCode();

@@ -29,7 +29,10 @@
     },
     {
         "name": "zone",
-        "icon": "⏣"
+        "icon": "⏣",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE067"
+        }
     },
     {
         "name": "abiphone",
@@ -66,5 +69,177 @@
     {
         "name": "raffle",
         "icon": "⛃"
+    },
+    {
+        "name": "hypixel_staff",
+        "icon": "\u12DE"
+    },
+    {
+        "name": "notched_heart",
+        "icon": "\uE000"
+    },
+    {
+        "name": "cage",
+        "icon": "\uE00E"
+    },
+    {
+        "name": "pest_icon",
+        "icon": "\uE018"
+    },
+    {
+        "name": "rift_hearts",
+        "icon": "\uE01F"
+    },
+    {
+        "name": "launch_arrow",
+        "icon": "\uE026"
+    },
+    {
+        "name": "sparkle",
+        "icon": "\uE029"
+    },
+    {
+        "name": "fishing_skill",
+        "icon": "\uE052"
+    },
+    {
+        "name": "enchanting_skill",
+        "icon": "\uE055"
+    },
+    {
+        "name": "alchemy_skill",
+        "icon": "\uE056"
+    },
+    {
+        "name": "carpentry_skill",
+        "icon": "\uE057"
+    },
+    {
+        "name": "runecrafting_skill",
+        "icon": "\uE058"
+    },
+    {
+        "name": "taming_skill",
+        "icon": "\uE059"
+    },
+    {
+        "name": "social_skill",
+        "icon": "\uE05A"
+    },
+    {
+        "name": "arrow_left",
+        "icon": "\uE060"
+    },
+    {
+        "name": "arrow_right",
+        "icon": "\uE061"
+    },
+    {
+        "name": "arrow_up",
+        "icon": "\uE062"
+    },
+    {
+        "name": "arrow_down",
+        "icon": "\uE063"
+    },
+    {
+        "name": "lock",
+        "icon": "\uE066"
+    },
+    {
+        "name": "double_chevron_up",
+        "icon": "\uE068"
+    },
+    {
+        "name": "mob_airborne",
+        "icon": "\uE070"
+    },
+    {
+        "name": "mob_animal",
+        "icon": "\uE071"
+    },
+    {
+        "name": "mob_aquatic",
+        "icon": "\uE072"
+    },
+    {
+        "name": "mob_arcane",
+        "icon": "\uE073"
+    },
+    {
+        "name": "mob_arthropod",
+        "icon": "\uE074"
+    },
+    {
+        "name": "mob_construct",
+        "icon": "\uE075"
+    },
+    {
+        "name": "mob_cubic",
+        "icon": "\uE076"
+    },
+    {
+        "name": "mob_elusive",
+        "icon": "\uE077"
+    },
+    {
+        "name": "mob_ender",
+        "icon": "\uE078"
+    },
+    {
+        "name": "mob_frozen",
+        "icon": "\uE079"
+    },
+    {
+        "name": "mob_glacial",
+        "icon": "\uE07A"
+    },
+    {
+        "name": "mob_humanoid",
+        "icon": "\uE07B"
+    },
+    {
+        "name": "mob_infernal",
+        "icon": "\uE07C"
+    },
+    {
+        "name": "mob_magmatic",
+        "icon": "\uE07D"
+    },
+    {
+        "name": "mob_mythological",
+        "icon": "\uE07E"
+    },
+    {
+        "name": "mob_pest",
+        "icon": "\uE07F"
+    },
+    {
+        "name": "mob_shielded",
+        "icon": "\uE080"
+    },
+    {
+        "name": "mob_skeletal",
+        "icon": "\uE081"
+    },
+    {
+        "name": "mob_spooky",
+        "icon": "\uE082"
+    },
+    {
+        "name": "mob_subterranean",
+        "icon": "\uE083"
+    },
+    {
+        "name": "mob_undead",
+        "icon": "\uE084"
+    },
+    {
+        "name": "mob_wither",
+        "icon": "\uE085"
+    },
+    {
+        "name": "mob_woodland",
+        "icon": "\uE086"
     }
 ]
