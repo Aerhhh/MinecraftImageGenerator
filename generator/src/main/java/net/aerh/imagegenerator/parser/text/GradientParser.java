@@ -85,35 +85,31 @@ public class GradientParser implements StringParser {
 
         for (int i = 0; i < body.length(); i++) {
             char symbol = body.charAt(i);
+            CodeType type = classifyCode(body, i);
 
-            if (isCodeSymbol(symbol) && i + 1 < body.length()) {
-                char peek = Character.toLowerCase(body.charAt(i + 1));
-                boolean isHexColor = peek == '#' && RgbColor.tryParseAt(body, i + 1) != null;
-
-                if (isHexColor || COLOR_CODES.indexOf(peek) != -1) {
-                    // An explicit color code overrides the gradient from this point on.
-                    return out.append(body, i, body.length()).toString();
+            if (type == CodeType.HEX_COLOR || type == CodeType.NAMED_COLOR) {
+                // An explicit color code overrides the gradient from this point on.
+                return out.append(body, i, body.length()).toString();
+            }
+            if (type == CodeType.STYLE) {
+                String style = "" + ChatFormat.AMPERSAND_SYMBOL + Character.toLowerCase(body.charAt(i + 1));
+                if (activeStyles.indexOf(style) == -1) {
+                    activeStyles.append(style);
                 }
-                if (STYLE_CODES.indexOf(peek) != -1) {
-                    String style = "" + ChatFormat.AMPERSAND_SYMBOL + peek;
-                    if (activeStyles.indexOf(style) == -1) {
-                        activeStyles.append(style);
-                    }
-                    i++;
-                    continue;
-                }
-                if (peek == ChatFormat.RESET.getCode()) {
-                    activeStyles.setLength(0);
-                    out.append(symbol).append(body.charAt(i + 1));
-                    i++;
-                    continue;
-                }
-                if (FONT_CODES.indexOf(peek) != -1) {
-                    // Fonts survive color changes in the lexer, so passing them through once suffices.
-                    out.append(symbol).append(body.charAt(i + 1));
-                    i++;
-                    continue;
-                }
+                i += codeSkipLength(type);
+                continue;
+            }
+            if (type == CodeType.RESET) {
+                activeStyles.setLength(0);
+                out.append(symbol).append(body.charAt(i + 1));
+                i += codeSkipLength(type);
+                continue;
+            }
+            if (type == CodeType.FONT) {
+                // Fonts survive color changes in the lexer, so passing them through once suffices.
+                out.append(symbol).append(body.charAt(i + 1));
+                i += codeSkipLength(type);
+                continue;
             }
 
             if (Character.isWhitespace(symbol)) {
@@ -145,36 +141,38 @@ public class GradientParser implements StringParser {
         StringBuilder styles = new StringBuilder();
 
         for (int i = 0; i < before.length() - 1; i++) {
-            if (!isCodeSymbol(before.charAt(i))) {
-                continue;
-            }
+            CodeType type = classifyCode(before, i);
 
-            char peek = Character.toLowerCase(before.charAt(i + 1));
-
-            if (peek == '#' && RgbColor.tryParseAt(before, i + 1) != null) {
-                lastColor = ChatFormat.AMPERSAND_SYMBOL
-                    + before.subSequence(i + 1, i + 1 + RgbColor.HEX_CODE_LENGTH).toString().toLowerCase(Locale.ROOT);
-                styles.setLength(0);
-                i += RgbColor.HEX_CODE_LENGTH;
-            } else if (COLOR_CODES.indexOf(peek) != -1) {
-                lastColor = "" + ChatFormat.AMPERSAND_SYMBOL + peek;
-                styles.setLength(0);
-                i++;
-            } else if (STYLE_CODES.indexOf(peek) != -1) {
-                String style = "" + ChatFormat.AMPERSAND_SYMBOL + peek;
-                if (styles.indexOf(style) == -1) {
-                    styles.append(style);
+            switch (type) {
+                case HEX_COLOR:
+                    lastColor = ChatFormat.AMPERSAND_SYMBOL
+                        + before.subSequence(i + 1, i + 1 + RgbColor.HEX_CODE_LENGTH).toString().toLowerCase(Locale.ROOT);
+                    styles.setLength(0);
+                    break;
+                case NAMED_COLOR:
+                    lastColor = "" + ChatFormat.AMPERSAND_SYMBOL + Character.toLowerCase(before.charAt(i + 1));
+                    styles.setLength(0);
+                    break;
+                case STYLE: {
+                    String style = "" + ChatFormat.AMPERSAND_SYMBOL + Character.toLowerCase(before.charAt(i + 1));
+                    if (styles.indexOf(style) == -1) {
+                        styles.append(style);
+                    }
+                    break;
                 }
-                i++;
-            } else if (FONT_CODES.indexOf(peek) != -1) {
-                lastFont = "" + ChatFormat.AMPERSAND_SYMBOL + peek;
-                i++;
-            } else if (peek == ChatFormat.RESET.getCode()) {
-                lastColor = "";
-                lastFont = "";
-                styles.setLength(0);
-                i++;
+                case FONT:
+                    lastFont = "" + ChatFormat.AMPERSAND_SYMBOL + Character.toLowerCase(before.charAt(i + 1));
+                    break;
+                case RESET:
+                    lastColor = "";
+                    lastFont = "";
+                    styles.setLength(0);
+                    break;
+                case NONE:
+                    break;
             }
+
+            i += codeSkipLength(type);
         }
 
         return "" + ChatFormat.AMPERSAND_SYMBOL + ChatFormat.RESET.getCode() + lastColor + lastFont + styles;
@@ -185,18 +183,11 @@ public class GradientParser implements StringParser {
         int count = 0;
 
         for (int i = 0; i < body.length(); i++) {
-            if (isCodeSymbol(body.charAt(i)) && i + 1 < body.length()) {
-                char peek = Character.toLowerCase(body.charAt(i + 1));
+            CodeType type = classifyCode(body, i);
 
-                if (peek == '#' && RgbColor.tryParseAt(body, i + 1) != null) {
-                    i += RgbColor.HEX_CODE_LENGTH;
-                    continue;
-                }
-                if (COLOR_CODES.indexOf(peek) != -1 || STYLE_CODES.indexOf(peek) != -1
-                    || FONT_CODES.indexOf(peek) != -1 || peek == ChatFormat.RESET.getCode()) {
-                    i++;
-                    continue;
-                }
+            if (type != CodeType.NONE) {
+                i += codeSkipLength(type);
+                continue;
             }
 
             count++;
@@ -219,5 +210,52 @@ public class GradientParser implements StringParser {
 
     private static boolean isCodeSymbol(char c) {
         return c == ChatFormat.AMPERSAND_SYMBOL || c == ChatFormat.SECTION_SYMBOL;
+    }
+
+    /** The kind of in-band code (if any) a code symbol introduces. */
+    private enum CodeType {
+        HEX_COLOR, NAMED_COLOR, STYLE, FONT, RESET, NONE
+    }
+
+    /**
+     * Classifies the in-band code starting at index {@code i}, or {@code NONE} when the char at
+     * {@code i} is not a code symbol, or is a code symbol not followed by a recognized code.
+     * This is the single place the code grammar (hex colors, legacy colors, styles, fonts,
+     * reset) is defined; {@link #expand}, {@link #restorationPrefix}, and {@link #visibleLength}
+     * all classify through here so their skip lengths and recognized codes stay in sync.
+     */
+    private static CodeType classifyCode(CharSequence text, int i) {
+        if (!isCodeSymbol(text.charAt(i)) || i + 1 >= text.length()) {
+            return CodeType.NONE;
+        }
+
+        char peek = Character.toLowerCase(text.charAt(i + 1));
+
+        if (peek == '#' && RgbColor.tryParseAt(text, i + 1) != null) {
+            return CodeType.HEX_COLOR;
+        }
+        if (COLOR_CODES.indexOf(peek) != -1) {
+            return CodeType.NAMED_COLOR;
+        }
+        if (STYLE_CODES.indexOf(peek) != -1) {
+            return CodeType.STYLE;
+        }
+        if (FONT_CODES.indexOf(peek) != -1) {
+            return CodeType.FONT;
+        }
+        if (peek == ChatFormat.RESET.getCode()) {
+            return CodeType.RESET;
+        }
+
+        return CodeType.NONE;
+    }
+
+    /** Number of extra characters (after the code symbol itself) the code at {@code type} occupies. */
+    private static int codeSkipLength(CodeType type) {
+        if (type == CodeType.NONE) {
+            return 0;
+        }
+
+        return type == CodeType.HEX_COLOR ? RgbColor.HEX_CODE_LENGTH : 1;
     }
 }

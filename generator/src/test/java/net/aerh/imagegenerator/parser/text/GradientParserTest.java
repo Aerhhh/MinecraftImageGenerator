@@ -77,6 +77,18 @@ class GradientParserTest {
     }
 
     @Test
+    void priorHexColorIsRestoredAfterTheCloser() {
+        assertEquals("&#123abcGold &#000000A&#ffffffB&r&#123abc tail",
+            parser.parse("&#123abcGold %%gradient:#000000:#ffffff%%AB%%/gradient%% tail"));
+    }
+
+    @Test
+    void priorFontIsRestoredAfterTheCloser() {
+        assertEquals("&gRunic &#000000A&#ffffffB&r&g tail",
+            parser.parse("&gRunic %%gradient:#000000:#ffffff%%AB%%/gradient%% tail"));
+    }
+
+    @Test
     void multipleGradientsInOneLineExpandIndependently() {
         assertEquals("&#000000A&#ffffffB&r &#ff0000C&#0000ffD&r",
             parser.parse("%%gradient:#000000:#ffffff%%AB%%/gradient%% %%gradient:#ff0000:#0000ff%%CD%%/gradient%%"));
