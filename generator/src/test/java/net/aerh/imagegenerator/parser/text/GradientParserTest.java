@@ -136,4 +136,63 @@ class GradientParserTest {
         assertTrue(out.endsWith("&#0000ffY&r"), "outer gradient ends at its last stop, then restores");
         assertEquals(-1, out.indexOf("%%/gradient%%"), "the single closer is consumed by the outer gradient");
     }
+
+    @Test
+    void formattingIsReemittedAfterEveryColorCode() {
+        // Birdflop vector (bold enabled): color codes reset formatting, so the active
+        // style set must follow every per-character color.
+        assertEquals("&#000000&lA&#404040&lB &#bfbfbf&lC&#ffffff&lD&r",
+            parser.parse("%%gradient:#000000:#ffffff%%&lAB CD%%/gradient%%"));
+    }
+
+    @Test
+    void midBodyFormattingAppliesFromThatPointOn() {
+        assertEquals("&#000000A&#ffffff&lB&r",
+            parser.parse("%%gradient:#000000:#ffffff%%A&lB%%/gradient%%"));
+    }
+
+    @Test
+    void resetInsideTheBodyClearsFormattingButTheGradientContinues() {
+        assertEquals("&#000000&lA&r&#ffffffB&r",
+            parser.parse("%%gradient:#000000:#ffffff%%&lA&rB%%/gradient%%"));
+    }
+
+    @Test
+    void innerNamedColorOverridesTheGradientWithoutRestoration() {
+        // C and D still count toward the gradient length (t = i / 3), so B sits at 1/3.
+        assertEquals("&#000000A&#555555B&cCD tail",
+            parser.parse("%%gradient:#000000:#ffffff%%AB&cCD%%/gradient%% tail"));
+    }
+
+    @Test
+    void innerHexColorOverridesTheGradientWithoutRestoration() {
+        assertEquals("&#000000A&#555555B&#123456CD",
+            parser.parse("%%gradient:#000000:#ffffff%%AB&#123456CD%%/gradient%%"));
+    }
+
+    @Test
+    void fontCodesPassThroughUnchanged() {
+        // The segment lexer carries fonts across color changes, so one pass-through suffices.
+        assertEquals("&g&#000000A&#ffffffB&r",
+            parser.parse("%%gradient:#000000:#ffffff%%&gAB%%/gradient%%"));
+    }
+
+    @Test
+    void sectionSymbolCodesAreCanonicalizedToAmpersand() {
+        assertEquals("&#000000&lA&#ffffff&lB&r",
+            parser.parse("%%gradient:#000000:#ffffff%%§lAB%%/gradient%%"));
+    }
+
+    @Test
+    void duplicateFormattingCodesAreNotRepeated() {
+        assertEquals("&#000000&lA&#ffffff&lB&r",
+            parser.parse("%%gradient:#000000:#ffffff%%&l&lAB%%/gradient%%"));
+    }
+
+    @Test
+    void loneTrailingSymbolIsColoredAsText() {
+        // A '&' not followed by a valid code is a visible character.
+        assertEquals("&#000000A&#ffffff&&r",
+            parser.parse("%%gradient:#000000:#ffffff%%A&%%/gradient%%"));
+    }
 }
