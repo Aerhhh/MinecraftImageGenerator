@@ -827,7 +827,10 @@
         "display": "☘ Syphon Luck",
         "color": "LIGHT_PURPLE",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE05B"
+        }
     },
     {
         "icon": "∮",
@@ -896,7 +899,10 @@
         "display": "❤ Absorption",
         "color": "GOLD",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE000"
+        }
     },
     {
         "icon": "☀",

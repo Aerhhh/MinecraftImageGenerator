@@ -15,15 +15,18 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * Validates the pack-glyph data ({@code packOverrides}) across icons.json and stats.json, and
- * resolves which icon entry owns each bare character for reverse mapping.
+ * Validates the pack-glyph data ({@code packOverrides}) across icons.json, stats.json,
+ * flavor.json and gemstones.json, and resolves which icon entry owns each bare character for
+ * reverse mapping.
  * <p>
  * The bare-character domain has two tiers. Icons.json entries (base characters plus their override
  * characters) own bare characters first: an icon placeholder regenerates the bare character
  * faithfully. Stat characters not claimed by any icon form a second tier that regenerates through
  * the icon-only {@code %%icon:<stat>%%} form; formatted stat text still reverse maps through stat
- * <em>format</em> rules, which run before any bare-character rule. Within a tier, a character
- * claimed by multiple entries resolves to the first entry in file order.
+ * <em>format</em> rules, which run before any bare-character rule. Flavor and gemstone override
+ * characters never own bare characters - they reverse map through pack-variant <em>format</em>
+ * rules only. Within a tier, a character claimed by multiple entries resolves to the first entry
+ * in file order.
  * <p>
  * Validation fails fast with an {@link IllegalStateException} listing every violation:
  * <ul>
@@ -62,49 +65,48 @@ public final class PackGlyphIndex {
     public static PackGlyphIndex fromRegistries() {
         PackGlyphIndex index = cachedRegistryIndex;
         if (index == null) {
-            index = build(Icon.getIcons(), Stat.getStats(), reservedRegistryNames());
+            index = build(Icon.getIcons(), Stat.getStats(), Flavor.getFlavors(), Gemstone.getGemstones());
             cachedRegistryIndex = index;
         }
         return index;
-    }
-
-    private static Map<String, String> reservedRegistryNames() {
-        Map<String, String> reserved = new LinkedHashMap<>();
-        Flavor.getFlavors().forEach(flavor -> {
-            if (flavor.getName() != null) {
-                reserved.put(flavor.getName(), "flavor.json");
-            }
-        });
-        Gemstone.getGemstones().forEach(gemstone -> {
-            if (gemstone.getName() != null) {
-                reserved.put(gemstone.getName(), "gemstones.json");
-            }
-        });
-        return reserved;
     }
 
     /**
      * Builds and validates an index from explicit entry collections. Exposed for tests.
      */
     static PackGlyphIndex build(Collection<Icon> icons, Collection<Stat> stats) {
-        return build(icons, stats, Map.of());
+        return build(icons, stats, List.of(), List.of());
     }
 
     /**
      * Builds and validates an index from explicit entry collections.
      *
-     * @param icons         the icon entries participating in bare-character ownership
-     * @param stats         the stat entries (validated only; stats never own bare characters)
-     * @param reservedNames placeholder names owned by other registries (flavors, gemstones)
-     *                      mapped to their source file; icon names must not collide with them
-     *                      because IconParser runs first and would shadow them
+     * @param icons     the icon entries participating in bare-character ownership
+     * @param stats     the stat entries (validated only; stats never own bare characters)
+     * @param flavors   the flavor entries (validated only; flavor glyphs reverse map through
+     *                  flavor format rules); their names are reserved against icon shadowing
+     * @param gemstones the gemstone entries (validated only; gemstone glyphs reverse map through
+     *                  gemstone tier rules); their names are reserved against icon shadowing
      *
      * @return the validated index
      *
      * @throws IllegalStateException if the data violates any pack-glyph constraint
      */
-    static PackGlyphIndex build(Collection<Icon> icons, Collection<Stat> stats, Map<String, String> reservedNames) {
+    static PackGlyphIndex build(Collection<Icon> icons, Collection<Stat> stats,
+                                Collection<Flavor> flavors, Collection<Gemstone> gemstones) {
         List<String> violations = new ArrayList<>();
+
+        Map<String, String> reservedNames = new LinkedHashMap<>();
+        for (Flavor flavor : flavors) {
+            if (flavor.getName() != null) {
+                reservedNames.put(flavor.getName(), "flavor.json");
+            }
+        }
+        for (Gemstone gemstone : gemstones) {
+            if (gemstone.getName() != null) {
+                reservedNames.put(gemstone.getName(), "gemstones.json");
+            }
+        }
 
         Set<String> statNames = new LinkedHashSet<>();
         for (Stat stat : stats) {
@@ -139,7 +141,17 @@ public final class PackGlyphIndex {
             validateOverrides(stat.getName(), stat.getPackOverrides(), "stats.json", violations);
         }
 
-        reservedNames.forEach((name, file) -> validateReservedKeyword(name, file, violations));
+        for (Flavor flavor : flavors) {
+            validateName(flavor.getName(), "flavor.json", violations);
+            validateReservedKeyword(flavor.getName(), "flavor.json", violations);
+            validateOverrides(flavor.getName(), flavor.getPackOverrides(), "flavor.json", violations);
+        }
+
+        for (Gemstone gemstone : gemstones) {
+            validateName(gemstone.getName(), "gemstones.json", violations);
+            validateReservedKeyword(gemstone.getName(), "gemstones.json", violations);
+            validateOverrides(gemstone.getName(), gemstone.getPackOverrides(), "gemstones.json", violations);
+        }
 
         Map<String, List<Icon>> claims = new LinkedHashMap<>();
         for (Icon icon : icons) {

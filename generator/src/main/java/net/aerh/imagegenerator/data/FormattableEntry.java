@@ -47,4 +47,17 @@ public interface FormattableEntry {
     default String getDisplay(@Nullable PackId packId) {
         return getDisplay();
     }
+
+    /**
+     * Resolves the stat text for the given pack. Entries whose stat text embeds the icon
+     * character (e.g. flavor lines like "This armor piece is undead X!") override this to swap
+     * the embedded character; the default falls through to the stored stat text.
+     *
+     * @param packId the active pack, or {@code null} for none
+     *
+     * @return the stat text
+     */
+    default String getStat(@Nullable PackId packId) {
+        return getStat();
+    }
 }

@@ -12,6 +12,9 @@
             "fine": "&9[%s&9]&r",
             "flawless": "&5[%s&5]&r",
             "perfect": "&6[%s&6]&r"
+        },
+        "packOverrides": {
+            "hypixel:skyblock": "\uE010"
         }
     },
     {
@@ -27,6 +30,9 @@
             "fine": "&9[%s&9]&r",
             "flawless": "&5[%s&5]&r",
             "perfect": "&6[%s&6]&r"
+        },
+        "packOverrides": {
+            "hypixel:skyblock": "\uE008"
         }
     },
     {
@@ -42,6 +48,9 @@
             "fine": "&9[%s&9]&r",
             "flawless": "&5[%s&5]&r",
             "perfect": "&6[%s&6]&r"
+        },
+        "packOverrides": {
+            "hypixel:skyblock": "\uE027"
         }
     },
     {
@@ -57,6 +66,9 @@
             "fine": "&9[%s&9]&r",
             "flawless": "&5[%s&5]&r",
             "perfect": "&6[%s&6]&r"
+        },
+        "packOverrides": {
+            "hypixel:skyblock": "\uE003"
         }
     },
     {
@@ -72,6 +84,9 @@
             "fine": "&9[%s&9]&r",
             "flawless": "&5[%s&5]&r",
             "perfect": "&6[%s&6]&r"
+        },
+        "packOverrides": {
+            "hypixel:skyblock": "\uE00D"
         }
     },
     {
@@ -87,6 +102,9 @@
             "fine": "&9[%s&9]&r",
             "flawless": "&5[%s&5]&r",
             "perfect": "&6[%s&6]&r"
+        },
+        "packOverrides": {
+            "hypixel:skyblock": "\uE053"
         }
     },
     {
@@ -102,6 +120,9 @@
             "fine": "&9[%s&9]&r",
             "flawless": "&5[%s&5]&r",
             "perfect": "&6[%s&6]&r"
+        },
+        "packOverrides": {
+            "hypixel:skyblock": "\uE015"
         }
     },
     {
@@ -117,6 +138,9 @@
             "fine": "&9[%s&9]&r",
             "flawless": "&5[%s&5]&r",
             "perfect": "&6[%s&6]&r"
+        },
+        "packOverrides": {
+            "hypixel:skyblock": "\uE01C"
         }
     },
     {
@@ -132,6 +156,9 @@
             "fine": "&9[%s&9]&r",
             "flawless": "&5[%s&5]&r",
             "perfect": "&6[%s&6]&r"
+        },
+        "packOverrides": {
+            "hypixel:skyblock": "\uE007"
         }
     },
     {
@@ -147,6 +174,9 @@
             "fine": "&9[%s&9]&r",
             "flawless": "&5[%s&5]&r",
             "perfect": "&6[%s&6]&r"
+        },
+        "packOverrides": {
+            "hypixel:skyblock": "\uE051"
         }
     },
     {
@@ -162,6 +192,9 @@
             "fine": "&9[%s&9]&r",
             "flawless": "&5[%s&5]&r",
             "perfect": "&6[%s&6]&r"
+        },
+        "packOverrides": {
+            "hypixel:skyblock": "\uE054"
         }
     },
     {
@@ -177,6 +210,9 @@
             "fine": "&9[%s&9]&r",
             "flawless": "&5[%s&5]&r",
             "perfect": "&6[%s&6]&r"
+        },
+        "packOverrides": {
+            "hypixel:skyblock": "\uE021"
         }
     },
     {
@@ -191,6 +227,9 @@
             "fine": "&9[%s&9]&r",
             "flawless": "&5[%s&5]&r",
             "perfect": "&6[%s&6]&r"
+        },
+        "packOverrides": {
+            "hypixel:skyblock": "\uE001"
         }
     },
     {
@@ -205,6 +244,9 @@
             "fine": "&9[%s&9]&r",
             "flawless": "&5[%s&5]&r",
             "perfect": "&6[%s&6]&r"
+        },
+        "packOverrides": {
+            "hypixel:skyblock": "\uE007"
         }
     },
     {
@@ -233,6 +275,9 @@
             "fine": "&9[%s&9]&r",
             "flawless": "&5[%s&5]&r",
             "perfect": "&6[%s&6]&r"
+        },
+        "packOverrides": {
+            "hypixel:skyblock": "\uE022"
         }
     },
     {
@@ -247,6 +292,9 @@
             "fine": "&9[%s&9]&r",
             "flawless": "&5[%s&5]&r",
             "perfect": "&6[%s&6]&r"
+        },
+        "packOverrides": {
+            "hypixel:skyblock": "\uE027"
         }
     }
 ]
