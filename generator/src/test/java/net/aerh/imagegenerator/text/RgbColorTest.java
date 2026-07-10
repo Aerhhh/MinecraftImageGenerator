@@ -94,4 +94,32 @@ class RgbColorTest {
         assertNull(TextColor.fromJsonString("#ZZZZZZ"));
         assertNull(TextColor.fromJsonString("bold"), "formats are not colors");
     }
+
+    @Test
+    void lerpEndpointsReturnTheStops() {
+        RgbColor from = new RgbColor(0x123456);
+        RgbColor to = new RgbColor(0xABCDEF);
+        assertEquals(from, RgbColor.lerp(from, to, 0.0));
+        assertEquals(to, RgbColor.lerp(from, to, 1.0));
+    }
+
+    @Test
+    void lerpRoundsHalfUpPerChannel() {
+        // Birdflop vector: t = 0.25 of black -> white gives 63.75, which rounds to 0x40.
+        assertEquals(new RgbColor(0x404040),
+            RgbColor.lerp(new RgbColor(0x000000), new RgbColor(0xFFFFFF), 0.25));
+        // Birdflop vector: midpoint of black -> white is 127.5, which rounds up to 0x80.
+        assertEquals(new RgbColor(0x808080),
+            RgbColor.lerp(new RgbColor(0x000000), new RgbColor(0xFFFFFF), 0.5));
+        // Birdflop vector: midpoint of #ffffff -> #599fb0; blue channel 215.5 rounds up to 0xD8.
+        assertEquals(new RgbColor(0xACCFD8),
+            RgbColor.lerp(new RgbColor(0xFFFFFF), new RgbColor(0x599FB0), 0.5));
+    }
+
+    @Test
+    void lerpDescendingChannelRoundsHalfUpToo() {
+        // Birdflop vector: t = 0.75 of black -> white gives 191.25 per channel, rounding to 0xBF.
+        assertEquals(new RgbColor(0xBFBFBF),
+            RgbColor.lerp(new RgbColor(0x000000), new RgbColor(0xFFFFFF), 0.75));
+    }
 }

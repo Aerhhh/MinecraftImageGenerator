@@ -65,6 +65,27 @@ public record RgbColor(int rgb) implements TextColor {
         return new RgbColor(rgb);
     }
 
+    /**
+     * Linearly interpolates each RGB channel between two colors with half-up rounding,
+     * matching the RGBirdflop reference generator.
+     *
+     * @param from the color at {@code t = 0}
+     * @param to   the color at {@code t = 1}
+     * @param t    the interpolation position, expected within {@code [0, 1]}
+     *
+     * @return the interpolated color
+     */
+    public static @NotNull RgbColor lerp(@NotNull RgbColor from, @NotNull RgbColor to, double t) {
+        int red = lerpChannel(from.rgb >> 16 & 0xFF, to.rgb >> 16 & 0xFF, t);
+        int green = lerpChannel(from.rgb >> 8 & 0xFF, to.rgb >> 8 & 0xFF, t);
+        int blue = lerpChannel(from.rgb & 0xFF, to.rgb & 0xFF, t);
+        return new RgbColor(red << 16 | green << 8 | blue);
+    }
+
+    private static int lerpChannel(int from, int to, double t) {
+        return (int) Math.round(from + (to - from) * t);
+    }
+
     @Override
     public @NotNull Color getColor() {
         return new Color(rgb);
