@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.MatchResult;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -28,6 +29,7 @@ public class PlaceholderReverseMapper {
 
     private static final Pattern TOKEN_PATTERN = Pattern.compile("\\{([^}]+)}");
     private static final String DEFAULT_CAPTURE = "[^\\n]+";
+    private static final String MID_PATTERN_CAPTURE = "(?:[^\\n§&])+?";
 
     private record ReplacementRule(Pattern pattern, ReplacementProvider provider) {
     }
@@ -254,23 +256,27 @@ public class PlaceholderReverseMapper {
         StringBuilder regex = new StringBuilder();
         List<String> captureOrder = new ArrayList<>();
 
-        Matcher matcher = TOKEN_PATTERN.matcher(format);
+        List<MatchResult> tokens = TOKEN_PATTERN.matcher(format).results().toList();
         int last = 0;
 
-        while (matcher.find()) {
-            String literal = format.substring(last, matcher.start());
+        for (int i = 0; i < tokens.size(); i++) {
+            MatchResult token = tokens.get(i);
+            String literal = format.substring(last, token.start());
             regex.append(escapeLiteral(literal));
 
-            String key = matcher.group(1);
+            String key = token.group(1);
             String value = resolver.resolve(key);
             if (value != null && !value.isEmpty()) {
                 regex.append(escapeLiteral(value));
             } else {
                 captureOrder.add(key);
-                regex.append("(").append(DEFAULT_CAPTURE).append(")");
+                // A trailing capture may greedily consume the rest of the segment (POST/POST_DUAL/ITEM_STAT/ABILITY),
+                // but a mid-pattern capture must stop at the next color code so the same stat can match twice on one line
+                boolean trailing = i == tokens.size() - 1 && format.substring(token.end()).isEmpty();
+                regex.append("(").append(trailing ? DEFAULT_CAPTURE : MID_PATTERN_CAPTURE).append(")");
             }
 
-            last = matcher.end();
+            last = token.end();
         }
 
         regex.append(escapeLiteral(format.substring(last)));
