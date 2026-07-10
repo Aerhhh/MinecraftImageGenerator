@@ -1,6 +1,7 @@
 package net.aerh.imagegenerator.text.wrapper;
 
 import lombok.extern.slf4j.Slf4j;
+import net.aerh.imagegenerator.parser.ParseContext;
 import net.aerh.imagegenerator.parser.Parser;
 import net.aerh.imagegenerator.parser.text.ColorCodeParser;
 import net.aerh.imagegenerator.parser.text.FlavorParser;
@@ -90,6 +91,20 @@ public class TextWrapper {
      * @return A list of strings, representing the wrapped lines.
      */
     public static List<String> wrapString(String input, int maxLineLength) {
+        return wrapString(input, maxLineLength, ParseContext.empty());
+    }
+
+    /**
+     * Wraps a string to a specified maximum line length, preserving Minecraft formatting codes,
+     * resolving placeholders with the given {@link ParseContext}.
+     *
+     * @param input         The input string, potentially containing placeholders and formatting.
+     * @param maxLineLength The maximum visible length of each line (must be > 0).
+     * @param context       The {@link ParseContext} carrying pack-conditional state.
+     *
+     * @return A list of strings, representing the wrapped lines.
+     */
+    public static List<String> wrapString(String input, int maxLineLength, ParseContext context) {
         List<String> lines = new ArrayList<>();
 
         if (input == null || input.isEmpty()) {
@@ -101,7 +116,7 @@ public class TextWrapper {
             return lines;
         }
 
-        String parsedInput = normalizeNewlines(parseLine(input));
+        String parsedInput = normalizeNewlines(parseLine(input, context));
         String[] rawLines = NEWLINE_PATTERN.split(parsedInput, -1);
         FormatState currentFormatState = FormatState.EMPTY;
 
@@ -355,10 +370,24 @@ public class TextWrapper {
      * @return A string with all applicable parsers applied.
      */
     public static String parseLine(String line) {
+        return parseLine(line, ParseContext.empty());
+    }
+
+    /**
+     * Applies a list of {@link Parser parsers} to a line of text with the given
+     * {@link ParseContext}. Parsers are executed in the order they are defined in the
+     * {@link #PARSERS} array.
+     *
+     * @param line    The line of text to parse.
+     * @param context The {@link ParseContext} carrying pack-conditional state.
+     *
+     * @return A string with all applicable parsers applied.
+     */
+    public static String parseLine(String line, ParseContext context) {
         if (line == null) {
             return "";
         }
 
-        return Parser.parseString(line, PARSERS);
+        return Parser.parseString(line, PARSERS, context);
     }
 }

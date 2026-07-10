@@ -142,7 +142,14 @@ public class MinecraftNbtParser {
 
         generators.add(tooltipGenerator);
 
-        PlaceholderReverseMapper reverseMapper = new PlaceholderReverseMapper();
+        PlaceholderReverseMapper reverseMapper;
+        try {
+            reverseMapper = new PlaceholderReverseMapper();
+        } catch (IllegalStateException e) {
+            // Invalid glyph data (e.g. a bad external icons.json/stats.json override file) must
+            // surface as a user-visible parse error, not an uncaught exception.
+            throw new NbtParseException("Invalid glyph override data: " + e.getMessage());
+        }
         String mappedLore = reverseMapper.mapPlaceholders(tooltipGenerator.getItemLore());
         String mappedName = reverseMapper.mapPlaceholders(tooltipGenerator.getItemName());
 

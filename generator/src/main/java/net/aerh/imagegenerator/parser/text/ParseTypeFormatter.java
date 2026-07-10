@@ -3,6 +3,7 @@ package net.aerh.imagegenerator.parser.text;
 import lombok.extern.slf4j.Slf4j;
 import net.aerh.imagegenerator.data.FormattableEntry;
 import net.aerh.imagegenerator.data.ParseType;
+import net.aerh.imagegenerator.parser.ParseContext;
 import net.aerh.imagegenerator.text.ChatFormat;
 
 import java.util.Arrays;
@@ -50,6 +51,22 @@ public final class ParseTypeFormatter {
      * @return the fully expanded format string with ampersand color codes
      */
     public static String format(FormattableEntry entry, ParseType parseType, String extraDetails) {
+        return format(entry, parseType, extraDetails, ParseContext.empty());
+    }
+
+    /**
+     * Expands a {@link ParseType} format template using the given entry's properties, optional
+     * extra details, and pack context. Icon and display placeholders resolve pack-conditionally
+     * via {@link FormattableEntry#getIcon(net.aerh.imagegenerator.pack.PackId)}.
+     *
+     * @param entry        the stat or flavor entry providing colors, icons, etc.
+     * @param parseType    the parse type whose format template to expand
+     * @param extraDetails optional colon-separated data (e.g. "100" or "Vacuum:HOLD RIGHT CLICK")
+     * @param context      the {@link ParseContext} carrying pack-conditional state
+     *
+     * @return the fully expanded format string with ampersand color codes
+     */
+    public static String format(FormattableEntry entry, ParseType parseType, String extraDetails, ParseContext context) {
         boolean hasExtra = extraDetails != null && !extraDetails.isEmpty();
         String format = hasExtra ? parseType.getFormatWithDetails() : parseType.getFormatWithoutDetails();
 
@@ -61,9 +78,11 @@ public final class ParseTypeFormatter {
         Map<String, String> placeholders = new HashMap<>(BASE_PLACEHOLDERS);
         placeholders.put("color", String.valueOf(entry.getColor().getCode()));
         placeholders.put("subColor", String.valueOf(entry.getSecondaryColor().getCode()));
-        placeholders.put("icon", entry.getIcon() != null ? entry.getIcon() : "");
+        String icon = entry.getIcon(context.packId());
+        String display = entry.getDisplay(context.packId());
+        placeholders.put("icon", icon != null ? icon : "");
         placeholders.put("stat", entry.getStat() != null ? entry.getStat() : "");
-        placeholders.put("display", entry.getDisplay() != null ? entry.getDisplay() : "");
+        placeholders.put("display", display != null ? display : "");
         placeholders.put("extraDetails", hasExtra ? extraDetails : "");
 
         if (parseType.getName().equalsIgnoreCase("ITEM_STAT")) {
