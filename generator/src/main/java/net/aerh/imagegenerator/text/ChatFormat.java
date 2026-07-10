@@ -39,7 +39,7 @@ public enum ChatFormat implements TextColor {
     public static final char SECTION_SYMBOL = '§';
     public static final char AMPERSAND_SYMBOL = '&';
 
-    public static final Pattern VANILLA_PATTERN = Pattern.compile(SECTION_SYMBOL + "+([0-9A-HK-OR])", Pattern.CASE_INSENSITIVE);
+    public static final Pattern VANILLA_PATTERN = Pattern.compile(SECTION_SYMBOL + "+(#[0-9A-F]{6}|[0-9A-HK-OR])", Pattern.CASE_INSENSITIVE);
 
     @Getter
     private final char code;
