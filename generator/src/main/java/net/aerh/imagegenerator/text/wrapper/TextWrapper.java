@@ -6,6 +6,7 @@ import net.aerh.imagegenerator.parser.Parser;
 import net.aerh.imagegenerator.parser.text.ColorCodeParser;
 import net.aerh.imagegenerator.parser.text.FlavorParser;
 import net.aerh.imagegenerator.parser.text.GemstoneParser;
+import net.aerh.imagegenerator.parser.text.GradientParser;
 import net.aerh.imagegenerator.parser.text.IconParser;
 import net.aerh.imagegenerator.parser.text.StatParser;
 import net.aerh.imagegenerator.text.RgbColor;
@@ -27,7 +28,8 @@ public class TextWrapper {
         new IconParser(),
         new FlavorParser(),
         new StatParser(),
-        new GemstoneParser()
+        new GemstoneParser(),
+        new GradientParser()
     );
 
     /**

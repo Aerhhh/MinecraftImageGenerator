@@ -1,6 +1,9 @@
 package net.aerh.imagegenerator.parser.text;
 
+import net.aerh.imagegenerator.text.wrapper.TextWrapper;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -194,5 +197,34 @@ class GradientParserTest {
         // A '&' not followed by a valid code is a visible character.
         assertEquals("&#000000A&#ffffff&&r",
             parser.parse("%%gradient:#000000:#ffffff%%A&%%/gradient%%"));
+    }
+
+    @Test
+    void gradientResolvesThroughTheFullParseChain() {
+        assertEquals("&#000000A&#404040B &#bfbfbfC&#ffffffD&r",
+            TextWrapper.parseLine("%%gradient:#000000:#ffffff%%AB CD%%/gradient%%"));
+    }
+
+    @Test
+    void namedColorPlaceholderInsideTheBodyBecomesAnInnerOverride() {
+        // ColorCodeParser runs first, so %%RED%% is already &c when the gradient expands.
+        assertEquals("&#000000A&#555555B&cCD",
+            TextWrapper.parseLine("%%gradient:#000000:#ffffff%%AB%%RED%%CD%%/gradient%%"));
+    }
+
+    @Test
+    void hexPlaceholderInsideTheBodyBecomesAnInnerOverride() {
+        assertEquals("&#000000A&#555555B&#123456CD",
+            TextWrapper.parseLine("%%gradient:#000000:#ffffff%%AB%%#123456%%CD%%/gradient%%"));
+    }
+
+    @Test
+    void gradientSurvivesLineWrapping() {
+        List<String> lines = TextWrapper.wrapString(
+            "%%gradient:#ff0000:#0000ff%%AAAA BBBB%%/gradient%%", 6);
+        assertEquals(2, lines.size());
+        assertEquals("&#ff0000A&#df0020A&#bf0040A&#9f0060A ", lines.get(0));
+        assertTrue(lines.get(1).startsWith("&#9f0060"), "wrap carries the last gradient color forward");
+        assertTrue(lines.get(1).endsWith("&#0000ffB&r"), "gradient finishes on the wrapped line");
     }
 }
