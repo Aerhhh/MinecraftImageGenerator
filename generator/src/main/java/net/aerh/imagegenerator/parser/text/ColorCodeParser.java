@@ -16,6 +16,8 @@ public class ColorCodeParser implements StringParser {
             chatFormat -> Pattern.compile("%%" + chatFormat.name() + "%%", Pattern.CASE_INSENSITIVE)
         ));
 
+    private static final Pattern HEX_PATTERN = Pattern.compile("%%(#[0-9a-fA-F]{6})%%");
+
     @Override
     public String parse(String input) {
         for (ChatFormat value : ChatFormat.VALUES) {
@@ -23,6 +25,6 @@ public class ColorCodeParser implements StringParser {
             input = pattern.matcher(input).replaceAll(String.valueOf(ChatFormat.AMPERSAND_SYMBOL) + value.getCode());
         }
 
-        return input;
+        return HEX_PATTERN.matcher(input).replaceAll(ChatFormat.AMPERSAND_SYMBOL + "$1");
     }
 }
