@@ -69,6 +69,32 @@ class PlaceholderReverseMapperPackTest {
     }
 
     @Test
+    void bareStatGlyphsMapToIconReferencePlaceholders() {
+        // Bare stat characters outside a stat format regenerate faithfully via %%icon:<stat>%%
+        assertEquals("+100%%icon:health%%", mapper.mapPlaceholders("+100❤"));
+        assertEquals("+100%%icon:health%%", mapper.mapPlaceholders("+100"));
+    }
+
+    @Test
+    void repeatedBareStatGlyphsCollapseToACount() {
+        assertEquals("%%icon:health:3%%", mapper.mapPlaceholders("❤❤❤"));
+    }
+
+    @Test
+    void sharedBareStatGlyphsMapToTheFirstStatInFileOrder() {
+        // strength and damage share U+2741; bare chars have no adjacent text to disambiguate
+        assertEquals("%%icon:strength%%", mapper.mapPlaceholders("❁"));
+    }
+
+    @Test
+    void formattedStatTextStillWinsOverBareStatGlyphRules() {
+        Stat health = Stat.byName("health");
+        String colorCode = String.valueOf(health.getColor().getCode());
+
+        assertEquals("%%health%%", mapper.mapPlaceholders("§" + colorCode + "❤ Health"));
+    }
+
+    @Test
     void packRenderedFlavorTextMapsToTheFlavorNotTheIcon() {
         // U+E084 is both the undead flavor's override char and mob_undead's base char; flavor
         // format rules run before bare-char icon rules, so the surrounding text wins.

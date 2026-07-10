@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -85,12 +86,67 @@ class PackGlyphIndexTest {
 
     @Test
     void statOverrideCharactersDoNotOwnBareCharacters() {
-        // Stat glyphs reverse map through stat format rules; a bare-char rule would expand back
-        // into formatted stat text and break round-trip fidelity.
+        // Stat glyphs never join the icon-owned tier; they live in the separate stat tier that
+        // regenerates through %%icon:<stat>%% instead of expanding into formatted stat text.
         PackGlyphIndex index = PackGlyphIndex.build(
             List.of(), List.of(stat("strengthlike", Map.of("hypixel:skyblock", "\uE100"))));
 
         assertTrue(index.getBareCharacterOwners().isEmpty());
+    }
+
+    @Test
+    void statCharactersOwnBareCharactersWhenNoIconClaimsThem() {
+        PackGlyphIndex index = PackGlyphIndex.build(
+            List.of(), List.of(stat("healthlike", Map.of("hypixel:skyblock", ""))));
+
+        assertEquals("healthlike", index.getStatBareCharacterOwners().get("❁").getName());
+        assertEquals("healthlike", index.getStatBareCharacterOwners().get("").getName());
+    }
+
+    @Test
+    void iconClaimedCharactersStayOutOfTheStatBareDomain() {
+        // Icons regenerate a bare character faithfully via %%name%%, so they keep precedence over
+        // the %%icon:<stat>%% form for contested characters (e.g. tracking vs mob_elusive).
+        PackGlyphIndex index = PackGlyphIndex.build(
+            List.of(icon("alpha", "", null)),
+            List.of(stat("healthlike", Map.of("hypixel:skyblock", ""))));
+
+        assertEquals("alpha", index.getBareCharacterOwners().get("").getName());
+        assertFalse(index.getStatBareCharacterOwners().containsKey(""));
+        assertEquals("healthlike", index.getStatBareCharacterOwners().get("❁").getName());
+    }
+
+    @Test
+    void sharedStatCharactersResolveToTheFirstStatInFileOrder() {
+        PackGlyphIndex index = PackGlyphIndex.build(
+            List.of(), List.of(stat("first", null), stat("second", null)));
+
+        assertEquals("first", index.getStatBareCharacterOwners().get("❁").getName());
+    }
+
+    @Test
+    void iconEntryNamedIconFailsValidation() {
+        // "icon" is the reserved %%icon:<name>%% keyword handled before any registry lookup
+        IllegalStateException e = assertThrows(IllegalStateException.class, () -> PackGlyphIndex.build(
+            List.of(icon("icon", "", null)), List.of()));
+
+        assertTrue(e.getMessage().contains("reserved"));
+    }
+
+    @Test
+    void statEntryNamedIconFailsValidation() {
+        IllegalStateException e = assertThrows(IllegalStateException.class, () -> PackGlyphIndex.build(
+            List.of(), List.of(stat("icon", null))));
+
+        assertTrue(e.getMessage().contains("reserved"));
+    }
+
+    @Test
+    void reservedRegistryEntryNamedIconFailsValidation() {
+        IllegalStateException e = assertThrows(IllegalStateException.class, () -> PackGlyphIndex.build(
+            List.of(), List.of(), List.of(flavor("icon", null)), List.of()));
+
+        assertTrue(e.getMessage().contains("reserved"));
     }
 
     @Test
