@@ -3,6 +3,7 @@ package net.aerh.imagegenerator.data;
 import net.aerh.imagegenerator.text.ChatFormat;
 import org.junit.jupiter.api.Test;
 
+import java.awt.Color;
 import java.util.List;
 import java.util.Map;
 
@@ -18,6 +19,14 @@ class PackGlyphIndexTest {
 
     private static Stat stat(String name, Map<String, String> overrides) {
         return new Stat("\u2741", name, "Test", "\u2741 Test", ChatFormat.RED, null, "NORMAL", null, overrides);
+    }
+
+    private static Flavor flavor(String name, Map<String, String> overrides) {
+        return new Flavor("\u0f15", name, "Test", "\u0f15 Test", ChatFormat.DARK_GREEN, null, "NORMAL", overrides);
+    }
+
+    private static Gemstone gemstone(String name, Map<String, String> overrides) {
+        return new Gemstone(name, "\u2764", "&c\u2764", Color.RED, Map.of("locked", "&8[%s]&r"), overrides);
     }
 
     @Test
@@ -95,8 +104,32 @@ class PackGlyphIndexTest {
     @Test
     void iconNameCollidingWithAReservedRegistryNameFails() {
         IllegalStateException e = assertThrows(IllegalStateException.class, () -> PackGlyphIndex.build(
-            List.of(icon("pest", "\uE018", null)), List.of(), Map.of("pest", "flavor.json")));
+            List.of(icon("pest", "\uE018", null)), List.of(), List.of(flavor("pest", null)), List.of()));
 
         assertTrue(e.getMessage().contains("flavor.json"));
+    }
+
+    @Test
+    void flavorOverridesAreValidatedToo() {
+        assertThrows(IllegalStateException.class, () -> PackGlyphIndex.build(
+            List.of(), List.of(), List.of(flavor("alphaflavor", Map.of("no_colon_here", "\uE100"))), List.of()));
+    }
+
+    @Test
+    void gemstoneOverridesAreValidatedToo() {
+        assertThrows(IllegalStateException.class, () -> PackGlyphIndex.build(
+            List.of(), List.of(), List.of(), List.of(gemstone("gem_alpha", Map.of("hypixel:skyblock", "ab")))));
+    }
+
+    @Test
+    void flavorAndGemstoneOverrideCharactersDoNotOwnBareCharacters() {
+        // Flavor and gemstone glyphs reverse map through their own format rules, exactly like
+        // stat glyphs; only icons.json entries own bare characters.
+        PackGlyphIndex index = PackGlyphIndex.build(
+            List.of(), List.of(),
+            List.of(flavor("alphaflavor", Map.of("hypixel:skyblock", "\uE100"))),
+            List.of(gemstone("gem_alpha", Map.of("hypixel:skyblock", "\uE101"))));
+
+        assertTrue(index.getBareCharacterOwners().isEmpty());
     }
 }

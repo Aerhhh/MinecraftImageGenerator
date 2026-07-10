@@ -6,7 +6,10 @@
         "display": "❣ Requires",
         "color": "DARK_RED",
         "subColor": "RED",
-        "parseType": "DIFFERENT_ICON_COLOR"
+        "parseType": "DIFFERENT_ICON_COLOR",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE011"
+        }
     },
     {
         "icon": "☠",
@@ -15,7 +18,10 @@
         "display": "☠ Requires",
         "color": "DARK_RED",
         "subColor": "RED",
-        "parseType": "DIFFERENT_ICON_COLOR"
+        "parseType": "DIFFERENT_ICON_COLOR",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE007"
+        }
     },
     {
         "icon": "",
@@ -69,7 +75,10 @@
         "display": "༕ This armor piece is undead ༕!",
         "color": "DARK_GREEN",
         "subColor": null,
-        "parseType": "NONE"
+        "parseType": "NONE",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE084"
+        }
     },
     {
         "icon": "Ж",
@@ -78,7 +87,10 @@
         "display": "Ж This item is Arachnal Ж!",
         "color": "DARK_RED",
         "subColor": null,
-        "parseType": "NONE"
+        "parseType": "NONE",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE074"
+        }
     },
     {
         "icon": "✈",
@@ -87,7 +99,10 @@
         "display": "✈ Airborne",
         "color": "GRAY",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE070"
+        }
     },
     {
         "icon": "☮",
@@ -96,7 +111,10 @@
         "display": "☮ Animal",
         "color": "GREEN",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE071"
+        }
     },
     {
         "icon": "⚓",
@@ -105,7 +123,10 @@
         "display": "⚓ Aquatic",
         "color": "BLUE",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE072"
+        }
     },
     {
         "icon": "♃",
@@ -114,7 +135,10 @@
         "display": "♃ Arcane",
         "color": "DARK_PURPLE",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE073"
+        }
     },
     {
         "icon": "Ж",
@@ -123,7 +147,10 @@
         "display": "Ж Arthropod",
         "color": "DARK_RED",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE074"
+        }
     },
     {
         "icon": "⚙",
@@ -132,7 +159,10 @@
         "display": "⚙ Construct",
         "color": "GRAY",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE075"
+        }
     },
     {
         "icon": "⚂",
@@ -141,7 +171,10 @@
         "display": "⚂ Cubic",
         "color": "GREEN",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE076"
+        }
     },
     {
         "icon": "♣",
@@ -150,7 +183,10 @@
         "display": "♣ Elusive",
         "color": "LIGHT_PURPLE",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE077"
+        }
     },
     {
         "icon": "⊙",
@@ -159,7 +195,10 @@
         "display": "⊙ Ender",
         "color": "DARK_PURPLE",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE078"
+        }
     },
     {
         "icon": "☃",
@@ -168,7 +207,10 @@
         "display": "☃ Frozen",
         "color": "WHITE",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE079"
+        }
     },
     {
         "icon": "❄",
@@ -177,7 +219,10 @@
         "display": "❄ Glacial",
         "color": "AQUA",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE07A"
+        }
     },
     {
         "icon": "✰",
@@ -186,7 +231,10 @@
         "display": "✰ Humanoid",
         "color": "YELLOW",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE07B"
+        }
     },
     {
         "icon": "♨",
@@ -195,7 +243,10 @@
         "display": "♨ Infernal",
         "color": "DARK_RED",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE07C"
+        }
     },
     {
         "icon": "♆",
@@ -204,7 +255,10 @@
         "display": "♆ Magmatic",
         "color": "RED",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE07D"
+        }
     },
     {
         "icon": "✿",
@@ -213,7 +267,10 @@
         "display": "✿ Mythological",
         "color": "DARK_GREEN",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE07E"
+        }
     },
     {
         "icon": "ൠ",
@@ -222,7 +279,10 @@
         "display": "ൠ Pest",
         "color": "DARK_GREEN",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE07F"
+        }
     },
     {
         "icon": "⛨",
@@ -231,7 +291,10 @@
         "display": "⛨ Shielded",
         "color": "YELLOW",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE080"
+        }
     },
     {
         "icon": "🦴",
@@ -240,7 +303,10 @@
         "display": "🦴 Skeletal",
         "color": "WHITE",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE081"
+        }
     },
     {
         "icon": "☽",
@@ -249,7 +315,10 @@
         "display": "☽ Spooky",
         "color": "GOLD",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE082"
+        }
     },
     {
         "icon": "⛏",
@@ -258,7 +327,10 @@
         "display": "⛏ Subterranean",
         "color": "GOLD",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE083"
+        }
     },
     {
         "icon": "༕",
@@ -267,7 +339,10 @@
         "display": "༕ Undead",
         "color": "DARK_GREEN",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE084"
+        }
     },
     {
         "icon": "☠",
@@ -276,7 +351,10 @@
         "display": "☠ Wither",
         "color": "DARK_GRAY",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE085"
+        }
     },
     {
         "icon": "⸙",
@@ -285,7 +363,10 @@
         "display": "⸙ Woodland",
         "color": "DARK_GREEN",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE086"
+        }
     },
     {
         "icon": "♢",
@@ -357,7 +438,10 @@
         "display": "❄ Cold",
         "color": "AQUA",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE006"
+        }
     },
     {
         "icon": "♨",
@@ -366,7 +450,10 @@
         "display": "♨ Heat",
         "color": "RED",
         "subColor": null,
-        "parseType": "NORMAL"
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE012"
+        }
     },
     {
         "icon": "ථ",

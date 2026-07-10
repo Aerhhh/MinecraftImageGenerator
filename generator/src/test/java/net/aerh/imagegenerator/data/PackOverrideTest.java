@@ -22,6 +22,9 @@ class PackOverrideTest {
     private static final String MOB_UNDEAD = "\uE084";
     private static final String MOB_ELUSIVE = "\uE077";
     private static final String STAFF_BADGE = "\u12DE";
+    private static final String RUBY_BASE = "\u2764";
+    private static final String RUBY_PACK = "\uE010";
+    private static final String UNDEAD_BASE = "\u0F15";
 
     @Test
     void iconOverrideAppliesOnlyForMatchingPack() {
@@ -63,10 +66,11 @@ class PackOverrideTest {
 
     @Test
     void statsWithoutOverridesKeepBaseIconUnderAnyPack() {
-        Stat syphonLuck = Stat.byName("syphon_luck");
-        assertNotNull(syphonLuck);
-        assertEquals(syphonLuck.getIcon(), syphonLuck.getIcon(HYPIXEL));
-        assertEquals(syphonLuck.getDisplay(), syphonLuck.getDisplay(HYPIXEL));
+        // The pack has no wisdom glyph, so wisdom stats stay on their base character.
+        Stat combatWisdom = Stat.byName("combat_wisdom");
+        assertNotNull(combatWisdom);
+        assertEquals(combatWisdom.getIcon(), combatWisdom.getIcon(HYPIXEL));
+        assertEquals(combatWisdom.getDisplay(), combatWisdom.getDisplay(HYPIXEL));
     }
 
     @Test
@@ -77,6 +81,55 @@ class PackOverrideTest {
         assertEquals("\uE017", Stat.byName("overflow_mana").getIcon(HYPIXEL));
         assertEquals("\uE004", Stat.byName("mana_regen").getIcon(HYPIXEL));
         assertEquals("\uE010", Stat.byName("health").getIcon(HYPIXEL));
+        assertEquals("\uE000", Stat.byName("absorption").getIcon(HYPIXEL));
+        assertEquals("\uE05B", Stat.byName("syphon_luck").getIcon(HYPIXEL));
+    }
+
+    @Test
+    void gemstoneIconOverrideAppliesOnlyForMatchingPack() {
+        Gemstone ruby = Gemstone.byName("gem_ruby");
+        assertNotNull(ruby);
+        assertEquals(RUBY_BASE, ruby.getIcon());
+        assertEquals(RUBY_PACK, ruby.getIcon(HYPIXEL));
+        assertEquals(RUBY_BASE, ruby.getIcon(OTHER));
+        assertEquals(RUBY_BASE, ruby.getIcon(null));
+    }
+
+    @Test
+    void gemstoneFormattedIconKeepsItsColorCodes() {
+        Gemstone ruby = Gemstone.byName("gem_ruby");
+        assertEquals("&c" + RUBY_BASE, ruby.getFormattedIcon());
+        assertEquals("&c" + RUBY_PACK, ruby.getFormattedIcon(HYPIXEL));
+        assertEquals("&c" + RUBY_BASE, ruby.getFormattedIcon(OTHER));
+    }
+
+    @Test
+    void gemstoneWithoutGlyphKeepsBaseIconUnderAnyPack() {
+        // The pack has no caduceus glyph, so the defensive slot stays on its base character.
+        Gemstone defensive = Gemstone.byName("gem_defensive");
+        assertNotNull(defensive);
+        assertEquals(defensive.getIcon(), defensive.getIcon(HYPIXEL));
+        assertEquals(defensive.getFormattedIcon(), defensive.getFormattedIcon(HYPIXEL));
+    }
+
+    @Test
+    void flavorIconOverrideAppliesOnlyForMatchingPack() {
+        Flavor undead = Flavor.byName("undead");
+        assertNotNull(undead);
+        assertEquals(UNDEAD_BASE, undead.getIcon());
+        assertEquals(MOB_UNDEAD, undead.getIcon(HYPIXEL));
+        assertEquals(UNDEAD_BASE, undead.getIcon(OTHER));
+        assertEquals(MOB_UNDEAD + " Undead", undead.getDisplay(HYPIXEL));
+    }
+
+    @Test
+    void flavorEmbeddedIconCharactersAreSwappedEverywhere() {
+        Flavor undeadItem = Flavor.byName("undead_item");
+        assertNotNull(undeadItem);
+        assertEquals("This armor piece is undead " + UNDEAD_BASE + "!", undeadItem.getStat());
+        assertEquals("This armor piece is undead " + MOB_UNDEAD + "!", undeadItem.getStat(HYPIXEL));
+        assertEquals(MOB_UNDEAD + " This armor piece is undead " + MOB_UNDEAD + "!", undeadItem.getDisplay(HYPIXEL));
+        assertEquals(UNDEAD_BASE + " This armor piece is undead " + UNDEAD_BASE + "!", undeadItem.getDisplay(OTHER));
     }
 
     @Test

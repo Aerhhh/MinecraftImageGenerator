@@ -6,8 +6,10 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import net.aerh.imagegenerator.pack.PackId;
 import net.hypixel.nerdbot.marmalade.json.serializer.ColorDeserializer;
 import net.hypixel.nerdbot.marmalade.registry.DataRegistry;
+import org.jetbrains.annotations.Nullable;
 
 import java.awt.Color;
 import java.io.IOException;
@@ -63,6 +65,50 @@ public class Gemstone {
     private String formattedIcon;
     private Color color;
     private Map<String, String> formattedTiers;
+    /**
+     * Pack-conditional replacement icon characters keyed by pack ID string
+     * (e.g. {@code "hypixel:skyblock"}). Icon-only: no other field is overridable.
+     */
+    @Nullable
+    private Map<String, String> packOverrides;
+
+    /**
+     * Resolves the icon character for the given pack: the exact-pack-ID override when one exists,
+     * otherwise the base {@link #icon}.
+     *
+     * @param packId the active pack, or {@code null} for none
+     *
+     * @return the icon character to render
+     */
+    public String getIcon(@Nullable PackId packId) {
+        String override = resolveOverride(packId);
+        return override != null ? override : icon;
+    }
+
+    /**
+     * Resolves the formatted (color-coded) icon for the given pack. When an icon override is
+     * active it is derived by swapping the base icon character inside {@link #formattedIcon} so
+     * the hand-tuned color codes are preserved.
+     *
+     * @param packId the active pack, or {@code null} for none
+     *
+     * @return the formatted icon to render
+     */
+    public String getFormattedIcon(@Nullable PackId packId) {
+        String override = resolveOverride(packId);
+        if (override == null || formattedIcon == null || icon == null || icon.isEmpty()) {
+            return formattedIcon;
+        }
+        return formattedIcon.replace(icon, override);
+    }
+
+    @Nullable
+    private String resolveOverride(@Nullable PackId packId) {
+        if (packId != null && packOverrides != null) {
+            return packOverrides.get(packId.toString());
+        }
+        return null;
+    }
 
     public static Gemstone byName(String name) {
         return REGISTRY.byName(name).orElse(null);

@@ -69,6 +69,32 @@ class PlaceholderReverseMapperPackTest {
     }
 
     @Test
+    void packRenderedFlavorTextMapsToTheFlavorNotTheIcon() {
+        // U+E084 is both the undead flavor's override char and mob_undead's base char; flavor
+        // format rules run before bare-char icon rules, so the surrounding text wins.
+        assertEquals("%%undead%%", mapper.mapPlaceholders("\u00A72\uE084 Undead"));
+        assertEquals("%%undead%%", mapper.mapPlaceholders("\u00A72\u0F15 Undead"));
+    }
+
+    @Test
+    void packRenderedEmbeddedFlavorTextReverseMaps() {
+        assertEquals("%%undead_item%%",
+            mapper.mapPlaceholders("\u00A72This armor piece is undead \uE084!"));
+        assertEquals("%%undead_item%%",
+            mapper.mapPlaceholders("\u00A72This armor piece is undead \u0F15!"));
+    }
+
+    @Test
+    void packRenderedGemstoneSlotsReverseMap() {
+        assertEquals("%%gem_ruby:unlocked%%",
+            mapper.mapPlaceholders("\u00A78[\u00A77\uE010\u00A78]\u00A7r"));
+        assertEquals("%%gem_ruby:fine%%",
+            mapper.mapPlaceholders("\u00A79[\u00A7c\uE010\u00A79]\u00A7r"));
+        assertEquals("%%gem_ruby:fine%%",
+            mapper.mapPlaceholders("\u00A79[\u00A7c\u2764\u00A79]\u00A7r"));
+    }
+
+    @Test
     void packGlyphInsideFormattedStatTextMapsToTheStatNotTheIcon() {
         // U+E077 is both the tracking stat's override char and mob_elusive's base char; stat
         // format rules run before bare-char icon rules, so the surrounding "Tracking" text wins.
