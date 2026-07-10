@@ -22,7 +22,9 @@ import java.util.regex.Pattern;
  * inside the body combine with the gradient and are re-emitted after each per-character color
  * (color codes reset formatting). An explicit color code inside the body overrides the gradient
  * from that point on. After the closer, the pre-gradient color state is restored. Malformed
- * input (invalid hex, fewer than two stops, missing closer) stays literal.
+ * input (invalid hex, fewer than two stops, missing closer) stays literal. The two-character
+ * {@code \n} line-break marker (see {@code TextWrapper.normalizeNewlines}) inside a body is
+ * preserved verbatim with no color code and counts as a single position, like a space.
  * <p>
  * Must be registered <em>last</em> in the parser chain so that placeholders inside the body
  * are already resolved to plain text and in-band codes before expansion.
@@ -41,11 +43,16 @@ public class GradientParser implements StringParser {
     @Override
     public String parse(String input) {
         Matcher opener = OPENER_PATTERN.matcher(input);
+
+        if (!opener.find()) {
+            return input; // No well-formed opener at all: nothing to expand.
+        }
+
         Matcher closer = CLOSER_PATTERN.matcher(input);
         StringBuilder result = new StringBuilder(input.length());
         int cursor = 0;
 
-        while (opener.find(cursor)) {
+        do {
             if (!closer.find(opener.end())) {
                 break; // Unclosed opener: everything from the cursor stays literal.
             }
@@ -54,7 +61,7 @@ public class GradientParser implements StringParser {
             String body = input.substring(opener.end(), closer.start());
             result.append(expand(body, parseStops(opener.group(1)), restorationPrefix(result)));
             cursor = closer.end();
-        }
+        } while (opener.find(cursor));
 
         return result.append(input, cursor, input.length()).toString();
     }
@@ -109,6 +116,15 @@ public class GradientParser implements StringParser {
                 // Fonts survive color changes in the lexer, so passing them through once suffices.
                 out.append(symbol).append(body.charAt(i + 1));
                 i += codeSkipLength(type);
+                continue;
+            }
+
+            if (isNewlineMarker(body, i)) {
+                // The \n line-break marker must survive verbatim for TextWrapper to see it;
+                // a color code in between would break the two-char sequence it looks for.
+                out.append(symbol).append(body.charAt(i + 1));
+                visibleIndex++;
+                i++;
                 continue;
             }
 
@@ -183,6 +199,12 @@ public class GradientParser implements StringParser {
         int count = 0;
 
         for (int i = 0; i < body.length(); i++) {
+            if (isNewlineMarker(body, i)) {
+                i++;
+                count++;
+                continue;
+            }
+
             CodeType type = classifyCode(body, i);
 
             if (type != CodeType.NONE) {
@@ -194,6 +216,16 @@ public class GradientParser implements StringParser {
         }
 
         return count;
+    }
+
+    /**
+     * Recognizes the two-character {@code \n} line-break marker (backslash followed by 'n'),
+     * the same marker {@code TextWrapper.normalizeNewlines} looks for. It is not an in-band
+     * code, so it is not part of {@link #classifyCode}; both {@link #expand} and
+     * {@link #visibleLength} check for it directly so it is defined once.
+     */
+    private static boolean isNewlineMarker(CharSequence text, int i) {
+        return text.charAt(i) == '\\' && i + 1 < text.length() && text.charAt(i + 1) == 'n';
     }
 
     /** Position of a character within the gradient: {@code t = i / (len - 1)}, first stop when len is 1. */

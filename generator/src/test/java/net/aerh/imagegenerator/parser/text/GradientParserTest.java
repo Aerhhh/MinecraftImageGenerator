@@ -227,4 +227,28 @@ class GradientParserTest {
         assertTrue(lines.get(1).startsWith("&#9f0060"), "wrap carries the last gradient color forward");
         assertTrue(lines.get(1).endsWith("&#0000ffB&r"), "gradient finishes on the wrapped line");
     }
+
+    @Test
+    void newlineMarkerInsideBodyIsPreservedUncolored() {
+        // The two-char \n marker is the pipeline's line break; it must survive expansion
+        // verbatim and advance the gradient by one position like a space.
+        assertEquals("&#ff0000A&#bf0040B\\n&#4000bfC&#0000ffD&r",
+            parser.parse("%%gradient:#ff0000:#0000ff%%AB\\nCD%%/gradient%%"));
+    }
+
+    @Test
+    void realNewlineInsideBodyIsPreservedUncolored() {
+        assertEquals("&#ff0000A&#bf0040B\n&#4000bfC&#0000ffD&r",
+            parser.parse("%%gradient:#ff0000:#0000ff%%AB\nCD%%/gradient%%"));
+    }
+
+    @Test
+    void gradientSpansTheNewlineMarkerAcrossWrappedLines() {
+        List<String> lines = TextWrapper.wrapString(
+            "%%gradient:#ff0000:#0000ff%%AB\\nCD%%/gradient%%", 20);
+        assertEquals(2, lines.size());
+        assertEquals("&#ff0000A&#bf0040B", lines.get(0));
+        assertTrue(lines.get(1).endsWith("&#4000bfC&#0000ffD&r"),
+            "gradient continues on the second line");
+    }
 }
