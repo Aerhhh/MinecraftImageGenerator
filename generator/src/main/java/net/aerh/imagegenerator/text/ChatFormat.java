@@ -9,7 +9,7 @@ import java.util.Arrays;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
-public enum ChatFormat {
+public enum ChatFormat implements TextColor {
     BLACK('0', 0x000000, 0x000000),
     DARK_BLUE('1', 0x0000AA, 0x00002A),
     DARK_GREEN('2', 0x00AA00, 0x002A00),
@@ -39,7 +39,7 @@ public enum ChatFormat {
     public static final char SECTION_SYMBOL = '§';
     public static final char AMPERSAND_SYMBOL = '&';
 
-    public static final Pattern VANILLA_PATTERN = Pattern.compile(SECTION_SYMBOL + "+([0-9A-HK-OR])", Pattern.CASE_INSENSITIVE);
+    public static final Pattern VANILLA_PATTERN = Pattern.compile(SECTION_SYMBOL + "+(#[0-9A-F]{6}|[0-9A-HK-OR])", Pattern.CASE_INSENSITIVE);
 
     @Getter
     private final char code;
@@ -148,6 +148,11 @@ public enum ChatFormat {
             return getNextFormat(nextColor);
 
         return values()[nextColor];
+    }
+
+    @Override
+    public String getLegacyCode() {
+        return String.valueOf(this.code);
     }
 
     public String toLegacyString() {

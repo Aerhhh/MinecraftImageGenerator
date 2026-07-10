@@ -8,6 +8,7 @@ import net.aerh.imagegenerator.builder.ClassBuilder;
 import net.aerh.imagegenerator.impl.nbt.NbtTextComponentUtil;
 import net.aerh.imagegenerator.text.ChatFormat;
 import net.aerh.imagegenerator.text.MinecraftFont;
+import net.aerh.imagegenerator.text.TextColor;
 import net.aerh.imagegenerator.text.event.ClickEvent;
 import net.aerh.imagegenerator.text.event.HoverEvent;
 import org.jetbrains.annotations.NotNull;
@@ -36,8 +37,14 @@ public final class TextSegment extends ColorSegment {
                 textSegment.setClickEvent(ClickEvent.fromJson(jsonObject.get("clickEvent").getAsJsonObject()));
             if (jsonObject.has("hoverEvent"))
                 textSegment.setHoverEvent(HoverEvent.fromJson(jsonObject.get("hoverEvent").getAsJsonObject()));
-            if (jsonObject.has("color"))
-                textSegment.setColor(ChatFormat.valueOf(jsonObject.get("color").getAsString().toUpperCase()));
+            if (jsonObject.has("color")) {
+                // Named colors and vanilla 1.16+ hex colors; unknown values keep the default
+                // (matching how the NBT pipeline treats unrecognized colors) instead of throwing.
+                TextColor color = TextColor.fromJsonString(jsonObject.get("color").getAsString());
+                if (color != null) {
+                    textSegment.setColor(color);
+                }
+            }
             if (jsonObject.has("font"))
                 textSegment.setFont(MinecraftFont.fromResourceLocation(jsonObject.get("font").getAsString()));
             if (jsonObject.has("obfuscated"))
@@ -110,7 +117,7 @@ public final class TextSegment extends ColorSegment {
     public static class Builder implements ClassBuilder<TextSegment> {
 
         protected String text = "";
-        protected ChatFormat color;
+        protected TextColor color;
         protected boolean italic, bold, underlined, obfuscated, strikethrough;
         private ClickEvent clickEvent;
         private HoverEvent hoverEvent;
@@ -160,7 +167,7 @@ public final class TextSegment extends ColorSegment {
             return this;
         }
 
-        public Builder withColor(@NotNull ChatFormat color) {
+        public Builder withColor(@NotNull TextColor color) {
             this.color = color;
             return this;
         }

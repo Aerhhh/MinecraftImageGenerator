@@ -8,6 +8,7 @@ import net.aerh.imagegenerator.builder.ClassBuilder;
 import net.aerh.imagegenerator.pack.GuiSpriteRenderer;
 import net.aerh.imagegenerator.pack.TooltipSprites;
 import net.aerh.imagegenerator.text.ChatFormat;
+import net.aerh.imagegenerator.text.TextColor;
 import net.aerh.imagegenerator.text.TextColorRemap;
 import net.aerh.imagegenerator.text.MinecraftFont;
 import net.aerh.imagegenerator.text.segment.ColorSegment;
@@ -84,7 +85,7 @@ public class MinecraftTooltip {
     @Getter
     private int animationFrameCount;
 
-    private transient ChatFormat currentColor;
+    private transient TextColor currentColor;
     private transient Font currentFont;
     private transient int locationX;
     private transient int locationY;
@@ -95,7 +96,7 @@ public class MinecraftTooltip {
      * Construct a new {@link MinecraftTooltip} instance.
      *
      * @param lines               A list of {@link LineSegment} objects representing the lines of text.
-     * @param defaultColor        The default {@link ChatFormat} color to use for the text.
+     * @param defaultColor        The default {@link TextColor} to use for the text.
      * @param alpha               The alpha value for the tooltip background. Range: 0-255.
      * @param padding             The padding value for the tooltip. Range: 0-255.
      * @param firstLinePadding    Whether to apply padding to the first line.
@@ -108,7 +109,7 @@ public class MinecraftTooltip {
      * @param themeSprites        Pack tooltip sprites replacing the programmatic chrome, or null.
      * @param textColorRemap      Shader-equivalent text color replacement table, or null.
      */
-    private MinecraftTooltip(List<LineSegment> lines, ChatFormat defaultColor, int alpha, int padding, boolean firstLinePadding, boolean renderBorder, boolean centeredText, int frameDelayMs, int animationFrameCount, int scaleFactor, boolean aprilFools, TooltipSprites themeSprites, TextColorRemap textColorRemap) {
+    private MinecraftTooltip(List<LineSegment> lines, TextColor defaultColor, int alpha, int padding, boolean firstLinePadding, boolean renderBorder, boolean centeredText, int frameDelayMs, int animationFrameCount, int scaleFactor, boolean aprilFools, TooltipSprites themeSprites, TextColorRemap textColorRemap) {
         this.lines = lines;
         this.currentColor = defaultColor;
         this.alpha = alpha;
@@ -758,7 +759,7 @@ public class MinecraftTooltip {
     public static class Builder implements ClassBuilder<MinecraftTooltip> {
         @Getter
         private final List<LineSegment> lines = new ArrayList<>();
-        private ChatFormat defaultColor = ChatFormat.GRAY;
+        private TextColor defaultColor = ChatFormat.GRAY;
         private int alpha = DEFAULT_ALPHA;
         private int padding = 0;
         private boolean firstLinePadding = true;
@@ -801,8 +802,8 @@ public class MinecraftTooltip {
             return this;
         }
 
-        public Builder withDefaultColor(@NotNull ChatFormat chatColor) {
-            this.defaultColor = chatColor;
+        public Builder withDefaultColor(@NotNull TextColor color) {
+            this.defaultColor = color;
             return this;
         }
 

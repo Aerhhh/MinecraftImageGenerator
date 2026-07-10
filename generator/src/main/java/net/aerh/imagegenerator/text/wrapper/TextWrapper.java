@@ -8,6 +8,7 @@ import net.aerh.imagegenerator.parser.text.FlavorParser;
 import net.aerh.imagegenerator.parser.text.GemstoneParser;
 import net.aerh.imagegenerator.parser.text.IconParser;
 import net.aerh.imagegenerator.parser.text.StatParser;
+import net.aerh.imagegenerator.text.RgbColor;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,7 +18,7 @@ import java.util.regex.Pattern;
 @Slf4j
 public class TextWrapper {
 
-    private static final Pattern STRIP_COLOR_PATTERN = Pattern.compile("[&§][0-9a-fA-FK-ORk-or]");
+    private static final Pattern STRIP_COLOR_PATTERN = Pattern.compile("[&§](?:#[0-9a-fA-F]{6}|[0-9a-fA-FK-ORk-or])");
     private static final Pattern NEWLINE_PATTERN = Pattern.compile("(?:\n|\\\\n)");
     private static final Pattern TOKEN_PATTERN = Pattern.compile("\\S+|\\s+");
 
@@ -60,6 +61,16 @@ public class TextWrapper {
             for (int i = 0; i < segment.length(); i++) {
                 if ((segment.charAt(i) == '&' || segment.charAt(i) == '§') && i + 1 < segment.length()) {
                     char code = Character.toLowerCase(segment.charAt(i + 1));
+
+                    if (code == '#' && RgbColor.tryParseAt(segment, i + 1) != null) {
+                        lastColor = segment.substring(i, i + 1 + RgbColor.HEX_CODE_LENGTH);
+                        formatting = new StringBuilder(); // Hex colors reset formatting like any color
+                        colorFoundInSegment = true;
+                        i += RgbColor.HEX_CODE_LENGTH; // Skip #RRGGBB
+                        log.debug("Found hex color code: '{}'", lastColor);
+                        continue;
+                    }
+
                     String codeStr = segment.substring(i, i + 2);
 
                     if ("0123456789abcdef".indexOf(code) != -1) {
@@ -243,7 +254,9 @@ public class TextWrapper {
                 if ((currentChar == '&' || currentChar == '§') && i + 1 < word.length()) {
                     char code = Character.toLowerCase(word.charAt(i + 1));
 
-                    if ("0123456789abcdefklmnor".indexOf(code) != -1) {
+                    if (code == '#' && RgbColor.tryParseAt(word, i + 1) != null) {
+                        i += 1 + RgbColor.HEX_CODE_LENGTH; // Hex colors are zero-width like other codes
+                    } else if ("0123456789abcdefklmnor".indexOf(code) != -1) {
                         i += 2; // Skip formatting codes since they don't count towards visible length
                     } else {
                         currentVisibleLength++; // Treat first character as a visible character
