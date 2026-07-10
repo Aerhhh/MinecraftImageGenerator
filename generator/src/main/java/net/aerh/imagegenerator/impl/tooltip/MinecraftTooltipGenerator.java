@@ -181,6 +181,7 @@ public class MinecraftTooltipGenerator implements Generator {
     public static class Builder implements ClassBuilder<MinecraftTooltipGenerator> {
         @Getter
         private String itemName;
+        @Getter
         private Rarity rarity;
         @Getter
         private String itemLore;
