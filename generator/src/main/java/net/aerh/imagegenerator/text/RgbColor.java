@@ -24,6 +24,9 @@ public record RgbColor(int rgb) implements TextColor {
         }
     }
 
+    /** Length of an in-band hex color code without its {@code &}/{@code §} symbol: {@code #RRGGBB}. */
+    public static final int HEX_CODE_LENGTH = 7;
+
     /**
      * Parses a strict {@code #RRGGBB} string (case-insensitive, exactly six hex digits).
      *
@@ -32,13 +35,27 @@ public record RgbColor(int rgb) implements TextColor {
      * @return the parsed color, or null if the string is not a valid hex color
      */
     public static @Nullable RgbColor tryParse(@NotNull String value) {
-        if (value.length() != 7 || value.charAt(0) != '#') {
+        return value.length() == HEX_CODE_LENGTH ? tryParseAt(value, 0) : null;
+    }
+
+    /**
+     * Parses a {@code #RRGGBB} sequence starting at {@code start} within a larger string,
+     * ignoring any content after the six hex digits. Used by the legacy text pipeline to
+     * recognize in-band {@code &#RRGGBB} color codes.
+     *
+     * @param text  the text containing the potential hex color code
+     * @param start the index of the expected {@code #} character
+     *
+     * @return the parsed color, or null if no valid hex color starts at {@code start}
+     */
+    public static @Nullable RgbColor tryParseAt(@NotNull CharSequence text, int start) {
+        if (start < 0 || start + HEX_CODE_LENGTH > text.length() || text.charAt(start) != '#') {
             return null;
         }
 
         int rgb = 0;
-        for (int i = 1; i < 7; i++) {
-            int digit = Character.digit(value.charAt(i), 16);
+        for (int i = start + 1; i < start + HEX_CODE_LENGTH; i++) {
+            int digit = Character.digit(text.charAt(i), 16);
             if (digit == -1) {
                 return null;
             }

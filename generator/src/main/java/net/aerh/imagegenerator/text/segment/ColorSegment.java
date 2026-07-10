@@ -7,6 +7,8 @@ import lombok.ToString;
 import net.aerh.imagegenerator.builder.ClassBuilder;
 import net.aerh.imagegenerator.text.ChatFormat;
 import net.aerh.imagegenerator.text.MinecraftFont;
+import net.aerh.imagegenerator.text.RgbColor;
+import net.aerh.imagegenerator.text.TextColor;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -20,7 +22,7 @@ import java.util.function.Supplier;
 public class ColorSegment {
 
     protected @NotNull String text;
-    protected ChatFormat color = ChatFormat.GRAY;
+    protected TextColor color = ChatFormat.GRAY;
     protected @NotNull MinecraftFont font = MinecraftFont.DEFAULT;
     protected boolean italic, bold, underlined, obfuscated, strikethrough;
 
@@ -68,8 +70,24 @@ public class ColorSegment {
 
                 // peek at the next character.
                 char peek = legacyText.charAt(i + 1);
+                RgbColor hexColor = peek == '#' ? RgbColor.tryParseAt(legacyText, i + 1) : null;
 
-                if (ChatFormat.isValid(peek)) {
+                if (hexColor != null) {
+                    // Hex colors behave exactly like named color codes: flush the pending
+                    // text, then start a fresh segment (dropping formatting, keeping the font).
+                    MinecraftFont currentFont = currentObject.getFont();
+
+                    if (!text.isEmpty()) {
+                        currentObject.setText(text.toString());
+                        builder.withSegments(currentObject);
+                        text.setLength(0);
+                    }
+
+                    currentObject = segmentSupplier.get();
+                    currentObject.setColor(hexColor);
+                    currentObject.setFont(currentFont);
+                    i += RgbColor.HEX_CODE_LENGTH; // skip #RRGGBB; the loop increment skips the symbol
+                } else if (ChatFormat.isValid(peek)) {
                     i += 1; // if valid
 
                     // Preserve the current font before creating a new segment
@@ -140,11 +158,11 @@ public class ColorSegment {
         return builder.build();
     }
 
-    public Optional<ChatFormat> getColor() {
+    public Optional<TextColor> getColor() {
         return Optional.ofNullable(this.color);
     }
 
-    public void setColor(@NotNull ChatFormat color) {
+    public void setColor(@NotNull TextColor color) {
         this.color = color;
     }
 
@@ -191,7 +209,7 @@ public class ColorSegment {
 
     protected @NotNull StringBuilder toLegacyBuilder(char symbol) {
         StringBuilder builder = new StringBuilder();
-        this.getColor().ifPresent(color -> builder.append(symbol).append(color.getCode()));
+        this.getColor().ifPresent(color -> builder.append(symbol).append(color.getLegacyCode()));
         if (this.isObfuscated()) builder.append(symbol).append(ChatFormat.OBFUSCATED.getCode());
         if (this.isBold()) builder.append(symbol).append(ChatFormat.BOLD.getCode());
         if (this.isStrikethrough()) builder.append(symbol).append(ChatFormat.STRIKETHROUGH.getCode());
@@ -216,7 +234,7 @@ public class ColorSegment {
 
     public static class Builder implements ClassBuilder<ColorSegment> {
         protected String text = "";
-        protected ChatFormat color = ChatFormat.GRAY;
+        protected TextColor color = ChatFormat.GRAY;
         protected MinecraftFont font = MinecraftFont.DEFAULT;
         protected boolean italic, bold, underlined, obfuscated, strikethrough;
 
@@ -265,7 +283,7 @@ public class ColorSegment {
             return this;
         }
 
-        public Builder withColor(@NotNull ChatFormat color) {
+        public Builder withColor(@NotNull TextColor color) {
             this.color = color;
             return this;
         }
