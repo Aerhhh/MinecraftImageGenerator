@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 import net.aerh.imagegenerator.builder.ClassBuilder;
+import net.aerh.imagegenerator.text.CodeClassifier;
 import net.hypixel.nerdbot.marmalade.collections.ArrayUtils;
 import org.jetbrains.annotations.NotNull;
 
@@ -26,7 +27,7 @@ public final class LineSegment {
     }
 
     public static @NotNull List<LineSegment> fromLegacy(@NotNull String legacyText, char symbolSubstitute) {
-        return ArrayUtils.safeArrayStream(legacyText.split("(?:\n|\\\\n)+"))
+        return ArrayUtils.safeArrayStream(legacyText.split(CodeClassifier.NEWLINE_REGEX + "+"))
             .map(line -> TextSegment.fromLegacy(line, symbolSubstitute))
             .toList();
     }

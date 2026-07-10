@@ -2,6 +2,8 @@ package net.aerh.imagegenerator.parser.text;
 
 import net.aerh.imagegenerator.parser.StringParser;
 import net.aerh.imagegenerator.text.ChatFormat;
+import net.aerh.imagegenerator.text.CodeClassifier;
+import net.aerh.imagegenerator.text.CodeClassifier.CodeType;
 import net.aerh.imagegenerator.text.RgbColor;
 
 import java.util.ArrayList;
@@ -35,10 +37,6 @@ public class GradientParser implements StringParser {
         Pattern.compile("%%gradient((?::#[0-9a-fA-F]{6}){2,})%%", Pattern.CASE_INSENSITIVE);
     private static final Pattern CLOSER_PATTERN =
         Pattern.compile("%%/gradient%%", Pattern.CASE_INSENSITIVE);
-
-    private static final String COLOR_CODES = "0123456789abcdef";
-    private static final String STYLE_CODES = "klmno";
-    private static final String FONT_CODES = "gh";
 
     @Override
     public String parse(String input) {
@@ -92,7 +90,7 @@ public class GradientParser implements StringParser {
 
         for (int i = 0; i < body.length(); i++) {
             char symbol = body.charAt(i);
-            CodeType type = classifyCode(body, i);
+            CodeType type = CodeClassifier.classify(body, i);
 
             if (type == CodeType.HEX_COLOR || type == CodeType.NAMED_COLOR) {
                 // An explicit color code overrides the gradient from this point on.
@@ -103,23 +101,23 @@ public class GradientParser implements StringParser {
                 if (activeStyles.indexOf(style) == -1) {
                     activeStyles.append(style);
                 }
-                i += codeSkipLength(type);
+                i += CodeClassifier.skipLength(type);
                 continue;
             }
             if (type == CodeType.RESET) {
                 activeStyles.setLength(0);
                 out.append(symbol).append(body.charAt(i + 1));
-                i += codeSkipLength(type);
+                i += CodeClassifier.skipLength(type);
                 continue;
             }
             if (type == CodeType.FONT) {
                 // Fonts survive color changes in the lexer, so passing them through once suffices.
                 out.append(symbol).append(body.charAt(i + 1));
-                i += codeSkipLength(type);
+                i += CodeClassifier.skipLength(type);
                 continue;
             }
 
-            if (isNewlineMarker(body, i)) {
+            if (CodeClassifier.isNewlineMarker(body, i)) {
                 // The \n line-break marker must survive verbatim for TextWrapper to see it;
                 // a color code in between would break the two-char sequence it looks for.
                 out.append(symbol).append(body.charAt(i + 1));
@@ -148,8 +146,9 @@ public class GradientParser implements StringParser {
     /**
      * Derives the color state active just before the gradient opener so it can be re-applied
      * after the closer: a reset followed by the last color, font, and style codes seen since
-     * the last reset. Intentionally not shared with TextWrapper.FormatState, whose accumulating
-     * treatment of reset codes is a wrapper-specific quirk.
+     * the last reset. Shares the {@link CodeClassifier} grammar with TextWrapper.FormatState
+     * but intentionally not its state semantics, whose accumulating treatment of reset codes
+     * is a wrapper-specific quirk.
      */
     private static String restorationPrefix(CharSequence before) {
         String lastColor = "";
@@ -157,7 +156,7 @@ public class GradientParser implements StringParser {
         StringBuilder styles = new StringBuilder();
 
         for (int i = 0; i < before.length() - 1; i++) {
-            CodeType type = classifyCode(before, i);
+            CodeType type = CodeClassifier.classify(before, i);
 
             switch (type) {
                 case HEX_COLOR:
@@ -188,27 +187,31 @@ public class GradientParser implements StringParser {
                     break;
             }
 
-            i += codeSkipLength(type);
+            i += CodeClassifier.skipLength(type);
         }
 
         return "" + ChatFormat.AMPERSAND_SYMBOL + ChatFormat.RESET.getCode() + lastColor + lastFont + styles;
     }
 
-    /** Counts characters that render (in-band codes are zero-width), including whitespace. */
+    /**
+     * Counts characters that render, including whitespace. In-band codes are zero-width here,
+     * <em>including</em> font codes; the wrapper deliberately counts those as visible when
+     * measuring line width (see {@code TextWrapper#isZeroWidthWhenWrapping}).
+     */
     private static int visibleLength(String body) {
         int count = 0;
 
         for (int i = 0; i < body.length(); i++) {
-            if (isNewlineMarker(body, i)) {
+            if (CodeClassifier.isNewlineMarker(body, i)) {
                 i++;
                 count++;
                 continue;
             }
 
-            CodeType type = classifyCode(body, i);
+            CodeType type = CodeClassifier.classify(body, i);
 
             if (type != CodeType.NONE) {
-                i += codeSkipLength(type);
+                i += CodeClassifier.skipLength(type);
                 continue;
             }
 
@@ -216,16 +219,6 @@ public class GradientParser implements StringParser {
         }
 
         return count;
-    }
-
-    /**
-     * Recognizes the two-character {@code \n} line-break marker (backslash followed by 'n'),
-     * the same marker {@code TextWrapper.normalizeNewlines} looks for. It is not an in-band
-     * code, so it is not part of {@link #classifyCode}; both {@link #expand} and
-     * {@link #visibleLength} check for it directly so it is defined once.
-     */
-    private static boolean isNewlineMarker(CharSequence text, int i) {
-        return text.charAt(i) == '\\' && i + 1 < text.length() && text.charAt(i + 1) == 'n';
     }
 
     /** Position of a character within the gradient: {@code t = i / (len - 1)}, first stop when len is 1. */
@@ -238,56 +231,5 @@ public class GradientParser implements StringParser {
         double scaled = t * (stops.size() - 1);
         int index = Math.min((int) scaled, stops.size() - 2);
         return RgbColor.lerp(stops.get(index), stops.get(index + 1), scaled - index);
-    }
-
-    private static boolean isCodeSymbol(char c) {
-        return c == ChatFormat.AMPERSAND_SYMBOL || c == ChatFormat.SECTION_SYMBOL;
-    }
-
-    /** The kind of in-band code (if any) a code symbol introduces. */
-    private enum CodeType {
-        HEX_COLOR, NAMED_COLOR, STYLE, FONT, RESET, NONE
-    }
-
-    /**
-     * Classifies the in-band code starting at index {@code i}, or {@code NONE} when the char at
-     * {@code i} is not a code symbol, or is a code symbol not followed by a recognized code.
-     * This is the single place the code grammar (hex colors, legacy colors, styles, fonts,
-     * reset) is defined; {@link #expand}, {@link #restorationPrefix}, and {@link #visibleLength}
-     * all classify through here so their skip lengths and recognized codes stay in sync.
-     */
-    private static CodeType classifyCode(CharSequence text, int i) {
-        if (!isCodeSymbol(text.charAt(i)) || i + 1 >= text.length()) {
-            return CodeType.NONE;
-        }
-
-        char peek = Character.toLowerCase(text.charAt(i + 1));
-
-        if (peek == '#' && RgbColor.tryParseAt(text, i + 1) != null) {
-            return CodeType.HEX_COLOR;
-        }
-        if (COLOR_CODES.indexOf(peek) != -1) {
-            return CodeType.NAMED_COLOR;
-        }
-        if (STYLE_CODES.indexOf(peek) != -1) {
-            return CodeType.STYLE;
-        }
-        if (FONT_CODES.indexOf(peek) != -1) {
-            return CodeType.FONT;
-        }
-        if (peek == ChatFormat.RESET.getCode()) {
-            return CodeType.RESET;
-        }
-
-        return CodeType.NONE;
-    }
-
-    /** Number of extra characters (after the code symbol itself) the code at {@code type} occupies. */
-    private static int codeSkipLength(CodeType type) {
-        if (type == CodeType.NONE) {
-            return 0;
-        }
-
-        return type == CodeType.HEX_COLOR ? RgbColor.HEX_CODE_LENGTH : 1;
     }
 }

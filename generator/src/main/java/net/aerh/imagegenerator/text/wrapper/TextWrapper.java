@@ -9,6 +9,8 @@ import net.aerh.imagegenerator.parser.text.GemstoneParser;
 import net.aerh.imagegenerator.parser.text.GradientParser;
 import net.aerh.imagegenerator.parser.text.IconParser;
 import net.aerh.imagegenerator.parser.text.StatParser;
+import net.aerh.imagegenerator.text.CodeClassifier;
+import net.aerh.imagegenerator.text.CodeClassifier.CodeType;
 import net.aerh.imagegenerator.text.RgbColor;
 
 import java.util.ArrayList;
@@ -19,8 +21,7 @@ import java.util.regex.Pattern;
 @Slf4j
 public class TextWrapper {
 
-    private static final Pattern STRIP_COLOR_PATTERN = Pattern.compile("[&§](?:#[0-9a-fA-F]{6}|[0-9a-fA-FK-ORk-or])");
-    private static final Pattern NEWLINE_PATTERN = Pattern.compile("(?:\n|\\\\n)");
+    private static final Pattern NEWLINE_PATTERN = Pattern.compile(CodeClassifier.NEWLINE_REGEX);
     private static final Pattern TOKEN_PATTERN = Pattern.compile("\\S+|\\s+");
 
     private static final List<Parser<String>> PARSERS = List.of(
@@ -58,38 +59,37 @@ public class TextWrapper {
         public static FormatState deriveStateFromSegment(String segment, FormatState initialState) {
             String lastColor = initialState.lastColor();
             StringBuilder formatting = new StringBuilder(initialState.formattingCodes());
-            boolean colorFoundInSegment = false;
 
             for (int i = 0; i < segment.length(); i++) {
-                if ((segment.charAt(i) == '&' || segment.charAt(i) == '§') && i + 1 < segment.length()) {
-                    char code = Character.toLowerCase(segment.charAt(i + 1));
+                CodeType type = CodeClassifier.classify(segment, i);
 
-                    if (code == '#' && RgbColor.tryParseAt(segment, i + 1) != null) {
+                switch (type) {
+                    case HEX_COLOR -> {
                         lastColor = segment.substring(i, i + 1 + RgbColor.HEX_CODE_LENGTH);
-                        formatting = new StringBuilder(); // Hex colors reset formatting like any color
-                        colorFoundInSegment = true;
-                        i += RgbColor.HEX_CODE_LENGTH; // Skip #RRGGBB
+                        formatting.setLength(0); // Hex colors reset formatting like any color
                         log.debug("Found hex color code: '{}'", lastColor);
-                        continue;
                     }
-
-                    String codeStr = segment.substring(i, i + 2);
-
-                    if ("0123456789abcdef".indexOf(code) != -1) {
-                        lastColor = codeStr;
-                        formatting = new StringBuilder(); // We want to reset the formatting when changing color
-                        colorFoundInSegment = true;
-                        i++; // Skip the code character
-                        log.debug("Found color code: '{}'", codeStr);
-                    } else if ("klmnor".indexOf(code) != -1) {
-                        // Append formatting codes to the formatting string
+                    case NAMED_COLOR -> {
+                        lastColor = segment.substring(i, i + 2);
+                        formatting.setLength(0); // We want to reset the formatting when changing color
+                        log.debug("Found color code: '{}'", lastColor);
+                    }
+                    // &r accumulates like a style instead of clearing state; existing wrapped-line
+                    // expectations depend on the reset carrying over to continuation lines.
+                    case STYLE, RESET -> {
+                        String codeStr = segment.substring(i, i + 2);
                         if (formatting.indexOf(codeStr) == -1) {
                             formatting.append(codeStr);
                             log.debug("Found formatting code: '{}'", codeStr);
                         }
-                        i++;
+                    }
+                    // Font codes don't affect carried-over state; the wrapper counts them
+                    // as visible width instead (see isZeroWidthWhenWrapping).
+                    case FONT, NONE -> {
                     }
                 }
+
+                i += CodeClassifier.skipLength(type);
             }
             return new FormatState(lastColor, formatting.toString());
         }
@@ -250,22 +250,12 @@ public class TextWrapper {
 
             // Iterate through the word to find where to cut based on visible characters
             for (int i = currentActualIndex; i < word.length(); ) {
-                char currentChar = word.charAt(i);
+                CodeType type = CodeClassifier.classify(word, i);
 
-                // Check for formatting codes (& or § followed by a valid code character)
-                if ((currentChar == '&' || currentChar == '§') && i + 1 < word.length()) {
-                    char code = Character.toLowerCase(word.charAt(i + 1));
-
-                    if (code == '#' && RgbColor.tryParseAt(word, i + 1) != null) {
-                        i += 1 + RgbColor.HEX_CODE_LENGTH; // Hex colors are zero-width like other codes
-                    } else if ("0123456789abcdefklmnor".indexOf(code) != -1) {
-                        i += 2; // Skip formatting codes since they don't count towards visible length
-                    } else {
-                        currentVisibleLength++; // Treat first character as a visible character
-                        i++;
-                    }
+                if (isZeroWidthWhenWrapping(type)) {
+                    i += 1 + CodeClassifier.skipLength(type); // Codes don't count towards visible length
                 } else {
-                    currentVisibleLength++; // Regular visible character
+                    currentVisibleLength++; // Regular visible character (or a font code's symbol)
                     i++;
                 }
 
@@ -317,13 +307,13 @@ public class TextWrapper {
                 normalized.append('\n');
                 i++;
 
-                while (i + 1 < input.length() && input.charAt(i) == '\\' && input.charAt(i + 1) == 'n') {
+                while (i < input.length() && CodeClassifier.isNewlineMarker(input, i)) {
                     i += 2;
                 }
                 continue;
             }
 
-            if (current == '\\' && i + 1 < input.length() && input.charAt(i + 1) == 'n') {
+            if (CodeClassifier.isNewlineMarker(input, i)) {
                 if (i + 2 < input.length() && input.charAt(i + 2) == '\n') {
                     i += 2;
                     continue;
@@ -362,7 +352,8 @@ public class TextWrapper {
     }
 
     /**
-     * Strips all known Minecraft color and formatting codes from a string.
+     * Strips all Minecraft color and formatting codes that are zero-width for wrapping
+     * (colors, styles, reset - not font codes) from a string, leaving its visible characters.
      *
      * @param string The string to strip codes from.
      *
@@ -373,7 +364,30 @@ public class TextWrapper {
             return "";
         }
 
-        return STRIP_COLOR_PATTERN.matcher(string).replaceAll("");
+        StringBuilder stripped = new StringBuilder(string.length());
+
+        for (int i = 0; i < string.length(); i++) {
+            CodeType type = CodeClassifier.classify(string, i);
+
+            if (isZeroWidthWhenWrapping(type)) {
+                i += CodeClassifier.skipLength(type);
+            } else {
+                stripped.append(string.charAt(i));
+            }
+        }
+
+        return stripped.toString();
+    }
+
+    /**
+     * Whether a classified code is invisible for line-width purposes. Font codes
+     * ({@code &g}/{@code &h}) deliberately return false: the wrapper has always counted them
+     * as two visible characters, unlike {@code GradientParser}, which treats them as
+     * zero-width when counting gradient positions. Changing this would shift pinned
+     * wrapped-line output, so the quirk is preserved and documented here.
+     */
+    private static boolean isZeroWidthWhenWrapping(CodeType type) {
+        return type != CodeType.NONE && type != CodeType.FONT;
     }
 
     /**
