@@ -135,6 +135,14 @@ public enum ChatFormat implements TextColor {
         return !this.isFormat() && this != RESET;
     }
 
+    /**
+     * Whether this format selects an alternate font ({@code &g}/{@code &h}) rather than a
+     * text style. Font codes survive color changes, unlike styles.
+     */
+    public boolean isFont() {
+        return this == FONT_GALACTIC || this == FONT_ILLAGERALT;
+    }
+
     public ChatFormat getNextFormat() {
         return this.getNextFormat(ordinal());
     }
