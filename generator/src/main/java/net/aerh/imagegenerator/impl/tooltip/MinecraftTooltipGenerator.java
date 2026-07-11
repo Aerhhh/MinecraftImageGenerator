@@ -335,21 +335,41 @@ public class MinecraftTooltipGenerator implements Generator {
                 JsonArray loreArray = components.getAsJsonArray("minecraft:lore");
                 StringBuilder loreBuilder = new StringBuilder();
 
+                // Each element is its own lore line, joined by a single "\n". Blank lines are bare
+                // empty-string elements (the components-format way of writing a paragraph break), so
+                // every element must contribute a line - skipping non-objects would collapse "\n\n"
+                // into "\n" and swallow non-empty plain-string lines too.
                 for (int i = 0; i < loreArray.size(); i++) {
-                    if (!loreArray.get(i).isJsonObject()) {
-                        continue;
-                    }
-
-                    JsonObject loreEntry = loreArray.get(i).getAsJsonObject();
-                    String parsedLine = NbtTextComponentUtil.toFormattedString(loreEntry);
-                    loreBuilder.append(parsedLine);
-                    if (i < loreArray.size() - 1) {
+                    if (i > 0) {
                         loreBuilder.append("\\n");
                     }
+                    loreBuilder.append(parseLoreLine(loreArray.get(i)));
                 }
 
                 this.itemLore = loreBuilder.toString();
             }
+        }
+
+        /**
+         * Renders a single {@code minecraft:lore} element to an ampersand-formatted line. Objects are
+         * full text components; primitives (including the bare {@code ""} used for blank lines) are
+         * parsed as string text components. Anything else yields an empty line so line positions - and
+         * therefore blank-line breaks - are preserved.
+         *
+         * @param element the lore element to render.
+         *
+         * @return the ampersand-formatted line, possibly empty.
+         */
+        private static String parseLoreLine(JsonElement element) {
+            if (element.isJsonObject()) {
+                return NbtTextComponentUtil.toFormattedString(element.getAsJsonObject());
+            }
+
+            if (element.isJsonPrimitive()) {
+                return NbtTextComponentUtil.parseTextValue(element.getAsString());
+            }
+
+            return "";
         }
 
         public String getDyeColor(JsonObject nbtJson) {
