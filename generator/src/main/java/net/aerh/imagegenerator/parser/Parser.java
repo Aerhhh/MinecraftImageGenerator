@@ -6,10 +6,14 @@ import java.util.regex.Pattern;
 public interface Parser<T> {
 
     /**
-     * Matches placeholders like %%name:extra%% and treats the last %% (not followed by another %)
-     * as the closing delimiter so values can contain % characters.
+     * Matches placeholders like %%name:extra%%. Percents are paired off as {@code %%} delimiters,
+     * so a {@code %} joins the value only when it begins an odd-length run of percents (the lone
+     * leftover after the closing {@code %%}). This keeps values that end in a percent, e.g.
+     * {@code %%health:50%%%} yielding {@code 50%}, while letting adjacent placeholders such as
+     * {@code %%left_arrow%%%%left_arrow%%} split cleanly instead of the first value swallowing the
+     * second placeholder's opening {@code %%}.
      */
-    Pattern VARIABLE_PATTERN = Pattern.compile("%%([a-zA-Z_]+):?(.*?)%%(?!%)", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+    Pattern VARIABLE_PATTERN = Pattern.compile("%%([a-zA-Z_]+):?((?:[^%]|%(?=(?:%%)*(?!%)))*)%%", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
     /**
      * Reserved placeholder name for icon-only references: {@code %%icon:<name>%%} renders just the
