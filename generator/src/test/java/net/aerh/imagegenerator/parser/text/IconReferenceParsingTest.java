@@ -82,6 +82,20 @@ class IconReferenceParsingTest {
     }
 
     @Test
+    void adjacentReferenceIconsBothResolve() {
+        assertEquals("⏣⏣", parser.parse("%%icon:zone%%%%icon:zone%%"));
+        assertEquals("❤❤❤", parser.parse("%%icon:health%%%%icon:health:2%%"));
+    }
+
+    @Test
+    void adjacentDirectIconsBothResolve() {
+        // Regression: a %%%% seam between two placeholders used to be swallowed as the first
+        // placeholder's value, leaving the second placeholder's name as literal text.
+        assertEquals("⏣⏣", parser.parse("%%zone%%%%zone%%"));
+        assertEquals("⏣⏣⏣", parser.parse("%%zone%%%%zone%%%%zone%%"));
+    }
+
+    @Test
     void fullStatPlaceholderIsUnaffected() {
         String base = String.join("\n", TextWrapper.wrapString("%%health%%", 36));
         assertTrue(base.contains("❤ Health"), base);
