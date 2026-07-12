@@ -19,7 +19,7 @@
         <java.version>25</java.version>
         <lombok.version>1.18.46</lombok.version>
         <mockito.version>5.23.0</mockito.version>
-        <feign.version>13.12</feign.version>
+        <feign.version>13.13</feign.version>
         <maven.compiler.release>${java.version}</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
