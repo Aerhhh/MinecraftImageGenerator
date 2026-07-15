@@ -19,7 +19,9 @@ import net.aerh.imagegenerator.context.GenerationContext;
 import net.aerh.imagegenerator.image.MinecraftTooltip;
 import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.item.InventoryItem;
+import net.aerh.imagegenerator.pack.CustomModelData;
 import net.aerh.imagegenerator.pack.PackId;
+import net.aerh.imagegenerator.pack.PackItemVisual;
 import net.aerh.imagegenerator.pack.PackRepository;
 import net.aerh.imagegenerator.parser.inventory.InventoryStringParser;
 import net.aerh.imagegenerator.text.PackGlyphDispatcher;
@@ -37,8 +39,10 @@ import java.io.StringReader;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -72,6 +76,16 @@ import java.util.regex.Pattern;
  * scaled (a fully transparent override, the MCC style, simply paints nothing). Without a pack,
  * or when the pack does not override the texture, the procedural vanilla-style chrome shared
  * with {@link MinecraftInventoryGenerator} is drawn instead, slot outlines included.
+ *
+ * <p><b>Elements models:</b> slot item specs that resolve to elements-based pack models render
+ * through the flat front projection directly at this generator's pixel size (no intermediate
+ * downscale), and {@code oversized_in_gui} art anchors on the slot center exactly like the
+ * vanilla client - the model-space [0, 16] box maps onto the slot and overflow spans the
+ * neighboring slots. The canvas does NOT expand for oversized item art (it clips at the canvas
+ * edge); only title-extent expansion grows the canvas. Item modifiers (enchant, hover,
+ * durability) do not apply to elements renders this wave. Slots accept per-slot
+ * {@link CustomModelData} via {@link Builder#withSlot(int, String, CustomModelData)} for
+ * dispatch-node evaluation; the recipe format carries none.
  *
  * <p><b>Out of scope</b> (documented, not rendered): hover/selected slot highlights, the player
  * inventory section (the rows grid only; the remaining GUI rect is background), spectator
@@ -123,6 +137,11 @@ public class MinecraftContainerGenerator implements Generator {
     private final List<TitleRun> title;
     /** Slot index (1-based, row-major) to raw item spec; sorted so the cache key is stable. */
     private final SortedMap<Integer, String> slots;
+    /**
+     * Slot index to the custom model data its item evaluates against; slots absent here use
+     * {@link CustomModelData#EMPTY}. Sorted so the cache key is stable.
+     */
+    private final SortedMap<Integer, CustomModelData> slotCustomModelData;
     private final int scaleFactor;
     // packId is final non-transient so it enters the render cache key; the repository reference
     // is transient so instances never split it.
@@ -139,6 +158,18 @@ public class MinecraftContainerGenerator implements Generator {
      */
     @ToString.Exclude
     private final transient Map<ItemVisualKey, BufferedImage> itemVisualCache = new ConcurrentHashMap<>();
+    /**
+     * Per-instance dedupe of elements-model rasters by item name and custom model data
+     * (modifiers never affect an elements render). {@link Optional#empty()} records a spec that
+     * resolved to a flat sprite or a vanilla item, so the elements probe runs once per distinct
+     * name-and-data pair.
+     */
+    @ToString.Exclude
+    private final transient Map<ElementsRasterKey, Optional<PackItemVisual.ElementsRaster>> elementsRasterCache = new ConcurrentHashMap<>();
+
+    /** Cache key for {@link #elementsRasterCache}: the item name plus its evaluated data. */
+    private record ElementsRasterKey(String itemName, CustomModelData data) {
+    }
 
     /**
      * Everything that determines a slot item's rendered appearance; the amount is deliberately
@@ -369,23 +400,76 @@ public class MinecraftContainerGenerator implements Generator {
             if (item.getItemName().equalsIgnoreCase("null")) {
                 continue;
             }
-            BufferedImage itemImage = resolveItemImage(item, generationContext);
             int[] itemSlots = item.getSlot();
             int[] amounts = item.getAmount();
-            if (itemImage == null || itemSlots == null || amounts == null || itemSlots.length != amounts.length) {
+            if (itemSlots == null || amounts == null || itemSlots.length != amounts.length) {
                 continue;
             }
             for (int index = 0; index < itemSlots.length; index++) {
+                // Custom model data is per slot, so the elements probe runs inside the slot
+                // loop; both resolution paths dedupe internally, so repeated specs stay cheap.
+                CustomModelData data = slotCustomModelData.getOrDefault(itemSlots[index], CustomModelData.EMPTY);
+                PackItemVisual.ElementsRaster raster = resolveElementsRaster(item, data, pixelSize);
+                BufferedImage itemImage = raster == null ? resolveItemImage(item, generationContext) : null;
+                if (raster == null && itemImage == null) {
+                    continue;
+                }
                 int slotOffset = itemSlots[index] - 1;
                 int x = originX + (SLOT_ORIGIN_X + SLOT_PITCH * (slotOffset % COLUMNS)) * pixelSize;
                 int y = originY + (SLOT_ORIGIN_Y + SLOT_PITCH * (slotOffset / COLUMNS)) * pixelSize;
-                graphics.drawImage(itemImage, x, y, SLOT_INTERIOR * pixelSize, SLOT_INTERIOR * pixelSize, null);
+                if (raster != null) {
+                    // Already at this generator's pixel size; the offsets anchor the art on the
+                    // slot exactly like the vanilla client (oversized art spans neighbors and
+                    // clips at the canvas edge).
+                    graphics.drawImage(raster.image(), x + raster.offsetX(), y + raster.offsetY(), null);
+                } else {
+                    graphics.drawImage(itemImage, x, y, SLOT_INTERIOR * pixelSize, SLOT_INTERIOR * pixelSize, null);
+                }
                 if (amounts[index] > 1) {
                     MinecraftInventoryGenerator.drawStackCount(
                         graphics, amounts[index], x - pixelSize, y - pixelSize, pixelSize);
                 }
             }
         }
+    }
+
+    /**
+     * Resolves a slot item spec against the active pack's elements-model path at this
+     * generator's pixel size, deduped per distinct item name and custom model data. Null when
+     * the spec is not an elements model (flat pack sprites and vanilla items keep the exact
+     * pre-elements pipeline, effects included). Elements renders ignore item modifiers, with a
+     * warning when a spec declares any.
+     */
+    @Nullable
+    private PackItemVisual.ElementsRaster resolveElementsRaster(InventoryItem item, CustomModelData data,
+                                                                int pixelSize) {
+        if (!hasActivePack() || isVanillaPlayerHead(item.getItemName())) {
+            return null;
+        }
+        Optional<PackItemVisual.ElementsRaster> raster = elementsRasterCache.computeIfAbsent(
+            new ElementsRasterKey(item.getItemName(), data),
+            key -> repository().resolveItemVisual(packId, key.itemName(), key.data(), pixelSize)
+                .filter(PackItemVisual.ElementsRaster.class::isInstance)
+                .map(PackItemVisual.ElementsRaster.class::cast));
+        if (raster.isPresent() && item.getExtraContent() != null && !item.getExtraContent().isBlank()) {
+            log.warn("Item modifiers `{}` are ignored for elements-model slot item `{}`",
+                item.getExtraContent(), item.getItemName());
+        }
+        return raster.orElse(null);
+    }
+
+    /**
+     * The dedicated head pipeline owns the vanilla {@code player_head} item (skin data lives in
+     * the spec modifiers); only that exact id skips the elements probe - a pack item whose path
+     * merely CONTAINS the substring (e.g. {@code x:item/player_head_frame}) is an ordinary pack
+     * model.
+     */
+    private static boolean isVanillaPlayerHead(String itemName) {
+        String normalized = itemName.toLowerCase(Locale.ROOT);
+        if (normalized.startsWith("minecraft:")) {
+            normalized = normalized.substring("minecraft:".length());
+        }
+        return normalized.equals("player_head");
     }
 
     /**
@@ -724,6 +808,7 @@ public class MinecraftContainerGenerator implements Generator {
         private int rows;
         private List<TitleRun> title = List.of();
         private final SortedMap<Integer, String> slots = new TreeMap<>();
+        private final SortedMap<Integer, CustomModelData> slotCustomModelData = new TreeMap<>();
         private int scaleFactor = 1;
         private PackId packId;
         private PackRepository packRepository;
@@ -771,6 +856,33 @@ public class MinecraftContainerGenerator implements Generator {
             }
             SlotSpec.parse(itemSpec);
             this.slots.put(slotIndex, itemSpec);
+            // Replacement semantics: re-setting a slot resets any previously supplied data.
+            this.slotCustomModelData.remove(slotIndex);
+            return this;
+        }
+
+        /**
+         * Places an item in a slot together with the {@code minecraft:custom_model_data}
+         * component value its item model definition evaluates against ({@code range_dispatch}
+         * floats, {@code condition} flags, {@code select} strings and tint colors). The data
+         * only affects specs that resolve through the active pack's elements-model path; flat
+         * sprites and vanilla items ignore it. The recipe format
+         * ({@link #fromRecipe(String)}) carries no custom model data - use this overload to
+         * supply it programmatically.
+         *
+         * @param slotIndex       1-based slot index
+         * @param itemSpec        the item spec, exactly as for {@link #withSlot(int, String)}
+         * @param customModelData the component value; {@link CustomModelData#EMPTY} behaves
+         *                        like the two-argument overload
+         * @throws IllegalArgumentException when the slot index is not positive or the spec is
+         *                                  malformed
+         */
+        public Builder withSlot(int slotIndex, @NotNull String itemSpec, @NotNull CustomModelData customModelData) {
+            Objects.requireNonNull(customModelData, "customModelData");
+            withSlot(slotIndex, itemSpec);
+            if (!CustomModelData.EMPTY.equals(customModelData)) {
+                this.slotCustomModelData.put(slotIndex, customModelData);
+            }
             return this;
         }
 
@@ -813,7 +925,8 @@ public class MinecraftContainerGenerator implements Generator {
                         + " is out of range for " + rows + " rows (1.." + totalSlots + ")");
                 }
             }
-            return new MinecraftContainerGenerator(rows, title, new TreeMap<>(slots), scaleFactor, packId, packRepository);
+            return new MinecraftContainerGenerator(rows, title, new TreeMap<>(slots),
+                new TreeMap<>(slotCustomModelData), scaleFactor, packId, packRepository);
         }
     }
 }

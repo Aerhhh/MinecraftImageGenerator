@@ -14,8 +14,12 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -28,19 +32,25 @@ class PackJsonParser {
     private static final String MINECRAFT_PREFIX = "minecraft:";
 
     public static ItemModelNode parseItemDefinition(byte[] json) {
+        return parseItemDefinitionInfo(json).model();
+    }
+
+    public static ItemDefinition parseItemDefinitionInfo(byte[] json) {
         JsonObject root = parseObject(json);
         if (!root.has("model") || !root.get("model").isJsonObject()) {
             throw new PackLoadException("Item definition is missing required 'model' object");
         }
-        return parseNode(root.getAsJsonObject("model"));
+        return new ItemDefinition(parseNode(root.getAsJsonObject("model")),
+            optionalBoolean(root, "oversized_in_gui"));
     }
 
     private static ItemModelNode parseNode(JsonObject node) {
         String type = normalize(requireString(node, "type"));
         return switch (type) {
-            case "model" -> new ItemModelNode.ModelLeaf(requireString(node, "model"));
+            case "model" -> new ItemModelNode.ModelLeaf(requireString(node, "model"), parseTints(node));
             case "condition" -> new ItemModelNode.ConditionNode(
                 normalize(requireString(node, "property")),
+                optionalIndex(node),
                 parseNode(requireObject(node, "on_true")),
                 parseNode(requireObject(node, "on_false")));
             case "select" -> parseSelect(node);
@@ -50,8 +60,62 @@ class PackJsonParser {
         };
     }
 
+    /** The optional {@code index} field of custom_model_data dispatch nodes, default 0. */
+    private static int optionalIndex(JsonObject node) {
+        return node.has("index") ? requireIntegralInt(node, "index", "Item definition node") : 0;
+    }
+
+    private static List<ItemModelNode.TintSpec> parseTints(JsonObject node) {
+        if (!node.has("tints")) {
+            return List.of();
+        }
+        List<ItemModelNode.TintSpec> tints = new ArrayList<>();
+        for (JsonElement tintElement : requireArray(node, "tints")) {
+            JsonObject tint = asObject(tintElement, "tint source");
+            String type = normalize(requireString(tint, "type", "Tint source"));
+            tints.add(switch (type) {
+                case "constant" -> new ItemModelNode.TintSpec.Constant(requireColor(tint, "value"));
+                case "custom_model_data" -> new ItemModelNode.TintSpec.CustomModelDataTint(
+                    optionalIndex(tint),
+                    tint.has("default") ? requireColor(tint, "default") : 0xFFFFFF);
+                default -> new ItemModelNode.TintSpec.Unsupported(type);
+            });
+        }
+        return List.copyOf(tints);
+    }
+
+    /**
+     * A tint color value: either a packed RGB integer or an {@code [r, g, b]} array of floats in
+     * 0..1 (the two shapes the vanilla format accepts). Returns packed {@code 0xRRGGBB}.
+     */
+    private static int requireColor(JsonObject node, String member) {
+        JsonElement element = node.get(member);
+        if (element != null && element.isJsonPrimitive() && element.getAsJsonPrimitive().isNumber()) {
+            return element.getAsInt() & 0xFFFFFF;
+        }
+        if (element != null && element.isJsonArray()) {
+            JsonArray channels = element.getAsJsonArray();
+            if (channels.size() != 3) {
+                throw new PackLoadException("Tint color '%s' array must have exactly 3 channels", member);
+            }
+            int rgb = 0;
+            for (int i = 0; i < 3; i++) {
+                JsonElement channel = channels.get(i);
+                if (!channel.isJsonPrimitive() || !channel.getAsJsonPrimitive().isNumber()) {
+                    throw new PackLoadException("Tint color '%s' channels must be numbers", member);
+                }
+                float value = channel.getAsFloat();
+                int scaled = Math.clamp(Math.round(value * 255.0f), 0, 255);
+                rgb = (rgb << 8) | scaled;
+            }
+            return rgb;
+        }
+        throw new PackLoadException("Tint color '%s' must be an integer or an [r, g, b] float array", member);
+    }
+
     private static ItemModelNode parseSelect(JsonObject node) {
         String property = normalize(requireString(node, "property"));
+        int index = optionalIndex(node);
         List<ItemModelNode.SelectNode.Case> cases = new ArrayList<>();
         for (JsonElement caseElement : requireArray(node, "cases")) {
             JsonObject caseObject = asObject(caseElement, "select case");
@@ -67,7 +131,7 @@ class PackJsonParser {
             }
             cases.add(new ItemModelNode.SelectNode.Case(Set.copyOf(when), parseNode(requireObject(caseObject, "model"))));
         }
-        return new ItemModelNode.SelectNode(property, List.copyOf(cases), parseFallback(node));
+        return new ItemModelNode.SelectNode(property, index, List.copyOf(cases), parseFallback(node));
     }
 
     private static ItemModelNode parseRangeDispatch(JsonObject node) {
@@ -82,7 +146,8 @@ class PackJsonParser {
                     parseNode(requireObject(entryObject, "model"))));
             }
         }
-        return new ItemModelNode.RangeDispatchNode(property, scale, List.copyOf(entries), parseFallback(node));
+        return new ItemModelNode.RangeDispatchNode(property, optionalIndex(node), scale,
+            List.copyOf(entries), parseFallback(node));
     }
 
     private static ItemModelNode parseComposite(JsonObject node) {
@@ -113,11 +178,161 @@ class PackJsonParser {
     public static ModelInfo parseModel(byte[] json) {
         JsonObject root = parseObject(json);
         String parent = optionalString(root, "parent");
-        String layer0 = null;
+        Map<String, String> textures = new LinkedHashMap<>();
         if (root.has("textures") && root.get("textures").isJsonObject()) {
-            layer0 = optionalString(root.getAsJsonObject("textures"), "layer0");
+            for (Map.Entry<String, JsonElement> entry : root.getAsJsonObject("textures").entrySet()) {
+                JsonElement value = entry.getValue();
+                if (value == null || value.isJsonNull()) {
+                    continue;
+                }
+                if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) {
+                    // Only layer0 has always been validated (pre-elements behavior); other
+                    // non-string entries are skipped so a model that previously loaded keeps
+                    // loading - a face referencing the skipped key still fails loudly at
+                    // resolve time with an undefined-texture-key error.
+                    if ("layer0".equals(entry.getKey())) {
+                        throw new PackLoadException("Expected string for member '%s'", entry.getKey());
+                    }
+                    continue;
+                }
+                textures.put(entry.getKey(), value.getAsString());
+            }
         }
-        return new ModelInfo(parent, layer0);
+        List<ModelElement> elements = root.has("elements") ? parseElements(root) : null;
+        return new ModelInfo(parent, textures.get("layer0"), Map.copyOf(textures), elements,
+            parseDisplayGui(root), parseGuiLight(root));
+    }
+
+    private static List<ModelElement> parseElements(JsonObject root) {
+        JsonElement elementsElement = root.get("elements");
+        if (!elementsElement.isJsonArray()) {
+            throw new PackLoadException("Model 'elements' must be an array");
+        }
+        List<ModelElement> elements = new ArrayList<>();
+        for (JsonElement element : elementsElement.getAsJsonArray()) {
+            elements.add(parseElement(asObject(element, "model element")));
+        }
+        return List.copyOf(elements);
+    }
+
+    private static ModelElement parseElement(JsonObject element) {
+        float[] from = requireVector3(element, "from", "Model element");
+        float[] to = requireVector3(element, "to", "Model element");
+        for (int i = 0; i < 3; i++) {
+            if (from[i] < -16 || from[i] > 32 || to[i] < -16 || to[i] > 32) {
+                throw new PackLoadException("Model element coordinates must be within -16..32");
+            }
+        }
+        float rotationAngle = 0;
+        if (element.has("rotation")) {
+            JsonElement rotationElement = element.get("rotation");
+            if (!rotationElement.isJsonObject()) {
+                throw new PackLoadException("Model element 'rotation' must be an object");
+            }
+            rotationAngle = (float) requireNumber(rotationElement.getAsJsonObject(), "angle", "Element rotation");
+        }
+        Map<ModelElement.Direction, ModelElement.Face> faces = new EnumMap<>(ModelElement.Direction.class);
+        if (element.has("faces")) {
+            JsonElement facesElement = element.get("faces");
+            if (!facesElement.isJsonObject()) {
+                throw new PackLoadException("Model element 'faces' must be an object");
+            }
+            for (Map.Entry<String, JsonElement> faceEntry : facesElement.getAsJsonObject().entrySet()) {
+                ModelElement.Direction direction;
+                try {
+                    direction = ModelElement.Direction.valueOf(faceEntry.getKey().toUpperCase(Locale.ROOT));
+                } catch (IllegalArgumentException e) {
+                    throw new PackLoadException("Unknown model element face '%s'", faceEntry.getKey());
+                }
+                faces.put(direction, parseFace(asObject(faceEntry.getValue(), "element face")));
+            }
+        }
+        return new ModelElement(from[0], from[1], from[2], to[0], to[1], to[2],
+            rotationAngle, Map.copyOf(faces));
+    }
+
+    private static ModelElement.Face parseFace(JsonObject face) {
+        ModelElement.FaceUv uv = null;
+        if (face.has("uv")) {
+            float[] values = requireVector(face, "uv", 4, "Element face");
+            uv = new ModelElement.FaceUv(values[0], values[1], values[2], values[3]);
+        }
+        int rotation = 0;
+        if (face.has("rotation")) {
+            rotation = requireIntegralInt(face, "rotation", "Element face");
+            if (rotation != 0 && rotation != 90 && rotation != 180 && rotation != 270) {
+                throw new PackLoadException("Element face rotation must be 0, 90, 180 or 270, got %s",
+                    String.valueOf(rotation));
+            }
+        }
+        int tintIndex = face.has("tintindex") ? requireIntegralInt(face, "tintindex", "Element face") : -1;
+        return new ModelElement.Face(uv, requireString(face, "texture", "Element face"), rotation, tintIndex);
+    }
+
+    /**
+     * The model's own {@code display.gui} entry, or null when the model declares none (the
+     * entry then inherits from the parent chain as a whole, per vanilla).
+     */
+    private static GuiTransform parseDisplayGui(JsonObject root) {
+        if (!root.has("display")) {
+            return null;
+        }
+        JsonElement displayElement = root.get("display");
+        if (!displayElement.isJsonObject()) {
+            throw new PackLoadException("Model 'display' must be an object");
+        }
+        JsonObject display = displayElement.getAsJsonObject();
+        if (!display.has("gui")) {
+            return null;
+        }
+        JsonElement guiElement = display.get("gui");
+        if (!guiElement.isJsonObject()) {
+            throw new PackLoadException("Model 'display.gui' must be an object");
+        }
+        JsonObject gui = guiElement.getAsJsonObject();
+        float[] rotation = optionalVector3(gui, "rotation", 0);
+        float[] translation = optionalVector3(gui, "translation", 0);
+        float[] scale = optionalVector3(gui, "scale", 1);
+        return new GuiTransform(rotation[0], rotation[1], rotation[2],
+            translation[0], translation[1], translation[2],
+            scale[0], scale[1], scale[2]);
+    }
+
+    private static String parseGuiLight(JsonObject root) {
+        String guiLight = optionalString(root, "gui_light");
+        if (guiLight != null && !guiLight.equals("front") && !guiLight.equals("side")) {
+            throw new PackLoadException("Model 'gui_light' must be 'front' or 'side', got '%s'", guiLight);
+        }
+        return guiLight;
+    }
+
+    private static float[] optionalVector3(JsonObject node, String member, float defaultValue) {
+        if (!node.has(member)) {
+            return new float[]{defaultValue, defaultValue, defaultValue};
+        }
+        return requireVector(node, member, 3, "Display transform");
+    }
+
+    private static float[] requireVector3(JsonObject node, String member, String owner) {
+        return requireVector(node, member, 3, owner);
+    }
+
+    private static float[] requireVector(JsonObject node, String member, int length, String owner) {
+        JsonElement element = node.get(member);
+        if (element == null || !element.isJsonArray() || element.getAsJsonArray().size() != length) {
+            throw new PackLoadException("%s member '%s' must be an array of %s numbers",
+                owner, member, String.valueOf(length));
+        }
+        float[] values = new float[length];
+        JsonArray array = element.getAsJsonArray();
+        for (int i = 0; i < length; i++) {
+            JsonElement value = array.get(i);
+            if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()) {
+                throw new PackLoadException("%s member '%s' must contain only numbers", owner, member);
+            }
+            values[i] = value.getAsFloat();
+        }
+        return values;
     }
 
     public static McMeta parseMcmeta(byte[] json) {
@@ -292,9 +507,13 @@ class PackJsonParser {
     }
 
     private static double requireNumber(JsonObject node, String member) {
+        return requireNumber(node, member, "Item definition node");
+    }
+
+    private static double requireNumber(JsonObject node, String member, String owner) {
         JsonElement element = node.get(member);
         if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isNumber()) {
-            throw new PackLoadException("Item definition node is missing numeric member '%s'", member);
+            throw new PackLoadException("%s is missing numeric member '%s'", owner, member);
         }
         return element.getAsDouble();
     }

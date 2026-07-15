@@ -85,13 +85,36 @@ public final class PackRepository {
     }
 
     /**
-     * Resolves an item ref against a registered pack.
+     * Resolves an item ref against a registered pack - the classic flat layer0 sprite path.
+     * Items with elements-based models resolve through
+     * {@link #resolveItemVisual(PackId, String, CustomModelData, int)} instead.
      *
      * @return empty when the pack does not contain the item (callers fall back to vanilla)
      * @throws PackResolveException when the pack is not registered, or the item exists but is broken
      */
     public Optional<BufferedImage> resolve(PackId packId, String itemRef) {
         return requireRegistered(packId).resolveSprite(itemRef);
+    }
+
+    /**
+     * Resolves an item ref against a registered pack to its GUI visual, evaluating
+     * {@code custom_model_data} dispatch nodes and tint sources against {@code data}. Flat
+     * layer0 models return a {@link PackItemVisual.Sprite} at native texture resolution
+     * (identical to {@link #resolve(PackId, String)}); elements models rasterize through the
+     * flat front projection directly at {@code pixelsPerGuiPx} canvas px per GUI px and return
+     * a {@link PackItemVisual.ElementsRaster}, clipped to the 16-GUI-px slot box unless the
+     * item declares {@code oversized_in_gui}.
+     *
+     * @return empty when the pack does not contain the item (callers fall back to vanilla)
+     * @throws PackResolveException when the pack is not registered, or the item exists but
+     *                              cannot be rendered (broken references, unsupported node
+     *                              types or tint sources, non-zero element rotations,
+     *                              unsupported gui rotations)
+     */
+    public Optional<PackItemVisual> resolveItemVisual(PackId packId, String itemRef,
+                                                      CustomModelData data, int pixelsPerGuiPx) {
+        Objects.requireNonNull(data, "data");
+        return requireRegistered(packId).resolveItemVisual(itemRef, data, pixelsPerGuiPx);
     }
 
     /**

@@ -10,9 +10,11 @@ import net.aerh.imagegenerator.pack.font.BitmapProviderCache;
 import net.aerh.imagegenerator.pack.font.FontProviderDefinition;
 import net.aerh.imagegenerator.pack.font.FontResolver;
 import net.aerh.imagegenerator.pack.font.PackFont;
+import org.jetbrains.annotations.Nullable;
 
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -66,7 +68,7 @@ final class LoadedPack {
      */
     private static final Set<String> EMISSIVE_ALPHA_PACK_IDS = Set.of("hypixel:skyblock");
 
-    private record ItemEntry(ItemModelNode node, String error) {
+    private record ItemEntry(ItemModelNode node, boolean oversizedInGui, String error) {
     }
 
     private static final class TooltipStyleEntry {
@@ -131,11 +133,12 @@ final class LoadedPack {
                 namespaces.add(itemMatcher.group(1));
                 String key = itemMatcher.group(1) + ":" + itemMatcher.group(2);
                 try {
-                    items.put(key, new ItemEntry(PackJsonParser.parseItemDefinition(source.read(path)), null));
+                    ItemDefinition definition = PackJsonParser.parseItemDefinitionInfo(source.read(path));
+                    items.put(key, new ItemEntry(definition.model(), definition.oversizedInGui(), null));
                 } catch (RuntimeException e) {
                     errors++;
                     String message = e.getMessage() != null ? e.getMessage() : e.getClass().getName();
-                    items.put(key, new ItemEntry(null, message));
+                    items.put(key, new ItemEntry(null, false, message));
                 }
                 continue;
             }
@@ -399,47 +402,226 @@ final class LoadedPack {
 
     /**
      * Resolves an item reference (full namespaced items/ path, e.g.
-     * {@code hypixel_skyblock:item/jacob/cactus_knife}) to a flat GUI sprite.
+     * {@code hypixel_skyblock:item/jacob/cactus_knife}) to a flat GUI sprite - the classic
+     * layer0 path only, evaluated with no custom model data. Items whose models are
+     * elements-based resolve through {@link #resolveItemVisual(String, CustomModelData, int)}
+     * instead. Supported tint sources (constant, custom_model_data defaults) color the sprite
+     * like the vanilla client; unsupported sources warn and stay untinted.
      *
      * @return empty when the ref is bare, in a foreign namespace, or unknown - callers fall back
      *     to vanilla; a present sprite otherwise
      * @throws PackResolveException when the item exists but cannot be rendered
      */
     public Optional<BufferedImage> resolveSprite(String itemRef) {
-        if (itemRef == null || itemRef.indexOf(':') < 0) {
+        ItemEntry entry = lookupItem(itemRef);
+        if (entry == null) {
             return Optional.empty();
+        }
+        return Optional.of(composeSpriteLayers(itemRef,
+            GuiModelResolver.resolveGui(entry.node(), CustomModelData.EMPTY), CustomModelData.EMPTY));
+    }
+
+    /**
+     * Resolves an item reference to its GUI visual, evaluating {@code custom_model_data}
+     * dispatch nodes and tint sources against {@code data}:
+     *
+     * <ul>
+     * <li>Models whose resolved chains carry no elements compose exactly like
+     *     {@link #resolveSprite(String)} and return a {@link PackItemVisual.Sprite} at native
+     *     texture resolution (callers scale as before). Supported tint sources multiply the
+     *     layer like vanilla's {@code item/generated} tintindex 0 quad; unsupported sources
+     *     warn and stay untinted so vanilla-style dye/potion items keep rendering.</li>
+     * <li>Models with elements rasterize through the flat front projection directly at
+     *     {@code pixelsPerGuiPx} (no 16 px intermediate, so sub-GUI-px geometry survives) and
+     *     return a {@link PackItemVisual.ElementsRaster}; the item's {@code oversized_in_gui}
+     *     flag selects slot-box clipping versus full-extent output. Mixing elements models and
+     *     flat layer0 models in one composite is unsupported and fails loudly.</li>
+     * </ul>
+     *
+     * <p>Elements chains stop at parents outside the pack (vanilla model assets are
+     * unavailable); their textures and display transforms are treated as absent. A missing
+     * IN-pack parent, a cyclic chain, or a chain deeper than the layer0 path allows fails
+     * loudly instead of silently dropping inherited transforms.
+     *
+     * @return empty when the ref is bare, in a foreign namespace, or unknown - callers fall back
+     *     to vanilla
+     * @throws PackResolveException when the item exists but cannot be rendered (broken
+     *                              references, unsupported node types or tint sources, non-zero
+     *                              element rotations, unsupported gui rotations)
+     */
+    public Optional<PackItemVisual> resolveItemVisual(String itemRef, CustomModelData data, int pixelsPerGuiPx) {
+        ItemEntry entry = lookupItem(itemRef);
+        if (entry == null) {
+            return Optional.empty();
+        }
+        List<GuiModelResolver.GuiModel> models = GuiModelResolver.resolveGui(entry.node(), data);
+        List<ChainData> chains = new ArrayList<>(models.size());
+        boolean anyElements = false;
+        boolean allElements = !models.isEmpty();
+        for (GuiModelResolver.GuiModel model : models) {
+            ChainData chain = resolveModelChain(model.modelRef());
+            chains.add(chain);
+            if (chain.elements() != null) {
+                anyElements = true;
+            } else {
+                allElements = false;
+            }
+        }
+        if (!anyElements) {
+            return Optional.of(new PackItemVisual.Sprite(composeSpriteLayers(itemRef, models, data)));
+        }
+        if (!allElements) {
+            throw new PackResolveException(
+                "Item `%s` in pack `%s` mixes elements models and flat layer0 models in one composite; unsupported",
+                itemRef, id.toString());
+        }
+        List<ElementModelRenderer.ModelInstance> instances = new ArrayList<>(models.size());
+        for (int i = 0; i < models.size(); i++) {
+            ChainData chain = chains.get(i);
+            instances.add(new ElementModelRenderer.ModelInstance(
+                chain.elements(), chain.textures(),
+                chain.guiTransform() != null ? chain.guiTransform() : GuiTransform.IDENTITY,
+                GuiModelResolver.evaluateTints(models.get(i).tints(), data)));
+        }
+        ElementModelRenderer.Raster raster = ElementModelRenderer.render(
+            instances, pixelsPerGuiPx, entry.oversizedInGui(), this::loadElementTexture,
+            "item `" + itemRef + "` in pack `" + id + "`");
+        return Optional.of(new PackItemVisual.ElementsRaster(
+            raster.image(), raster.offsetX(), raster.offsetY(), entry.oversizedInGui()));
+    }
+
+    /**
+     * Shared item lookup guards: null when the ref is bare, malformed, foreign or unknown
+     * (callers return empty and fall back to vanilla); loud when the item exists but its
+     * definition JSON failed to parse at register time.
+     */
+    private ItemEntry lookupItem(String itemRef) {
+        if (itemRef == null || itemRef.indexOf(':') < 0) {
+            return null;
         }
         ResourceRef ref;
         try {
             ref = ResourceRef.parse(itemRef, null);
         } catch (IllegalArgumentException e) {
-            return Optional.empty();
+            return null;
         }
         if (!namespaces.contains(ref.namespace())) {
-            return Optional.empty();
+            return null;
         }
         ItemEntry entry = items.get(ref.toString());
         if (entry == null) {
-            return Optional.empty();
+            return null;
         }
         if (entry.error() != null) {
             throw new PackResolveException("Item `%s` in pack `%s` is malformed: %s",
                 itemRef, id.toString(), entry.error());
         }
-        List<String> modelRefs = GuiModelResolver.resolveGui(entry.node());
+        return entry;
+    }
+
+    /**
+     * The classic layer0 composition plus vanilla {@code item/generated} tinting: the client
+     * bakes layer {@code i} with tintindex {@code i}, and only layer0 is supported here, so each
+     * leaf's tint 0 multiplies its layer. Unsupported tint sources warn and stay untinted
+     * (vanilla-style dye/potion items rendered fine before tints were parsed; see
+     * {@link GuiModelResolver#evaluateTintsLenient}). Byte-identical to the pre-elements sprite
+     * path when no tints are declared.
+     */
+    private BufferedImage composeSpriteLayers(String itemRef, List<GuiModelResolver.GuiModel> models,
+                                              CustomModelData data) {
         BufferedImage sprite = null;
-        for (String modelRef : modelRefs) {
-            BufferedImage layer = textureCache.get(resolveLayer0(modelRef));
+        for (GuiModelResolver.GuiModel model : models) {
+            BufferedImage layer = textureCache.get(resolveLayer0(model.modelRef()));
+            List<Integer> tints = GuiModelResolver.evaluateTintsLenient(model.tints(), data);
+            int tint = tints.isEmpty() ? GuiModelResolver.WHITE : tints.get(0);
+            if (tint != GuiModelResolver.WHITE) {
+                layer = tintedCopy(layer, tint);
+            }
             sprite = sprite == null ? copy(layer) : stack(sprite, layer);
         }
-        if (modelRefs.isEmpty() || sprite == null) {
+        if (models.isEmpty() || sprite == null) {
             // An empty composite (or any resolution path that yields no layers) must fail loudly
             // rather than silently falling back to vanilla: the item DOES exist in the pack, it is
             // just broken, and that distinction matters to callers.
             throw new PackResolveException("Item `%s` in pack `%s` resolved to zero renderable layers",
                 itemRef, id.toString());
         }
-        return Optional.of(sprite);
+        return sprite;
+    }
+
+    /**
+     * A copy of {@code source} with every pixel's color channels multiplied by the tint, alpha
+     * kept - the same multiplicative convention as element face tinting (the cached source
+     * instance is shared and must never be mutated).
+     */
+    private static BufferedImage tintedCopy(BufferedImage source, int tint) {
+        BufferedImage target = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_ARGB);
+        for (int y = 0; y < source.getHeight(); y++) {
+            for (int x = 0; x < source.getWidth(); x++) {
+                target.setRGB(x, y, ElementModelRenderer.tinted(source.getRGB(x, y), tint));
+            }
+        }
+        return target;
+    }
+
+    /**
+     * Everything an elements render needs from one model's parent chain, merged with child-most
+     * precedence: the first elements list, the first {@code display.gui} entry, and the texture
+     * map with child entries winning per key. The parsed root {@code gui_light} is deliberately
+     * not threaded: the flat GUI projection never shades (see {@link ElementModelRenderer}).
+     *
+     * <p>{@code elements} is null when no model in the reachable chain declares any - the item
+     * then composes through the classic layer0 path.
+     */
+    private record ChainData(@Nullable List<ModelElement> elements, Map<String, String> textures,
+                             @Nullable GuiTransform guiTransform) {
+    }
+
+    /**
+     * Walks a model's parent chain. Chains stop silently at the first parent OUTSIDE the pack
+     * (vanilla model assets are unavailable; its textures and transforms are treated as absent,
+     * documented behavior), but a missing IN-pack model or a chain exceeding
+     * {@link #MAX_PARENT_DEPTH} (cycles included) fails loudly with the same errors
+     * {@link #resolveLayer0} raises for the identical breakage - a broken parent ref must never
+     * silently drop the transforms or textures it was meant to supply.
+     */
+    private ChainData resolveModelChain(String modelRefValue) {
+        ResourceRef modelRef = parseRefOrResolveError(modelRefValue, "minecraft");
+        List<ModelElement> elements = null;
+        GuiTransform guiTransform = null;
+        Map<String, String> textures = new HashMap<>();
+        for (int depth = 0; depth < MAX_PARENT_DEPTH; depth++) {
+            if (!namespaces.contains(modelRef.namespace())) {
+                // Vanilla model assets are unavailable; stop and use what the pack declares.
+                return new ChainData(elements, Map.copyOf(textures), guiTransform);
+            }
+            ModelInfo model = models.get(modelRef.toString());
+            if (model == null) {
+                throw new PackResolveException("Model `%s` not found in pack `%s`",
+                    modelRef.toString(), id.toString());
+            }
+            if (elements == null && model.elements() != null) {
+                elements = model.elements();
+            }
+            model.textures().forEach(textures::putIfAbsent);
+            if (guiTransform == null && model.guiTransform() != null) {
+                guiTransform = model.guiTransform();
+            }
+            if (model.parentRef() == null) {
+                return new ChainData(elements, Map.copyOf(textures), guiTransform);
+            }
+            modelRef = parseRefOrResolveError(model.parentRef(), "minecraft");
+        }
+        throw new PackResolveException("Model parent chain exceeds depth %s in pack `%s`",
+            String.valueOf(MAX_PARENT_DEPTH), id.toString());
+    }
+
+    /**
+     * Loads an element face texture (already resolved to a concrete reference) under the strict
+     * item cap. The renderer only reads the returned image, so the cached instance is shared.
+     */
+    private BufferedImage loadElementTexture(String textureRef) {
+        return textureCache.get(parseRefOrResolveError(textureRef, "minecraft").texturePath());
     }
 
     private String resolveLayer0(String modelRefValue) {

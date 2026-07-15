@@ -536,6 +536,238 @@ public final class FixturePacks {
         }
     }
 
+    /**
+     * Writes a pack of ELEMENTS-BASED item models (the Wynncraft/MCC UI-quad shape): flat quads
+     * with display.gui transforms, custom_model_data dispatch, tints and oversized_in_gui.
+     * Everything is synthetic and generated at test runtime.
+     *
+     * <p>Textures (namespace {@code testpack}):
+     * <ul>
+     * <li>{@code item/paint}: 16x16, columns 0..7 solid red 0xFFFF0000, columns 8..15 solid
+     *     blue 0xFF0000FF (horizontally asymmetric for mirror assertions).</li>
+     * <li>{@code item/backpaint}: 16x16, columns 0..7 solid yellow 0xFFFFFF00, columns 8..15
+     *     solid magenta 0xFFFF00FF (the north-face texture).</li>
+     * <li>{@code item/white}, {@code item/green}, {@code item/blue}, {@code item/gray},
+     *     {@code item/red}: 2x2 solids (white, 0xFF00FF00, 0xFF0000FF, 0xFF808080,
+     *     0xFFFF0000).</li>
+     * </ul>
+     *
+     * <p>Items (all under {@code testpack:item/...}):
+     * <ul>
+     * <li>{@code flat}: full-slot quad ([0,0,0]..[16,16,1]); south face #front (paint), north
+     *     face #back (backpaint). Also the parent of the inheritance fixtures.</li>
+     * <li>{@code mirrored}: child of the flat model adding display.gui rotation (0,180,0).</li>
+     * <li>{@code tilted}: child adding rotation (0,2,0) - MCC's decorative tilt, identity.</li>
+     * <li>{@code badspin}: child adding rotation (30,225,0) - resolve throws.</li>
+     * <li>{@code retextured}: child overriding #front to the green texture (child texture map
+     *     entry wins over the parent's).</li>
+     * <li>{@code gauge}: range_dispatch on custom_model_data (index 0, scale 1): threshold 1 ->
+     *     green quad, threshold 2 -> blue quad, fallback gray quad.</li>
+     * <li>{@code flagged}: condition on custom_model_data: on_true green, on_false red.</li>
+     * <li>{@code named}: select on custom_model_data: "ruby" -> red, fallback blue.</li>
+     * <li>{@code colored}: white quad with tintindex 0 and a custom_model_data tint (index 0,
+     *     default white).</li>
+     * <li>{@code constant_tint}: white quad with a constant tint 0xFF8000.</li>
+     * <li>{@code unknown_tint}: white quad with a minecraft:dye tint - resolve throws.</li>
+     * <li>{@code oversized}: flat model with display.gui scale 2 and oversized_in_gui true
+     *     (32x32 GUI px centered on the slot). {@code clipped}: same model without the
+     *     flag.</li>
+     * <li>{@code rotated}: element rotation angle 45 - resolve throws.</li>
+     * <li>{@code mixed}: composite of the flat elements model and the plain layer0 sprite
+     *     model - resolve throws.</li>
+     * <li>{@code plain_sprite}: classic layer0 item (16x16 solid 0xFFAA5500) proving the sprite
+     *     path is untouched.</li>
+     * <li>{@code unmirrored}: child of the mirrored model whose own EMPTY display.gui entry
+     *     overrides the parent's rotation wholesale - renders like {@code flat}.</li>
+     * <li>{@code orphan}: elements model whose parent ref is missing from the pack - resolve
+     *     throws. {@code deep}: 9-model parent chain past the 8-hop limit - resolve throws.</li>
+     * <li>{@code player_head_frame}: ordinary elements item whose path merely contains
+     *     "player_head".</li>
+     * <li>{@code sprite_constant_tint} / {@code sprite_cmd_tint} / {@code sprite_dye_tint}:
+     *     layer0 sprite over the white texture with a constant 0xFF8000 tint, a
+     *     custom_model_data tint (index 0, white default) and an unsupported dye tint (renders
+     *     untinted with a warning).</li>
+     * </ul>
+     */
+    public static Path writeElementsPack(Path root) {
+        try {
+            write(root, "pack.mcmeta", """
+                {"pack":{"pack_format":88,"description":"elements test fixture"}}""");
+
+            BufferedImage paint = transparent(16, 16);
+            BufferedImage backpaint = transparent(16, 16);
+            for (int y = 0; y < 16; y++) {
+                for (int x = 0; x < 16; x++) {
+                    paint.setRGB(x, y, x < 8 ? 0xFFFF0000 : 0xFF0000FF);
+                    backpaint.setRGB(x, y, x < 8 ? 0xFFFFFF00 : 0xFFFF00FF);
+                }
+            }
+            texture(root, "paint", paint);
+            texture(root, "backpaint", backpaint);
+            texture(root, "white", solid(2, 2, 0xFFFFFFFF));
+            texture(root, "green", solid(2, 2, 0xFF00FF00));
+            texture(root, "blue", solid(2, 2, 0xFF0000FF));
+            texture(root, "gray", solid(2, 2, 0xFF808080));
+            texture(root, "red", solid(2, 2, 0xFFFF0000));
+
+            write(root, "assets/testpack/models/item/elem_flat.json", """
+                {"textures":{"front":"testpack:item/paint","back":"testpack:item/backpaint"},
+                 "gui_light":"front",
+                 "elements":[{"from":[0,0,0],"to":[16,16,1],
+                   "faces":{"south":{"texture":"#front"},"north":{"texture":"#back"}}}]}""");
+            item(root, "flat", """
+                {"model":{"type":"minecraft:model","model":"testpack:item/elem_flat"}}""");
+
+            write(root, "assets/testpack/models/item/elem_mirrored.json", """
+                {"parent":"testpack:item/elem_flat",
+                 "display":{"gui":{"rotation":[0,180,0]}}}""");
+            item(root, "mirrored", """
+                {"model":{"type":"minecraft:model","model":"testpack:item/elem_mirrored"}}""");
+
+            write(root, "assets/testpack/models/item/elem_tilted.json", """
+                {"parent":"testpack:item/elem_flat",
+                 "display":{"gui":{"rotation":[0,2,0]}}}""");
+            item(root, "tilted", """
+                {"model":{"type":"minecraft:model","model":"testpack:item/elem_tilted"}}""");
+
+            write(root, "assets/testpack/models/item/elem_badspin.json", """
+                {"parent":"testpack:item/elem_flat",
+                 "display":{"gui":{"rotation":[30,225,0]}}}""");
+            item(root, "badspin", """
+                {"model":{"type":"minecraft:model","model":"testpack:item/elem_badspin"}}""");
+
+            write(root, "assets/testpack/models/item/elem_retextured.json", """
+                {"parent":"testpack:item/elem_flat",
+                 "textures":{"front":"testpack:item/green"}}""");
+            item(root, "retextured", """
+                {"model":{"type":"minecraft:model","model":"testpack:item/elem_retextured"}}""");
+
+            solidQuadModel(root, "elem_green", "testpack:item/green");
+            solidQuadModel(root, "elem_blue", "testpack:item/blue");
+            solidQuadModel(root, "elem_gray", "testpack:item/gray");
+            solidQuadModel(root, "elem_red", "testpack:item/red");
+
+            item(root, "gauge", """
+                {"model":{"type":"range_dispatch","property":"minecraft:custom_model_data","index":0,"scale":1.0,
+                  "entries":[{"threshold":1.0,"model":{"type":"model","model":"testpack:item/elem_green"}},
+                             {"threshold":2.0,"model":{"type":"model","model":"testpack:item/elem_blue"}}],
+                  "fallback":{"type":"model","model":"testpack:item/elem_gray"}}}""");
+
+            item(root, "flagged", """
+                {"model":{"type":"condition","property":"minecraft:custom_model_data","index":0,
+                  "on_true":{"type":"model","model":"testpack:item/elem_green"},
+                  "on_false":{"type":"model","model":"testpack:item/elem_red"}}}""");
+
+            item(root, "named", """
+                {"model":{"type":"select","property":"minecraft:custom_model_data","index":0,
+                  "cases":[{"when":"ruby","model":{"type":"model","model":"testpack:item/elem_red"}}],
+                  "fallback":{"type":"model","model":"testpack:item/elem_blue"}}}""");
+
+            write(root, "assets/testpack/models/item/elem_tintable.json", """
+                {"textures":{"all":"testpack:item/white"},
+                 "elements":[{"from":[0,0,0],"to":[16,16,1],
+                   "faces":{"south":{"texture":"#all","tintindex":0}}}]}""");
+            item(root, "colored", """
+                {"model":{"type":"model","model":"testpack:item/elem_tintable",
+                  "tints":[{"type":"minecraft:custom_model_data","index":0,"default":16777215}]}}""");
+            item(root, "constant_tint", """
+                {"model":{"type":"model","model":"testpack:item/elem_tintable",
+                  "tints":[{"type":"minecraft:constant","value":16744448}]}}""");
+            item(root, "unknown_tint", """
+                {"model":{"type":"model","model":"testpack:item/elem_tintable",
+                  "tints":[{"type":"minecraft:dye","default":0}]}}""");
+
+            write(root, "assets/testpack/models/item/elem_wide.json", """
+                {"parent":"testpack:item/elem_flat",
+                 "display":{"gui":{"scale":[2,2,2]}}}""");
+            item(root, "oversized", """
+                {"model":{"type":"minecraft:model","model":"testpack:item/elem_wide"},
+                 "oversized_in_gui":true}""");
+            item(root, "clipped", """
+                {"model":{"type":"minecraft:model","model":"testpack:item/elem_wide"}}""");
+
+            write(root, "assets/testpack/models/item/elem_rotated.json", """
+                {"textures":{"all":"testpack:item/white"},
+                 "elements":[{"from":[0,0,0],"to":[16,16,1],
+                   "rotation":{"angle":45,"axis":"z","origin":[8,8,8]},
+                   "faces":{"south":{"texture":"#all"}}}]}""");
+            item(root, "rotated", """
+                {"model":{"type":"minecraft:model","model":"testpack:item/elem_rotated"}}""");
+
+            model(root, "plain", "item/generated", "testpack:item/plain");
+            texture(root, "plain", solid(16, 16, 0xFFAA5500));
+            item(root, "plain_sprite", """
+                {"model":{"type":"minecraft:model","model":"testpack:item/plain"}}""");
+
+            item(root, "mixed", """
+                {"model":{"type":"composite","models":[
+                  {"type":"model","model":"testpack:item/elem_flat"},
+                  {"type":"model","model":"testpack:item/plain"}]}}""");
+
+            // Child whose own EMPTY display.gui entry overrides the parent's (0,180,0) mirror
+            // wholesale (vanilla display entries never merge per component).
+            write(root, "assets/testpack/models/item/elem_unmirrored.json", """
+                {"parent":"testpack:item/elem_mirrored",
+                 "display":{"gui":{}}}""");
+            item(root, "unmirrored", """
+                {"model":{"type":"minecraft:model","model":"testpack:item/elem_unmirrored"}}""");
+
+            // Elements model whose parent ref points at a model missing from the pack.
+            write(root, "assets/testpack/models/item/elem_orphan.json", """
+                {"parent":"testpack:item/nope_parent",
+                 "textures":{"all":"testpack:item/white"},
+                 "elements":[{"from":[0,0,0],"to":[16,16,1],
+                   "faces":{"south":{"texture":"#all"}}}]}""");
+            item(root, "orphan", """
+                {"model":{"type":"minecraft:model","model":"testpack:item/elem_orphan"}}""");
+
+            // A 9-model parent chain (deeper than the resolver's 8-hop limit).
+            write(root, "assets/testpack/models/item/elem_deep_0.json", """
+                {"textures":{"all":"testpack:item/white"},
+                 "elements":[{"from":[0,0,0],"to":[16,16,1],
+                   "faces":{"south":{"texture":"#all"}}}],
+                 "parent":"testpack:item/elem_deep_1"}""");
+            for (int i = 1; i < 8; i++) {
+                write(root, "assets/testpack/models/item/elem_deep_" + i + ".json",
+                    "{\"parent\":\"testpack:item/elem_deep_" + (i + 1) + "\"}");
+            }
+            write(root, "assets/testpack/models/item/elem_deep_8.json", """
+                {"display":{"gui":{"scale":[2,2,2]}}}""");
+            item(root, "deep", """
+                {"model":{"type":"minecraft:model","model":"testpack:item/elem_deep_0"}}""");
+
+            // A pack item whose PATH contains "player_head": must render as an ordinary
+            // elements model, never fall into the dedicated vanilla head pipeline.
+            item(root, "player_head_frame", """
+                {"model":{"type":"minecraft:model","model":"testpack:item/elem_flat"}}""");
+
+            // Flat layer0 sprite items carrying tint sources: constant, custom_model_data and
+            // an unsupported (dye) source over a white 2x2 texture.
+            model(root, "white_layer0", "item/generated", "testpack:item/white");
+            item(root, "sprite_constant_tint", """
+                {"model":{"type":"model","model":"testpack:item/white_layer0",
+                  "tints":[{"type":"minecraft:constant","value":16744448}]}}""");
+            item(root, "sprite_cmd_tint", """
+                {"model":{"type":"model","model":"testpack:item/white_layer0",
+                  "tints":[{"type":"minecraft:custom_model_data","index":0,"default":16777215}]}}""");
+            item(root, "sprite_dye_tint", """
+                {"model":{"type":"model","model":"testpack:item/white_layer0",
+                  "tints":[{"type":"minecraft:dye","default":0}]}}""");
+
+            return root;
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to write elements fixture pack", e);
+        }
+    }
+
+    /** A full-slot single-quad model (south face only) over one solid texture. */
+    private static void solidQuadModel(Path root, String name, String textureRef) throws IOException {
+        write(root, "assets/testpack/models/item/" + name + ".json",
+            "{\"textures\":{\"all\":\"" + textureRef + "\"},"
+                + "\"elements\":[{\"from\":[0,0,0],\"to\":[16,16,1],"
+                + "\"faces\":{\"south\":{\"texture\":\"#all\"}}}]}");
+    }
+
     /** Fills a rectangle given in 256-normalized texel units, scaled by {@code unit} px per unit. */
     private static void fillUnits(BufferedImage image, int unit, int x, int y, int width, int height, int argb) {
         for (int py = y * unit; py < (y + height) * unit; py++) {
@@ -588,7 +820,8 @@ public final class FixturePacks {
         Files.writeString(path, content);
     }
 
-    private static BufferedImage solid(int width, int height, int argb) {
+    /** A solid-color image; public so renderer tests build synthetic textures the same way. */
+    public static BufferedImage solid(int width, int height, int argb) {
         BufferedImage image = transparent(width, height);
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
