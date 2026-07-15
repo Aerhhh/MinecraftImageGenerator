@@ -302,6 +302,63 @@ public final class FixturePacks {
         }
     }
 
+    /**
+     * Writes a font pack tailored for TEXT PIPELINE rendering tests (tooltips drawing pack
+     * glyphs). Everything is synthetic and generated at test runtime.
+     *
+     * <p>Contents:
+     * <ul>
+     * <li>{@code testpack:glyphs}: bitmap font, 9x3 sheet cut 3x1 (one chars row mapping
+     *     U+E000, U+E001 and U+E002 to 3x3 cells; height 3, ascent 3, scale 1).
+     *     U+E000 is solid red (ink 3, advance 4), U+E001 solid blue (ink 3, advance 4), U+E002
+     *     green in its first two columns (ink 2, advance 3). A space provider follows with
+     *     U+E00A -> -4.0, U+E00B -> 0.5, U+E00C -> 0.75 (quarter granularity, so per-step
+     *     rounding in canvas px is detectable at any even pixelSize), U+E00D -> 3.0 and
+     *     U+E00E -> -6.0 (reaches past the borderless 5 GUI px text origin).</li>
+     * <li>{@code minecraft:default}: a reference to {@code testpack:glyphs}, so ordinary lore
+     *     text picks the pack glyphs up without an explicit segment font id.</li>
+     * <li>{@code testpack:tall}: bitmap font whose single U+E000 glyph is a solid magenta
+     *     3x32 cell with height 32 and ascent 16, extending far above and below the 9 GUI px
+     *     line.</li>
+     * </ul>
+     */
+    public static Path writeTextFontPack(Path root) {
+        try {
+            write(root, "pack.mcmeta", """
+                {"pack":{"pack_format":88,"description":"text font test fixture"}}""");
+
+            BufferedImage glyphSheet = transparent(9, 3);
+            for (int y = 0; y < 3; y++) {
+                for (int x = 0; x < 3; x++) {
+                    glyphSheet.setRGB(x, y, 0xFFFF0000);
+                    glyphSheet.setRGB(3 + x, y, 0xFF0000FF);
+                }
+                glyphSheet.setRGB(6, y, 0xFF00FF00);
+                glyphSheet.setRGB(7, y, 0xFF00FF00);
+            }
+            fontTexture(root, NAMESPACE, "glyphs.png", glyphSheet);
+            fontJson(root, NAMESPACE, "glyphs", """
+                {"providers":[
+                  {"type":"bitmap","file":"testpack:font/glyphs.png",
+                   "height":3,"ascent":3,"chars":["\\uE000\\uE001\\uE002"]},
+                  {"type":"space","advances":{"\\uE00A":-4.0,"\\uE00B":0.5,"\\uE00C":0.75,
+                   "\\uE00D":3.0,"\\uE00E":-6.0}}]}""");
+
+            fontJson(root, "minecraft", "default", """
+                {"providers":[{"type":"reference","id":"testpack:glyphs"}]}""");
+
+            BufferedImage tallSheet = solid(3, 32, 0xFFFF00FF);
+            fontTexture(root, NAMESPACE, "tall.png", tallSheet);
+            fontJson(root, NAMESPACE, "tall", """
+                {"providers":[{"type":"bitmap","file":"testpack:font/tall.png",
+                  "height":32,"ascent":16,"chars":["\\uE000"]}]}""");
+
+            return root;
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to write text font fixture pack", e);
+        }
+    }
+
     private static void fontJson(Path root, String namespace, String name, String json) throws IOException {
         write(root, "assets/" + namespace + "/font/" + name + ".json", json);
     }

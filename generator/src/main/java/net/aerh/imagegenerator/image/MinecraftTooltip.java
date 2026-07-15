@@ -8,6 +8,7 @@ import net.aerh.imagegenerator.builder.ClassBuilder;
 import net.aerh.imagegenerator.pack.GuiSpriteRenderer;
 import net.aerh.imagegenerator.pack.TooltipSprites;
 import net.aerh.imagegenerator.text.ChatFormat;
+import net.aerh.imagegenerator.text.PackGlyphDispatcher;
 import net.aerh.imagegenerator.text.TextColor;
 import net.aerh.imagegenerator.text.TextColorRemap;
 import net.aerh.imagegenerator.text.MinecraftFont;
@@ -70,6 +71,7 @@ public class MinecraftTooltip {
     private final boolean aprilFools;
     private final TooltipSprites themeSprites;
     private final TextColorRemap textColorRemap;
+    private final PackGlyphDispatcher packGlyphs;
 
     // Scaled values based on scale factor
     private final int pixelSize;
@@ -87,10 +89,41 @@ public class MinecraftTooltip {
 
     private transient TextColor currentColor;
     private transient Font currentFont;
-    private transient int locationX;
+    /**
+     * Text cursor in canvas pixels. A double so fractional and negative pack glyph advances
+     * accumulate without per-step rounding; on the built-in (no-pack) path only integer AWT
+     * widths are ever added, so the value stays integer-exact and rounding at the draw sites is
+     * the identity - no-pack output is pixel-identical to the historical int cursor.
+     */
+    private transient double locationX;
     private transient int locationY;
+    /**
+     * Rightmost extent (canvas px) reached by the current line's cursor. In the measure pass the
+     * line starts at 0, so this is relative to the line start; the draw pass folds absolute
+     * (startXY-based) positions into the same field, but only the measure-pass value is ever
+     * consumed. Negative pack advances can move the cursor LEFT, so a line's width for canvas
+     * sizing and centering is this max extent, not the final cursor position.
+     */
+    private transient double lineMaxExtent;
+    /**
+     * Leftmost extent (canvas px, never above 0) reached by the current line's cursor in the
+     * measure pass. Leading negative pack advances place glyph art LEFT of the line start; see
+     * {@link #leftShift}.
+     */
+    private transient double lineMinExtent;
+    /**
+     * Canvas px added to every line's draw start (and to the canvas width) so glyph art reached
+     * through leading negative advances draws inside the canvas instead of clipping at x = 0.
+     * Zero whenever no line's art crosses the left canvas edge - i.e. always, for normal text,
+     * keeping the left padding behavior unchanged.
+     */
+    private transient int leftShift;
+    /** Per-frame counter feeding deterministic pack glyph obfuscation seeds. */
+    private transient int packObfuscationCounter;
     private transient int largestWidth = 0;
     private transient Map<Integer, Integer> lineMetrics;
+    /** Per-line {@link #lineMinExtent} captured by the measure pass, keyed like {@link #lineMetrics}. */
+    private transient Map<Integer, Double> lineMinExtents;
 
     /**
      * Construct a new {@link MinecraftTooltip} instance.
@@ -108,8 +141,9 @@ public class MinecraftTooltip {
      * @param aprilFools          Whether to randomly swap characters to alternate fonts.
      * @param themeSprites        Pack tooltip sprites replacing the programmatic chrome, or null.
      * @param textColorRemap      Shader-equivalent text color replacement table, or null.
+     * @param packFontSource      Resolver for pack font ids, or null when no pack is active.
      */
-    private MinecraftTooltip(List<LineSegment> lines, TextColor defaultColor, int alpha, int padding, boolean firstLinePadding, boolean renderBorder, boolean centeredText, int frameDelayMs, int animationFrameCount, int scaleFactor, boolean aprilFools, TooltipSprites themeSprites, TextColorRemap textColorRemap) {
+    private MinecraftTooltip(List<LineSegment> lines, TextColor defaultColor, int alpha, int padding, boolean firstLinePadding, boolean renderBorder, boolean centeredText, int frameDelayMs, int animationFrameCount, int scaleFactor, boolean aprilFools, TooltipSprites themeSprites, TextColorRemap textColorRemap, PackGlyphDispatcher.FontSource packFontSource) {
         this.lines = lines;
         this.currentColor = defaultColor;
         this.alpha = alpha;
@@ -123,6 +157,7 @@ public class MinecraftTooltip {
         this.aprilFools = aprilFools;
         this.themeSprites = themeSprites;
         this.textColorRemap = textColorRemap;
+        this.packGlyphs = PackGlyphDispatcher.of(packFontSource);
 
         this.pixelSize = DEFAULT_PIXEL_SIZE * scaleFactor;
         // Themed tooltips use the vanilla sprite-rect model: background and frame cover ONE rect
@@ -290,7 +325,11 @@ public class MinecraftTooltip {
     }
 
     /**
-     * Calculates the width of a line segment.
+     * Calculates the width of a line segment: the maximum rightward extent the cursor reaches,
+     * measured from the line start. Pack glyph codepoints dispatch through the SAME
+     * {@link PackGlyphDispatcher} as the draw pass and may advance the cursor by negative or
+     * fractional amounts; built-in codepoints contribute their AWT widths unchanged, so no-pack
+     * measurements are identical to the historical plain sum.
      *
      * @param graphics The {@link Graphics2D} object to measure text on.
      * @param line     The {@link LineSegment} to measure.
@@ -298,7 +337,9 @@ public class MinecraftTooltip {
      * @return The width of the line segment.
      */
     private int calculateLineWidth(Graphics2D graphics, LineSegment line) {
-        int lineWidth = 0;
+        this.locationX = 0;
+        this.lineMaxExtent = 0;
+        this.lineMinExtent = 0;
         for (ColorSegment segment : line.getSegments()) {
             Font baseFont = MinecraftFonts.getFont(segment.getFont(), segment.isBold(), segment.isItalic());
             Font font = scaleFactor > 1 ? baseFont.deriveFont(baseFont.getSize2D() * scaleFactor) : baseFont;
@@ -315,26 +356,47 @@ public class MinecraftTooltip {
                     continue;
                 }
 
+                PackGlyphDispatcher.Dispatched packGlyph = this.packGlyphs.dispatch(segment, codePoint).orElse(null);
+                if (packGlyph != null) {
+                    // Obfuscation substitutes have equal ceil(advance), so measuring the
+                    // original glyph is exact for them too.
+                    advanceCursor(packGlyph.advanceGuiPx() * (double) pixelSize);
+                    i += Character.charCount(codePoint);
+                    continue;
+                }
+
                 String charStr = new String(Character.toChars(codePoint));
 
                 if (font.canDisplayUpTo(charStr) == -1) {
-                    lineWidth += metrics.stringWidth(charStr);
+                    advanceCursor(metrics.stringWidth(charStr));
                 } else {
                     Font fallbackFont = MinecraftFonts.getFallbackFont(codePoint, font.getSize2D());
                     if (fallbackFont != null) {
                         graphics.setFont(fallbackFont);
                         FontMetrics fallbackMetrics = graphics.getFontMetrics(fallbackFont);
-                        lineWidth += fallbackMetrics.stringWidth(charStr);
+                        advanceCursor(fallbackMetrics.stringWidth(charStr));
                         graphics.setFont(font);
                     } else {
-                        lineWidth += metrics.stringWidth(charStr);
+                        advanceCursor(metrics.stringWidth(charStr));
                     }
                 }
                 i += Character.charCount(codePoint);
             }
         }
 
-        return lineWidth;
+        return (int) Math.ceil(this.lineMaxExtent);
+    }
+
+    /**
+     * Moves the text cursor by {@code advanceCanvasPx} (negative moves LEFT) and folds the
+     * traversed span into {@link #lineMaxExtent} and {@link #lineMinExtent}. The single
+     * advance/extent arithmetic shared by the measure and draw passes.
+     */
+    private void advanceCursor(double advanceCanvasPx) {
+        double next = this.locationX + advanceCanvasPx;
+        this.lineMaxExtent = Math.max(this.lineMaxExtent, Math.max(this.locationX, next));
+        this.lineMinExtent = Math.min(this.lineMinExtent, Math.min(this.locationX, next));
+        this.locationX = next;
     }
 
     /**
@@ -344,38 +406,61 @@ public class MinecraftTooltip {
      */
     private void measureLines(Graphics2D measureGraphics) {
         this.lineMetrics = new HashMap<>();
+        this.lineMinExtents = new HashMap<>();
         this.locationY = startXY + pixelSize * 2 + yIncrement / 2;
 
         for (int lineIndex = 0; lineIndex < this.getLines().size(); lineIndex++) {
             LineSegment line = this.getLines().get(lineIndex);
             int lineWidth = calculateLineWidth(measureGraphics, line);
             this.lineMetrics.put(lineIndex, lineWidth);
+            this.lineMinExtents.put(lineIndex, this.lineMinExtent);
 
             int extraPadding = (lineIndex == 0 && this.hasFirstLinePadding()) ? pixelSize * 2 : 0;
             this.locationY += yIncrement + extraPadding;
         }
 
         this.largestWidth = this.lineMetrics.values().stream().mapToInt(Integer::intValue).max().orElse(0);
+        this.leftShift = calculateLeftShift();
+    }
+
+    /**
+     * How far every line's draw start must move RIGHT so the leftmost art of any line (leading
+     * negative advances push the cursor left of the line start) still lands at canvas x >= 0.
+     * Evaluated against each line's planned start - centering included - so only art that would
+     * actually cross the canvas edge shifts the content.
+     */
+    private int calculateLeftShift() {
+        int shift = 0;
+        for (Map.Entry<Integer, Double> entry : this.lineMinExtents.entrySet()) {
+            int lineWidth = this.lineMetrics.getOrDefault(entry.getKey(), 0);
+            int lineStart = startXY + (this.centeredText ? (this.largestWidth - lineWidth) / 2 : 0);
+            shift = Math.max(shift, (int) Math.ceil(-(lineStart + entry.getValue())));
+        }
+        return shift;
     }
 
     /**
      * Draws lines of text on the image.
      *
      * @param frameGraphics The {@link Graphics2D} object to draw on.
+     * @param frameIndex    The animation frame being drawn; seeds deterministic pack glyph
+     *                      obfuscation so identical renders produce identical frames.
      */
-    private void drawLinesInternal(Graphics2D frameGraphics) {
+    private void drawLinesInternal(Graphics2D frameGraphics, int frameIndex) {
         this.locationY = startXY + pixelSize * 2 + yIncrement / 2;
         this.isAnimated = false;
+        this.packObfuscationCounter = 0;
 
         for (int lineIndex = 0; lineIndex < this.getLines().size(); lineIndex++) {
             LineSegment line = this.getLines().get(lineIndex);
             int lineWidth = this.lineMetrics.getOrDefault(lineIndex, 0);
 
-            // Adjust X position based on if text is centered
+            // Adjust X position based on if text is centered; leftShift keeps left-overdrawing
+            // glyph art inside the canvas (zero for normal text)
             if (this.centeredText) {
-                this.locationX = startXY + (this.largestWidth - lineWidth) / 2;
+                this.locationX = this.leftShift + startXY + (this.largestWidth - lineWidth) / 2;
             } else {
-                this.locationX = startXY;
+                this.locationX = this.leftShift + startXY;
             }
 
             // Draw segments for the line
@@ -383,7 +468,7 @@ public class MinecraftTooltip {
                 if (segment.isObfuscated()) {
                     this.isAnimated = true;
                 }
-                this.drawString(frameGraphics, segment);
+                this.drawString(frameGraphics, segment, frameIndex);
             }
 
             // Increment Y position for the next line
@@ -393,12 +478,15 @@ public class MinecraftTooltip {
     }
 
     /**
-     * Draws a string with the specified formatting.
+     * Draws a string with the specified formatting. Every codepoint dispatches through
+     * {@link PackGlyphDispatcher} first (pack glyphs WIN over the built-in fonts when the active
+     * pack supplies them); undispatched codepoints follow the historical OTF/Unifont path.
      *
      * @param graphics     The {@link Graphics2D} object to draw on.
      * @param colorSegment The {@link ColorSegment} containing formatted text.
+     * @param frameIndex   The animation frame being drawn (see {@link #drawLinesInternal}).
      */
-    private void drawString(Graphics2D graphics, @NotNull ColorSegment colorSegment) {
+    private void drawString(Graphics2D graphics, @NotNull ColorSegment colorSegment, int frameIndex) {
         Font baseFont = MinecraftFonts.getFont(colorSegment.getFont(), colorSegment.isBold(), colorSegment.isItalic());
         this.currentFont = scaleFactor > 1 ? baseFont.deriveFont(baseFont.getSize2D() * scaleFactor) : baseFont;
         this.currentColor = colorSegment.getColor().orElse(ChatFormat.GRAY);
@@ -421,6 +509,19 @@ public class MinecraftTooltip {
 
             String charStr = new String(Character.toChars(codePoint));
             int charCount = Character.charCount(codePoint);
+
+            PackGlyphDispatcher.Dispatched packGlyph = this.packGlyphs.dispatch(colorSegment, codePoint).orElse(null);
+            if (packGlyph != null) {
+                // Flush the pending built-in run so draw order matches text order
+                if (!subWord.isEmpty()) {
+                    drawSubWord(graphics, subWord.toString(), colorSegment, metrics);
+                    subWord.setLength(0);
+                }
+
+                drawPackGlyph(graphics, packGlyph, colorSegment, frameIndex);
+                i += charCount;
+                continue;
+            }
 
             if (colorSegment.isObfuscated()) {
                 // Draw previous subWord, if any
@@ -470,7 +571,7 @@ public class MinecraftTooltip {
                 int width = swappedMetrics.stringWidth(charStr);
 
                 drawTextWithEffects(graphics, charStr, colorSegment, width);
-                this.locationX += width;
+                advanceCursor(width);
 
                 // Restore the original font
                 graphics.setFont(this.currentFont);
@@ -503,7 +604,49 @@ public class MinecraftTooltip {
 
         int width = metrics.stringWidth(subWord);
         drawTextWithEffects(graphics, subWord, colorSegment, width);
-        this.locationX += width;
+        advanceCursor(width);
+    }
+
+    /**
+     * Draws one dispatched pack glyph at the cursor and advances it (possibly LEFT, for negative
+     * space advances). Obfuscated segments substitute an equal-width glyph deterministically per
+     * frame. The glyph draws its shadow pass at +1,+1 GUI px tinted with the pipeline's
+     * {@link #shadowColor()} - the same color built-in runs shadow with - before the main pass;
+     * strikethrough and underline wrap the glyph exactly like {@link #drawTextWithEffects} does
+     * for built-in runs and span EVERY glyph's advance, space glyphs included (vanilla emits
+     * decoration quads for spaces too). Space glyphs draw no glyph art - no shadow, no bold
+     * copy - but their advance fully counts.
+     *
+     * @param graphics     The {@link Graphics2D} object to draw on.
+     * @param packGlyph    The dispatched glyph for the current codepoint.
+     * @param colorSegment The {@link ColorSegment} containing the color and style information.
+     * @param frameIndex   The animation frame being drawn, part of the obfuscation seed.
+     */
+    private void drawPackGlyph(Graphics2D graphics, PackGlyphDispatcher.Dispatched packGlyph,
+                               ColorSegment colorSegment, int frameIndex) {
+        if (colorSegment.isObfuscated()) {
+            // Every (frame, position) pair gets a unique seed; the dispatcher scrambles it.
+            long seed = ((long) frameIndex << 32) ^ this.packObfuscationCounter++;
+            packGlyph = packGlyph.obfuscated(seed);
+        }
+
+        double advanceCanvasPx = packGlyph.advanceGuiPx() * (double) pixelSize;
+        int drawX = (int) Math.round(this.locationX);
+        int width = (int) Math.round(advanceCanvasPx);
+
+        drawDecorations(graphics, colorSegment, width, drawX, true);
+
+        if (!packGlyph.isSpace()) {
+            // The AWT baseline (locationY) is the vanilla baseline, which sits 7 GUI px below
+            // the line top; locationY is always a whole multiple of pixelSize.
+            double lineTopGuiPx = this.locationY / (double) pixelSize - 7.0;
+            packGlyph.draw(graphics, this.locationX / (double) pixelSize, lineTopGuiPx, pixelSize,
+                foregroundColor(), shadowColor());
+        }
+
+        drawDecorations(graphics, colorSegment, width, drawX, false);
+
+        advanceCursor(advanceCanvasPx);
     }
 
     /**
@@ -531,7 +674,7 @@ public class MinecraftTooltip {
 
         drawTextWithEffects(graphics, charStr, segment, width);
 
-        this.locationX += width;
+        advanceCursor(width);
         graphics.setFont(this.currentFont);
 
         if (fallbackFont != null) {
@@ -570,7 +713,7 @@ public class MinecraftTooltip {
         // Recalculate width for the potentially different character
         int drawnWidth = metrics.stringWidth(charToDrawStr);
         drawTextWithEffects(graphics, charToDrawStr, colorSegment, drawnWidth);
-        this.locationX += drawnWidth;
+        advanceCursor(drawnWidth);
     }
 
     /**
@@ -582,32 +725,41 @@ public class MinecraftTooltip {
      * @param width         The width of the text to draw.
      */
     private void drawTextWithEffects(Graphics2D frameGraphics, String textToDraw, ColorSegment colorSegment, int width) {
-        // Draw Strikethrough Drop Shadow
-        if (colorSegment.isStrikethrough()) {
-            this.drawThickLineInternal(frameGraphics, width, this.locationX, this.locationY, -1, STRIKETHROUGH_OFFSET * scaleFactor, true);
-        }
+        // Built-in runs draw at whole canvas pixels; the cursor is integer-exact here unless a
+        // fractional pack advance preceded this run, in which case it rounds to the nearest.
+        int drawX = (int) Math.round(this.locationX);
 
-        // Draw Underlined Drop Shadow
-        if (colorSegment.isUnderlined()) {
-            this.drawThickLineInternal(frameGraphics, width, this.locationX - pixelSize, this.locationY, 1, UNDERLINE_OFFSET * scaleFactor, true);
-        }
+        drawDecorations(frameGraphics, colorSegment, width, drawX, true);
 
         // Draw Drop Shadow Text
         frameGraphics.setColor(shadowColor());
-        frameGraphics.drawString(textToDraw, this.locationX + pixelSize, this.locationY + pixelSize);
+        frameGraphics.drawString(textToDraw, drawX + pixelSize, this.locationY + pixelSize);
 
         // Draw Text
         frameGraphics.setColor(foregroundColor());
-        frameGraphics.drawString(textToDraw, this.locationX, this.locationY);
+        frameGraphics.drawString(textToDraw, drawX, this.locationY);
 
-        // Draw Strikethrough
+        drawDecorations(frameGraphics, colorSegment, width, drawX, false);
+    }
+
+    /**
+     * One pass of the strikethrough/underline decorations spanning {@code width} canvas px from
+     * {@code drawX}: the drop-shadow pass draws before the text or glyph, the foreground pass
+     * after it. The single decoration geometry shared by the built-in run path and the pack
+     * glyph path, so the two can never drift apart.
+     *
+     * @param graphics     The {@link Graphics2D} object to draw on.
+     * @param colorSegment The {@link ColorSegment} containing the style information.
+     * @param width        The advance the decorations span, in canvas px.
+     * @param drawX        The left edge of the decorated run, in canvas px.
+     * @param dropShadow   Whether this is the shadow pass or the foreground pass.
+     */
+    private void drawDecorations(Graphics2D graphics, ColorSegment colorSegment, int width, int drawX, boolean dropShadow) {
         if (colorSegment.isStrikethrough()) {
-            this.drawThickLineInternal(frameGraphics, width, this.locationX, this.locationY, -1, STRIKETHROUGH_OFFSET * scaleFactor, false);
+            this.drawThickLineInternal(graphics, width, drawX, this.locationY, -1, STRIKETHROUGH_OFFSET * scaleFactor, dropShadow);
         }
-
-        // Draw Underlined
         if (colorSegment.isUnderlined()) {
-            this.drawThickLineInternal(frameGraphics, width, this.locationX - pixelSize, this.locationY, 1, UNDERLINE_OFFSET * scaleFactor, false);
+            this.drawThickLineInternal(graphics, width, drawX - pixelSize, this.locationY, 1, UNDERLINE_OFFSET * scaleFactor, dropShadow);
         }
     }
 
@@ -656,8 +808,9 @@ public class MinecraftTooltip {
         int measuredHeight = this.locationY;
         measureGraphics.dispose();
 
-        // Calculate final dimensions based on the measured largestWidth and height
-        int finalWidth = startXY + this.largestWidth + startXY;
+        // Calculate final dimensions based on the measured largestWidth and height; leftShift
+        // widens the canvas for glyph art that would otherwise clip at the left edge
+        int finalWidth = this.leftShift + startXY + this.largestWidth + startXY;
         int finalHeight = measuredHeight - (yIncrement + (this.lines.isEmpty() || !this.firstLinePadding ? 0 : pixelSize * 2)) + startXY + pixelSize * 2;
 
         if (isThemed()) {
@@ -695,7 +848,7 @@ public class MinecraftTooltip {
                 );
             }
 
-            drawLinesInternal(graphics);
+            drawLinesInternal(graphics, i);
 
             // Draw borders onto the frame
             if (this.renderBorder && themeLayer == null) {
@@ -771,6 +924,7 @@ public class MinecraftTooltip {
         private boolean aprilFools = false;
         private TooltipSprites themeSprites;
         private TextColorRemap textColorRemap;
+        private PackGlyphDispatcher.FontSource packFontSource;
 
         public Builder hasFirstLinePadding() {
             return this.hasFirstLinePadding(true);
@@ -865,6 +1019,17 @@ public class MinecraftTooltip {
             return this;
         }
 
+        /**
+         * Enables pack font glyphs: every codepoint of every segment first resolves against the
+         * given source (the segment's pack font id, or its built-in font's resource location)
+         * and renders as a pack glyph when supplied, falling back to the built-in fonts
+         * otherwise. Null (the default) leaves rendering fully on the built-in path.
+         */
+        public Builder withPackFontSource(PackGlyphDispatcher.FontSource packFontSource) {
+            this.packFontSource = packFontSource;
+            return this;
+        }
+
         @Override
         public @NotNull MinecraftTooltip build() {
             return new MinecraftTooltip(
@@ -880,7 +1045,8 @@ public class MinecraftTooltip {
                 this.scaleFactor,
                 this.aprilFools,
                 this.themeSprites,
-                this.textColorRemap
+                this.textColorRemap,
+                this.packFontSource
             );
         }
     }

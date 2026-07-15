@@ -23,6 +23,7 @@ import net.aerh.imagegenerator.pack.PackId;
 import net.aerh.imagegenerator.pack.PackRepository;
 import net.aerh.imagegenerator.pack.TooltipSprites;
 import net.aerh.imagegenerator.parser.ParseContext;
+import net.aerh.imagegenerator.text.PackGlyphDispatcher;
 import net.aerh.imagegenerator.text.TextColorRemap;
 import net.aerh.imagegenerator.parser.text.RarityFooterParser;
 import net.aerh.imagegenerator.text.ChatFormat;
@@ -120,7 +121,8 @@ public class MinecraftTooltipGenerator implements Generator {
             .withScaleFactor(settings.getScaleFactor())
             .withAprilFools(settings.isAprilFools())
             .withThemeSprites(resolveThemeSprites())
-            .withTextColorRemap(textColorRemap);
+            .withTextColorRemap(textColorRemap)
+            .withPackFontSource(resolvePackFontSource());
 
         if (settings.getName() != null && !settings.getName().isEmpty()) {
             String name = settings.getName();
@@ -157,20 +159,41 @@ public class MinecraftTooltipGenerator implements Generator {
      * through its {@code minecraft:tooltip/background} + {@code frame} override when present.
      */
     private TooltipSprites resolveThemeSprites() {
-        if (packId == null || PackId.VANILLA.equals(packId)) {
+        if (!hasActivePack()) {
             if (tooltipStyle != null) {
                 throw new GeneratorException("Tooltip style `%s` requires a resource pack; select one with withPack",
                     tooltipStyle);
             }
             return null;
         }
-        PackRepository repository = packRepository != null ? packRepository : PackRepository.global();
+        PackRepository repository = repository();
         if (tooltipStyle != null) {
             return repository.resolveTooltipSprites(packId, tooltipStyle)
                 .orElseThrow(() -> new GeneratorException("Tooltip style `%s` not found in pack `%s`",
                     tooltipStyle, packId.toString()));
         }
         return repository.resolveDefaultTooltipSprites(packId).orElse(null);
+    }
+
+    /**
+     * The pack font resolver handed to the tooltip renderer, or null without an active pack
+     * (keeping no-pack rendering entirely on the built-in font path).
+     */
+    private PackGlyphDispatcher.FontSource resolvePackFontSource() {
+        if (!hasActivePack()) {
+            return null;
+        }
+        PackRepository repository = repository();
+        PackId activePack = packId;
+        return fontId -> repository.resolveFont(activePack, fontId);
+    }
+
+    private boolean hasActivePack() {
+        return packId != null && !PackId.VANILLA.equals(packId);
+    }
+
+    private PackRepository repository() {
+        return packRepository != null ? packRepository : PackRepository.global();
     }
 
     public enum TooltipSide {

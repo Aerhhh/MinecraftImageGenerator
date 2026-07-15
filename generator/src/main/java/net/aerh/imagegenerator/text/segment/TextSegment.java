@@ -45,8 +45,17 @@ public final class TextSegment extends ColorSegment {
                     textSegment.setColor(color);
                 }
             }
-            if (jsonObject.has("font"))
-                textSegment.setFont(MinecraftFont.fromResourceLocation(jsonObject.get("font").getAsString()));
+            if (jsonObject.has("font")) {
+                // Built-in fonts map to their enum; anything else is an open resource-pack font
+                // id, kept raw (NOT collapsed to DEFAULT) so pack glyph lookup can resolve it.
+                String fontId = jsonObject.get("font").getAsString();
+                MinecraftFont builtIn = MinecraftFont.fromResourceLocationOrNull(fontId);
+                if (builtIn != null) {
+                    textSegment.setFont(builtIn);
+                } else {
+                    textSegment.setPackFontId(fontId);
+                }
+            }
             if (jsonObject.has("obfuscated"))
                 textSegment.setObfuscated(NbtTextComponentUtil.parseBooleanStrict(jsonObject.get("obfuscated")));
             if (jsonObject.has("italic"))

@@ -10,6 +10,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 /**
  * A resolved pack font: an ordered provider list ready for per-codepoint glyph lookup. Build one
@@ -58,6 +60,7 @@ public final class PackFont {
 
     private final String id;
     private final List<Provider> providers;
+    private volatile List<Integer> mappedCodePoints;
 
     private PackFont(String id, List<Provider> providers) {
         this.id = id;
@@ -152,6 +155,31 @@ public final class PackFont {
         return winner instanceof SpaceGlyph space
             ? OptionalDouble.of(space.advance())
             : OptionalDouble.empty();
+    }
+
+    /**
+     * Every codepoint mapped by this font's renderable providers (bitmap and space), sorted
+     * ascending. This is the candidate pool for obfuscation substitution; provider priority still
+     * applies when looking a listed codepoint up through {@link #glyph}. Computed once on first
+     * use and cached (the set is immutable for the font's lifetime).
+     */
+    public List<Integer> mappedCodePoints() {
+        List<Integer> cached = mappedCodePoints;
+        if (cached == null) {
+            SortedSet<Integer> union = new TreeSet<>();
+            for (Provider provider : providers) {
+                switch (provider) {
+                    case BitmapEntry bitmap -> union.addAll(bitmap.provider().codePoints());
+                    case SpaceEntry space -> union.addAll(space.glyphs().keySet());
+                    case UnsupportedEntry ignored -> {
+                        // Unsupported providers never claim a codepoint (see class javadoc).
+                    }
+                }
+            }
+            cached = List.copyOf(union);
+            mappedCodePoints = cached;
+        }
+        return cached;
     }
 
     /**

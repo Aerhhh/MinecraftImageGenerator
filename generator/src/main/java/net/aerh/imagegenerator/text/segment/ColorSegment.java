@@ -24,6 +24,13 @@ public class ColorSegment {
     protected @NotNull String text;
     protected TextColor color = ChatFormat.GRAY;
     protected @NotNull MinecraftFont font = MinecraftFont.DEFAULT;
+    /**
+     * Optional resource-pack font id (any resource location, e.g. {@code "wynn:chat"}); null when
+     * the segment uses a built-in {@link MinecraftFont}. When set it takes precedence over
+     * {@link #font} for pack glyph lookup; rendering falls back to {@link #font} for codepoints
+     * the pack font does not supply (or when no pack is active).
+     */
+    protected @Nullable String packFontId;
     protected boolean italic, bold, underlined, obfuscated, strikethrough;
 
     public ColorSegment(@NotNull String text) {
@@ -178,7 +185,11 @@ public class ColorSegment {
         object.addProperty("text", this.getText());
         this.getColor().ifPresent(color -> object.addProperty("color", color.toJsonString()));
 
-        if (this.font != MinecraftFont.DEFAULT) object.addProperty("font", this.font.getResourceLocation());
+        if (this.packFontId != null) {
+            object.addProperty("font", this.packFontId);
+        } else if (this.font != MinecraftFont.DEFAULT) {
+            object.addProperty("font", this.font.getResourceLocation());
+        }
         if (this.isItalic()) object.addProperty("italic", true);
         if (this.isBold()) object.addProperty("bold", true);
         if (this.isUnderlined()) object.addProperty("underlined", true);
@@ -236,6 +247,7 @@ public class ColorSegment {
         protected String text = "";
         protected TextColor color = ChatFormat.GRAY;
         protected MinecraftFont font = MinecraftFont.DEFAULT;
+        protected String packFontId;
         protected boolean italic, bold, underlined, obfuscated, strikethrough;
 
         public Builder isBold() {
@@ -293,6 +305,16 @@ public class ColorSegment {
             return this;
         }
 
+        /**
+         * Sets a resource-pack font id (any resource location, e.g. {@code "wynn:chat"}). Takes
+         * precedence over {@link #withFont} for pack glyph lookup when a pack is active; see
+         * {@link ColorSegment#packFontId}.
+         */
+        public Builder withPackFontId(@Nullable String packFontId) {
+            this.packFontId = packFontId;
+            return this;
+        }
+
         public Builder withText(@NotNull String text) {
             this.text = text;
             return this;
@@ -303,6 +325,7 @@ public class ColorSegment {
             ColorSegment colorSegment = new ColorSegment(this.text);
             colorSegment.setColor(this.color);
             colorSegment.setFont(this.font);
+            colorSegment.setPackFontId(this.packFontId);
             colorSegment.setObfuscated(this.obfuscated);
             colorSegment.setItalic(this.italic);
             colorSegment.setBold(this.bold);

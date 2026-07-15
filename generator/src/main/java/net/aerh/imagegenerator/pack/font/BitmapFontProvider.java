@@ -4,9 +4,11 @@ import lombok.extern.slf4j.Slf4j;
 import net.aerh.imagegenerator.exception.PackResolveException;
 
 import java.awt.image.BufferedImage;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * A runtime bitmap provider: cuts the sheet into equal cells by the codepoint grid and computes
@@ -82,6 +84,11 @@ final class BitmapFontProvider {
     /** The glyph for a codepoint, or null when this provider's grid does not map it. */
     BitmapGlyph glyph(int codePoint) {
         return glyphs.get(codePoint);
+    }
+
+    /** An unmodifiable view of every codepoint this provider's grid maps. */
+    Set<Integer> codePoints() {
+        return Collections.unmodifiableSet(glyphs.keySet());
     }
 
     /** Total bytes retained by this provider's copied cell rasters (empty cells retain none). */
