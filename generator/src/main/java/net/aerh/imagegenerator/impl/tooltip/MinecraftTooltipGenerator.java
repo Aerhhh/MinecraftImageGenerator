@@ -122,7 +122,7 @@ public class MinecraftTooltipGenerator implements Generator {
             .withAprilFools(settings.isAprilFools())
             .withThemeSprites(resolveThemeSprites())
             .withTextColorRemap(textColorRemap)
-            .withPackFontSource(resolvePackFontSource());
+            .withPackFontSource(PackGlyphDispatcher.FontSource.forPack(packId, packRepository));
 
         if (settings.getName() != null && !settings.getName().isEmpty()) {
             String name = settings.getName();
@@ -159,7 +159,7 @@ public class MinecraftTooltipGenerator implements Generator {
      * through its {@code minecraft:tooltip/background} + {@code frame} override when present.
      */
     private TooltipSprites resolveThemeSprites() {
-        if (!hasActivePack()) {
+        if (!PackId.isActive(packId)) {
             if (tooltipStyle != null) {
                 throw new GeneratorException("Tooltip style `%s` requires a resource pack; select one with withPack",
                     tooltipStyle);
@@ -173,23 +173,6 @@ public class MinecraftTooltipGenerator implements Generator {
                     tooltipStyle, packId.toString()));
         }
         return repository.resolveDefaultTooltipSprites(packId).orElse(null);
-    }
-
-    /**
-     * The pack font resolver handed to the tooltip renderer, or null without an active pack
-     * (keeping no-pack rendering entirely on the built-in font path).
-     */
-    private PackGlyphDispatcher.FontSource resolvePackFontSource() {
-        if (!hasActivePack()) {
-            return null;
-        }
-        PackRepository repository = repository();
-        PackId activePack = packId;
-        return fontId -> repository.resolveFont(activePack, fontId);
-    }
-
-    private boolean hasActivePack() {
-        return packId != null && !PackId.VANILLA.equals(packId);
     }
 
     private PackRepository repository() {

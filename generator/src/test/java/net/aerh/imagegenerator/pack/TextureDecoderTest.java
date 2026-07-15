@@ -349,6 +349,18 @@ class TextureDecoderTest {
     }
 
     @Test
+    void firstFrameCopiesTranslucentChannelValuesExactly() {
+        // 0x406F0305 is premultiply-lossy (see strictDecodePreservesTranslucentChannelValuesExactly):
+        // the crop composites with AlphaComposite.Src, aligned with the decode path, so translucent
+        // frame pixels survive without drifting by one.
+        BufferedImage flipbook = argb(16, 32);
+        flipbook.setRGB(3, 16, 0x406F0305); // distinctive translucent pixel in frame index 1
+        BufferedImage frame = TextureDecoder.firstFrame(flipbook, new AnimationMeta(1, null, null));
+        assertEquals(0x406F0305, frame.getRGB(3, 0),
+            "translucent pixels must survive the first-frame crop without premultiplication rounding");
+    }
+
+    @Test
     void firstFrameRejectsIndexOutsideImage() {
         BufferedImage flipbook = argb(16, 32);
         assertThrows(PackLoadException.class,

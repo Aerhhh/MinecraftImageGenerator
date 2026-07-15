@@ -21,12 +21,10 @@ public final class FixturePacks {
 
     public static Path writeDefaultPack(Path root) {
         try {
-            write(root, "pack.mcmeta", """
-                {"pack":{"pack_format":88,"description":"test fixture"}}""");
+            packMcmeta(root, "test fixture");
 
             // Simple item: definition -> model -> 16x16 texture
-            item(root, "simple", """
-                {"model":{"type":"minecraft:model","model":"testpack:item/simple"}}""");
+            delegatingItem(root, "simple", "testpack:item/simple");
             model(root, "simple", "item/generated", "testpack:item/simple");
             texture(root, "simple", solid(16, 16, 0xFFFF0000));
 
@@ -67,36 +65,30 @@ public final class FixturePacks {
                 {"model":{"type":"minecraft:special","base":"minecraft:item/template_shulker_box"}}""");
 
             // Dangling model reference
-            item(root, "broken_model_ref", """
-                {"model":{"type":"minecraft:model","model":"testpack:item/missing_model"}}""");
+            delegatingItem(root, "broken_model_ref", "testpack:item/missing_model");
 
             // Model without layer0 whose parent is outside the pack
-            item(root, "no_layer0", """
-                {"model":{"type":"minecraft:model","model":"testpack:item/no_layer0"}}""");
+            delegatingItem(root, "no_layer0", "testpack:item/no_layer0");
             write(root, "assets/testpack/models/item/no_layer0.json", """
                 {"parent":"item/paper"}""");
 
             // Model whose layer0 points at a texture PNG that does not exist
-            item(root, "broken_texture_ref", """
-                {"model":{"type":"minecraft:model","model":"testpack:item/broken_texture_ref"}}""");
+            delegatingItem(root, "broken_texture_ref", "testpack:item/broken_texture_ref");
             model(root, "broken_texture_ref", "item/generated", "testpack:item/missing_texture");
 
             // Model whose layer0 is not a parseable resource reference (multiple colons)
-            item(root, "malformed_ref", """
-                {"model":{"type":"minecraft:model","model":"testpack:item/malformed_ref"}}""");
+            delegatingItem(root, "malformed_ref", "testpack:item/malformed_ref");
             model(root, "malformed_ref", "item/generated", "a:b:c");
 
             // Parent cycle: two models referencing each other, neither with layer0
-            item(root, "cyclic", """
-                {"model":{"type":"minecraft:model","model":"testpack:item/cycle_a"}}""");
+            delegatingItem(root, "cyclic", "testpack:item/cycle_a");
             write(root, "assets/testpack/models/item/cycle_a.json", """
                 {"parent":"testpack:item/cycle_b"}""");
             write(root, "assets/testpack/models/item/cycle_b.json", """
                 {"parent":"testpack:item/cycle_a"}""");
 
             // Animated flipbook: 16x48, frames list starts at index 2 (blue frame)
-            item(root, "animated", """
-                {"model":{"type":"minecraft:model","model":"testpack:item/animated"}}""");
+            delegatingItem(root, "animated", "testpack:item/animated");
             model(root, "animated", "item/generated", "testpack:item/animated");
             BufferedImage flipbook = transparent(16, 48);
             fill(flipbook, 0, 0xFFFF0000);
@@ -107,16 +99,14 @@ public final class FixturePacks {
                 {"animation":{"frametime":3,"frames":[2,0,1]}}""");
 
             // Emissive marker texture (alpha 252)
-            item(root, "emissive", """
-                {"model":{"type":"minecraft:model","model":"testpack:item/emissive"}}""");
+            delegatingItem(root, "emissive", "testpack:item/emissive");
             model(root, "emissive", "item/generated", "testpack:item/emissive");
             BufferedImage emissive = transparent(16, 16);
             emissive.setRGB(0, 0, (252 << 24) | 0x00FFAA00);
             texture(root, "emissive", emissive);
 
             // 32x32 texture
-            item(root, "big", """
-                {"model":{"type":"minecraft:model","model":"testpack:item/big"}}""");
+            delegatingItem(root, "big", "testpack:item/big");
             model(root, "big", "item/generated", "testpack:item/big");
             texture(root, "big", solid(32, 32, 0xFF123456));
 
@@ -173,8 +163,7 @@ public final class FixturePacks {
      */
     public static Path writeTooltipOnlyPack(Path root) {
         try {
-            write(root, "pack.mcmeta", """
-                {"pack":{"pack_format":88,"description":"tooltip-only test fixture"}}""");
+            packMcmeta(root, "tooltip-only test fixture");
 
             tooltipSprite(root, THEME_NAMESPACE, "ruby_background", solid(8, 8, 0xFF990011));
             write(root, "assets/" + THEME_NAMESPACE + "/textures/gui/sprites/tooltip/ruby_background.png.mcmeta", """
@@ -217,8 +206,7 @@ public final class FixturePacks {
      */
     public static Path writeTallAnimatedTooltipPack(Path root) {
         try {
-            write(root, "pack.mcmeta", """
-                {"pack":{"pack_format":88,"description":"tall animated tooltip test fixture"}}""");
+            packMcmeta(root, "tall animated tooltip test fixture");
 
             BufferedImage strip = transparent(146, 17 * 146);
             fillFrame(strip, 0, 146, 0xFF112233);
@@ -241,16 +229,14 @@ public final class FixturePacks {
                     + "\"border\":{\"left\":8,\"top\":9,\"right\":10,\"bottom\":11},\"stretch_inner\":true}}}");
             tooltipSprite(root, NAMESPACE, "tallstrip_frame", ring(146, 146, 4, 0xFF445566));
 
-            item(root, "oversized", """
-                {"model":{"type":"minecraft:model","model":"testpack:item/oversized"}}""");
+            delegatingItem(root, "oversized", "testpack:item/oversized");
             model(root, "oversized", "item/generated", "testpack:item/oversized");
             texture(root, "oversized", transparent(146, 2482));
 
             // Item whose model references the strip ALREADY stored under the tooltip sprite
             // path: the decode cap is chosen by usage, not path, so resolving this ITEM must
             // still fail at the strict item cap even though the same file decodes as a sheet.
-            item(root, "smuggled", """
-                {"model":{"type":"minecraft:model","model":"testpack:item/smuggled"}}""");
+            delegatingItem(root, "smuggled", "testpack:item/smuggled");
             model(root, "smuggled", "item/generated", "testpack:gui/sprites/tooltip/tallstrip_background");
 
             return root;
@@ -270,10 +256,8 @@ public final class FixturePacks {
             throw new IllegalArgumentException("Minimal pack needs at least 3 asset files, got: " + assetFileCount);
         }
         try {
-            write(root, "pack.mcmeta", """
-                {"pack":{"pack_format":88,"description":"minimal test fixture"}}""");
-            item(root, "simple", """
-                {"model":{"type":"minecraft:model","model":"testpack:item/simple"}}""");
+            packMcmeta(root, "minimal test fixture");
+            delegatingItem(root, "simple", "testpack:item/simple");
             model(root, "simple", "item/generated", "testpack:item/simple");
             texture(root, "simple", solid(16, 16, 0xFFFF0000));
             for (int i = 3; i < assetFileCount; i++) {
@@ -314,8 +298,7 @@ public final class FixturePacks {
      */
     public static Path writeFontPack(Path root) {
         try {
-            write(root, "pack.mcmeta", """
-                {"pack":{"pack_format":88,"description":"font-only test fixture"}}""");
+            packMcmeta(root, "font-only test fixture");
 
             BufferedImage pixelSheet = transparent(16, 8);
             pixelSheet.setRGB(5, 0, 0xFFFFFFFF);
@@ -391,8 +374,7 @@ public final class FixturePacks {
      */
     public static Path writeTextFontPack(Path root) {
         try {
-            write(root, "pack.mcmeta", """
-                {"pack":{"pack_format":88,"description":"text font test fixture"}}""");
+            packMcmeta(root, "text font test fixture");
 
             BufferedImage glyphSheet = transparent(9, 3);
             for (int y = 0; y < 3; y++) {
@@ -427,14 +409,15 @@ public final class FixturePacks {
     }
 
     /**
-     * Writes a pack for CONTAINER COMPOSITOR tests: the title-glyph background technique over a
-     * fully transparent container texture. Everything is synthetic and generated at test runtime.
+     * Writes a pack for CONTAINER COMPOSITOR and HUD LINE tests: the title-glyph background
+     * technique over a fully transparent container texture. Everything is synthetic and
+     * generated at test runtime.
      *
      * <p>Contents:
      * <ul>
      * <li>{@code minecraft:textures/gui/container/generic_54.png}: fully transparent 256x256
      *     (the MCC style - the pack blanks the chrome and draws menus via title glyphs).</li>
-     * <li>{@code testpack:menu}: bitmap font with three glyph-art cells plus a space provider:
+     * <li>{@code testpack:menu}: bitmap font with four glyph-art cells plus a space provider:
      *     <ul>
      *     <li>U+E100 "background": 32x32 solid 0xFF336699 cell, height 64, ascent 5 - scale 2,
      *         drawn 64x64 GUI px, advance 65.</li>
@@ -442,6 +425,9 @@ public final class FixturePacks {
      *         40x40 GUI px topping out ABOVE the title line, advance 41.</li>
      *     <li>U+E102 "deep": 8x8 solid 0xFF663399 cell, height 160, ascent 5 - scale 20, drawn
      *         160x160 GUI px reaching far below a 1-row GUI rect, advance 161.</li>
+     *     <li>U+E103 "anchor": 8x8 solid 0xFF44CC88 cell, height 8, ascent 7 - scale 1, drawn
+     *         8x8 GUI px with its cell top exactly ON the line top ({@code 7 - ascent = 0}),
+     *         advance 9. Placement-pin glyph for line anchor assertions.</li>
      *     <li>space advances: U+E10A -> -8.0, U+E10B -> 120.0.</li>
      *     </ul></li>
      * <li>Item {@code testpack:item/marker}: definition -> model -> 16x16 solid 0xFFAA5500
@@ -450,14 +436,14 @@ public final class FixturePacks {
      */
     public static Path writeContainerPack(Path root) {
         try {
-            write(root, "pack.mcmeta", """
-                {"pack":{"pack_format":88,"description":"container test fixture"}}""");
+            packMcmeta(root, "container test fixture");
 
             containerTexture(root, transparent(256, 256));
 
             fontTexture(root, NAMESPACE, "menu_bg.png", solid(32, 32, 0xFF336699));
             fontTexture(root, NAMESPACE, "menu_tall.png", solid(8, 8, 0xFF993366));
             fontTexture(root, NAMESPACE, "menu_deep.png", solid(8, 8, 0xFF663399));
+            fontTexture(root, NAMESPACE, "menu_anchor.png", solid(8, 8, 0xFF44CC88));
             fontJson(root, NAMESPACE, "menu", """
                 {"providers":[
                   {"type":"bitmap","file":"testpack:font/menu_bg.png",
@@ -466,10 +452,11 @@ public final class FixturePacks {
                    "height":40,"ascent":30,"chars":["\\uE101"]},
                   {"type":"bitmap","file":"testpack:font/menu_deep.png",
                    "height":160,"ascent":5,"chars":["\\uE102"]},
+                  {"type":"bitmap","file":"testpack:font/menu_anchor.png",
+                   "height":8,"ascent":7,"chars":["\\uE103"]},
                   {"type":"space","advances":{"\\uE10A":-8.0,"\\uE10B":120.0}}]}""");
 
-            item(root, "marker", """
-                {"model":{"type":"minecraft:model","model":"testpack:item/marker"}}""");
+            delegatingItem(root, "marker", "testpack:item/marker");
             model(root, "marker", "item/generated", "testpack:item/marker");
             texture(root, "marker", solid(16, 16, 0xFFAA5500));
 
@@ -515,8 +502,7 @@ public final class FixturePacks {
             throw new IllegalArgumentException("textureSize must be a multiple of 256, got: " + textureSize);
         }
         try {
-            write(root, "pack.mcmeta", """
-                {"pack":{"pack_format":88,"description":"container art test fixture"}}""");
+            packMcmeta(root, "container art test fixture");
 
             int unit = textureSize / 256;
             BufferedImage art = transparent(textureSize, textureSize);
@@ -591,8 +577,7 @@ public final class FixturePacks {
      */
     public static Path writeElementsPack(Path root) {
         try {
-            write(root, "pack.mcmeta", """
-                {"pack":{"pack_format":88,"description":"elements test fixture"}}""");
+            packMcmeta(root, "elements test fixture");
 
             BufferedImage paint = transparent(16, 16);
             BufferedImage backpaint = transparent(16, 16);
@@ -615,32 +600,27 @@ public final class FixturePacks {
                  "gui_light":"front",
                  "elements":[{"from":[0,0,0],"to":[16,16,1],
                    "faces":{"south":{"texture":"#front"},"north":{"texture":"#back"}}}]}""");
-            item(root, "flat", """
-                {"model":{"type":"minecraft:model","model":"testpack:item/elem_flat"}}""");
+            delegatingItem(root, "flat", "testpack:item/elem_flat");
 
             write(root, "assets/testpack/models/item/elem_mirrored.json", """
                 {"parent":"testpack:item/elem_flat",
                  "display":{"gui":{"rotation":[0,180,0]}}}""");
-            item(root, "mirrored", """
-                {"model":{"type":"minecraft:model","model":"testpack:item/elem_mirrored"}}""");
+            delegatingItem(root, "mirrored", "testpack:item/elem_mirrored");
 
             write(root, "assets/testpack/models/item/elem_tilted.json", """
                 {"parent":"testpack:item/elem_flat",
                  "display":{"gui":{"rotation":[0,2,0]}}}""");
-            item(root, "tilted", """
-                {"model":{"type":"minecraft:model","model":"testpack:item/elem_tilted"}}""");
+            delegatingItem(root, "tilted", "testpack:item/elem_tilted");
 
             write(root, "assets/testpack/models/item/elem_badspin.json", """
                 {"parent":"testpack:item/elem_flat",
                  "display":{"gui":{"rotation":[30,225,0]}}}""");
-            item(root, "badspin", """
-                {"model":{"type":"minecraft:model","model":"testpack:item/elem_badspin"}}""");
+            delegatingItem(root, "badspin", "testpack:item/elem_badspin");
 
             write(root, "assets/testpack/models/item/elem_retextured.json", """
                 {"parent":"testpack:item/elem_flat",
                  "textures":{"front":"testpack:item/green"}}""");
-            item(root, "retextured", """
-                {"model":{"type":"minecraft:model","model":"testpack:item/elem_retextured"}}""");
+            delegatingItem(root, "retextured", "testpack:item/elem_retextured");
 
             solidQuadModel(root, "elem_green", "testpack:item/green");
             solidQuadModel(root, "elem_blue", "testpack:item/blue");
@@ -683,21 +663,18 @@ public final class FixturePacks {
             item(root, "oversized", """
                 {"model":{"type":"minecraft:model","model":"testpack:item/elem_wide"},
                  "oversized_in_gui":true}""");
-            item(root, "clipped", """
-                {"model":{"type":"minecraft:model","model":"testpack:item/elem_wide"}}""");
+            delegatingItem(root, "clipped", "testpack:item/elem_wide");
 
             write(root, "assets/testpack/models/item/elem_rotated.json", """
                 {"textures":{"all":"testpack:item/white"},
                  "elements":[{"from":[0,0,0],"to":[16,16,1],
                    "rotation":{"angle":45,"axis":"z","origin":[8,8,8]},
                    "faces":{"south":{"texture":"#all"}}}]}""");
-            item(root, "rotated", """
-                {"model":{"type":"minecraft:model","model":"testpack:item/elem_rotated"}}""");
+            delegatingItem(root, "rotated", "testpack:item/elem_rotated");
 
             model(root, "plain", "item/generated", "testpack:item/plain");
             texture(root, "plain", solid(16, 16, 0xFFAA5500));
-            item(root, "plain_sprite", """
-                {"model":{"type":"minecraft:model","model":"testpack:item/plain"}}""");
+            delegatingItem(root, "plain_sprite", "testpack:item/plain");
 
             item(root, "mixed", """
                 {"model":{"type":"composite","models":[
@@ -709,8 +686,7 @@ public final class FixturePacks {
             write(root, "assets/testpack/models/item/elem_unmirrored.json", """
                 {"parent":"testpack:item/elem_mirrored",
                  "display":{"gui":{}}}""");
-            item(root, "unmirrored", """
-                {"model":{"type":"minecraft:model","model":"testpack:item/elem_unmirrored"}}""");
+            delegatingItem(root, "unmirrored", "testpack:item/elem_unmirrored");
 
             // Elements model whose parent ref points at a model missing from the pack.
             write(root, "assets/testpack/models/item/elem_orphan.json", """
@@ -718,8 +694,7 @@ public final class FixturePacks {
                  "textures":{"all":"testpack:item/white"},
                  "elements":[{"from":[0,0,0],"to":[16,16,1],
                    "faces":{"south":{"texture":"#all"}}}]}""");
-            item(root, "orphan", """
-                {"model":{"type":"minecraft:model","model":"testpack:item/elem_orphan"}}""");
+            delegatingItem(root, "orphan", "testpack:item/elem_orphan");
 
             // A 9-model parent chain (deeper than the resolver's 8-hop limit).
             write(root, "assets/testpack/models/item/elem_deep_0.json", """
@@ -733,13 +708,11 @@ public final class FixturePacks {
             }
             write(root, "assets/testpack/models/item/elem_deep_8.json", """
                 {"display":{"gui":{"scale":[2,2,2]}}}""");
-            item(root, "deep", """
-                {"model":{"type":"minecraft:model","model":"testpack:item/elem_deep_0"}}""");
+            delegatingItem(root, "deep", "testpack:item/elem_deep_0");
 
             // A pack item whose PATH contains "player_head": must render as an ordinary
             // elements model, never fall into the dedicated vanilla head pipeline.
-            item(root, "player_head_frame", """
-                {"model":{"type":"minecraft:model","model":"testpack:item/elem_flat"}}""");
+            delegatingItem(root, "player_head_frame", "testpack:item/elem_flat");
 
             // Flat layer0 sprite items carrying tint sources: constant, custom_model_data and
             // an unsupported (dye) source over a white 2x2 texture.
@@ -795,6 +768,20 @@ public final class FixturePacks {
 
     private static void item(Path root, String name, String json) throws IOException {
         write(root, "assets/testpack/items/item/" + name + ".json", json);
+    }
+
+    /**
+     * An item definition that plainly delegates to one model -
+     * {@code {"model":{"type":"minecraft:model","model":"<modelRef>"}}} - the most common
+     * fixture shape, shared so the boilerplate JSON is written exactly once.
+     */
+    private static void delegatingItem(Path root, String name, String modelRef) throws IOException {
+        item(root, name, "{\"model\":{\"type\":\"minecraft:model\",\"model\":\"" + modelRef + "\"}}");
+    }
+
+    /** The {@code pack.mcmeta} every fixture pack starts with; only the description varies. */
+    private static void packMcmeta(Path root, String description) throws IOException {
+        write(root, "pack.mcmeta", "{\"pack\":{\"pack_format\":88,\"description\":\"" + description + "\"}}");
     }
 
     private static void model(Path root, String name, String parent, String layer0) throws IOException {

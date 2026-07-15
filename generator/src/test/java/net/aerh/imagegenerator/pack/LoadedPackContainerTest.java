@@ -5,6 +5,7 @@ import net.aerh.imagegenerator.testsupport.FixturePacks;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -71,6 +72,29 @@ class LoadedPackContainerTest {
         PackRepository repository = new PackRepository();
         assertThrows(PackResolveException.class,
             () -> repository.resolveContainerBackground(PackId.parse("test:never")));
+    }
+
+    @Test
+    void resolvedBackgroundPreservesTranslucentChannelValuesExactly() throws IOException {
+        // 0x406F0305 is premultiply-lossy: SrcOver compositing would round-trip it to
+        // 0x40700404. The defensive copy uses AlphaComposite.Src, aligned with the decode path,
+        // so translucent chrome pixels (common in packs that fade the vanilla chrome rather than
+        // blank it) resolve exactly as authored.
+        Files.writeString(packDir.resolve("pack.mcmeta"), """
+            {"pack":{"pack_format":88,"description":"translucent container texture fixture"}}""");
+        BufferedImage texture = new BufferedImage(256, 256, BufferedImage.TYPE_INT_ARGB);
+        texture.setRGB(0, 0, 0x406F0305);
+        Path texturePath = packDir.resolve("assets/minecraft/textures/gui/container/generic_54.png");
+        Files.createDirectories(texturePath.getParent());
+        ImageIO.write(texture, "png", texturePath.toFile());
+
+        PackRepository repository = new PackRepository();
+        PackId packId = repository.register("test:translucent",
+            PackSource.directory(packDir, PackLimits.fromSystemProperties()));
+
+        BufferedImage background = repository.resolveContainerBackground(packId).orElseThrow();
+        assertEquals(0x406F0305, background.getRGB(0, 0),
+            "translucent pixels must survive the defensive copy without premultiplication rounding");
     }
 
     @Test

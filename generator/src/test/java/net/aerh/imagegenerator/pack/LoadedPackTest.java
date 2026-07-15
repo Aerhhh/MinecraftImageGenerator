@@ -111,6 +111,10 @@ class LoadedPackTest {
         PackResolveException exception = assertThrows(PackResolveException.class,
             () -> pack.resolveSprite("testpack:item/special"));
         assertTrue(exception.getMessage().contains("special"));
+        assertTrue(exception.getMessage().contains("testpack:item/special"),
+            "dispatch errors name the offending item like every other resolve error: " + exception.getMessage());
+        assertTrue(exception.getMessage().contains("test:pack"),
+            "dispatch errors name the pack: " + exception.getMessage());
     }
 
     @Test

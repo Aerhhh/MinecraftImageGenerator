@@ -1,9 +1,12 @@
 package net.aerh.imagegenerator.text;
 
 import lombok.extern.slf4j.Slf4j;
+import net.aerh.imagegenerator.pack.PackId;
+import net.aerh.imagegenerator.pack.PackRepository;
 import net.aerh.imagegenerator.pack.font.PackFont;
 import net.aerh.imagegenerator.pack.font.PackGlyph;
 import net.aerh.imagegenerator.text.segment.ColorSegment;
+import org.jetbrains.annotations.Nullable;
 
 import java.awt.Color;
 import java.awt.Graphics2D;
@@ -52,6 +55,26 @@ public final class PackGlyphDispatcher {
          *                                                                fails loudly)
          */
         Optional<PackFont> resolveFont(String fontId);
+
+        /**
+         * The font source for a pack selection - the single conversion shared by every generator
+         * that renders text through the tooltip line machinery, so their pack-activation and
+         * repository-defaulting rules can never drift apart.
+         *
+         * @param packId         the selected pack, or null / {@link PackId#VANILLA} for none
+         * @param packRepository the repository to resolve against, or null for
+         *                       {@link PackRepository#global()}
+         * @return a source resolving font ids against the selected pack, or null when no pack is
+         *     active (keeping rendering entirely on the built-in font path)
+         */
+        @Nullable
+        static FontSource forPack(@Nullable PackId packId, @Nullable PackRepository packRepository) {
+            if (!PackId.isActive(packId)) {
+                return null;
+            }
+            PackRepository repository = packRepository != null ? packRepository : PackRepository.global();
+            return fontId -> repository.resolveFont(packId, fontId);
+        }
     }
 
     private static final PackGlyphDispatcher DISABLED = new PackGlyphDispatcher(null);

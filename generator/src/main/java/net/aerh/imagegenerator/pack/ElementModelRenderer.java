@@ -317,7 +317,7 @@ class ElementModelRenderer {
         int tintIndex = paint.face().tintIndex();
         List<Integer> tints = paint.model().tints();
         if (tintIndex < 0 || tintIndex >= tints.size()) {
-            return 0xFFFFFF;
+            return GuiModelResolver.WHITE;
         }
         return tints.get(tintIndex);
     }
@@ -329,7 +329,7 @@ class ElementModelRenderer {
      * identical arithmetic.
      */
     static int tinted(int argb, int tint) {
-        if (tint == 0xFFFFFF) {
+        if (tint == GuiModelResolver.WHITE) {
             return argb;
         }
         int red = Math.round(((argb >> 16) & 0xFF) * ((tint >> 16) & 0xFF) / 255.0f);

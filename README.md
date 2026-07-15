@@ -235,11 +235,188 @@ The items below are invented, rendered with this pack's real textures and rarity
 - `withTooltipStyle(...)` selects the pack's `minecraft:tooltip_style` (e.g. `hypixel_skyblock:mythic`).
 - The item and inventory generators accept `withPack(...)` too, so a whole inventory can render in a pack's style.
 
+## Server pack support
+
+Beyond item textures and tooltip styles, the library renders the interface techniques that large server resource packs are built on: menus whose entire background is glyph art drawn by the title through a custom font, per-rarity tooltip frames, elements-based item models dispatched on custom model data, and HUD text pushed through bossbar names. Packs like these ship on many large servers; every example below uses a fictional pack (`emberveil`) - swap in your own pack's ids.
+
+### Loading large packs
+
+Pack reads are guarded by `PackLimits`. The defaults (read from `generator.pack.*` system properties) comfortably fit vanilla-scale packs, but large server packs can far exceed the 20,000-entry default. Construct one `PackLimits` and pass the **same instance** to both the source factory and `register` so read-time and index-time limits agree:
+
+```java
+PackLimits limits = new PackLimits(
+    60_000,               // maxEntries
+    8L * 1024 * 1024,     // maxEntryBytes
+    1_024,                // maxTextureDim (item and general GUI textures)
+    256L * 1024 * 1024,   // textureCacheMaxBytes
+    8_192);               // sheetTextureMaxDim (font glyph sheets, sprite strips)
+
+PackId emberveil = PackRepository.global().register(
+    "emberveil:main",
+    PackSource.zip(Path.of("packs/emberveil.zip"), limits),
+    limits);
+```
+
+- What `maxEntries` counts depends on the source type: a zip counts every central-directory record (regular files *and* directory entries), a directory source counts only regular files under `assets/`. Size the limit comfortably above the pack's record count.
+- Sheet-shaped textures (font glyph sheets, animated tooltip sprite strips) decode under the separate `sheetTextureMaxDim` cap (default 8192); item and general GUI textures keep the strict `maxTextureDim` image-bomb guard.
+
+### Pack fonts in text
+
+Each text segment resolves against a font id: its explicit pack font id when set, otherwise the resource location of its built-in font (`minecraft:default` for ordinary text, `minecraft:alt` for `&g`, `minecraft:illageralt` for `&h`). A pack that overrides `minecraft:default` therefore restyles ordinary tooltip text automatically - just render with `withPack(...)`:
+
+```java
+// The pack's minecraft:default override restyles all of this text
+new MinecraftTooltipGenerator.Builder()
+    .withName("Emberveil Compass")
+    .withRarity(Rarity.byName("RARE"))
+    .withItemLore("&7Points to the nearest ember rift.")
+    .withPack("emberveil:main")
+    .build();
+```
+
+Explicit font ids go on individual runs and segments: the `font` key of a menu recipe title run, `TitleRun.of(text, fontId)` for container titles and HUD lines, and `withPackFontId(...)` when composing a `MinecraftTooltip` from segments directly:
+
+```java
+MinecraftTooltip tooltip = MinecraftTooltip.builder()
+    .withSegments(ColorSegment.builder()
+        .withText("\uE0A0 Ember Rush \uE0A1")
+        .withPackFontId("emberveil:icons")
+        .build())
+    .withPackFontSource(fontId -> PackRepository.global().resolveFont(emberveil, fontId))
+    .build()
+    .render();
+```
+
+- Codepoints the pack font does not supply fall back to the built-in fonts; a missing font id falls back entirely.
+- The full provider model is honored: `bitmap` sheets at any declared height and ascent, `space` providers with negative or fractional advances (how packs kern glyph art together), `reference` expansion, and `filter` objects.
+- Obfuscated (`&k`) text substitutes glyphs of equal advance from the same pack font, deterministically per frame.
+- `PackRepository.global().fontIds(packId)` lists every font a pack defines.
+
+### Tooltip styles
+
+`withTooltipStyle(...)` (shown above) selects a pack's `minecraft:tooltip_style` sprite pair - `<style>_background` and `<style>_frame` - honoring their nine-slice `gui.scaling` mcmeta. Three details worth knowing:
+
+- Missing styles fail loudly: requesting a style the pack does not define throws instead of rendering the vanilla missing texture.
+- Without an explicit style, a pack override of the default tooltip sprites (`minecraft:tooltip/background` + `minecraft:tooltip/frame`) still themes every tooltip; animated sprite strips contribute their first frame.
+- `PackRepository.global().tooltipStyles(packId)` lists every style a pack defines.
+
+### Container screens
+
+`MinecraftContainerGenerator` renders a vanilla-geometry generic chest screen, including the title-glyph background technique: a menu whose whole background is glyph art drawn by the *title* through a custom font, over a fully transparent `generic_54` container texture.
+
+```java
+new MinecraftContainerGenerator.Builder()
+    .withRows(6)
+    .withTitle(
+        TitleRun.of("\uE000", "emberveil:menu"), // full-bleed menu art glyph
+        TitleRun.of("Vault of Embers"))
+    .withSlot(22, "emberveil:item/ember_blade,enchant")
+    .withSlot(31, "nether_star:5")
+    .withPack("emberveil:main")
+    .withScaleFactor(2)
+    .build();
+```
+
+- Geometry is vanilla-exact: the GUI rect is 176 x `114 + 18 * rows` GUI px, the top-left slot interior sits at (8, 18) with an 18 px pitch, and the title draws unclipped at (8, 6) in `#404040` with no shadow.
+- The canvas expands to cover the measured title-line extents, so full-bleed menu art reached through glyph ascents and negative advances is never clipped; slot positions stay anchored to the GUI rect.
+- With a pack override of `minecraft:textures/gui/container/generic_54.png`, the texture is stitched exactly like the client (chest section above the player-inventory section); without one, procedural vanilla-style chrome is drawn.
+- Layers follow the vanilla z-order: background, then title art, then items, then stack count badges.
+- Slot items use the inventory item spec (modifiers like `enchant` and `hover` included) plus an optional trailing `:amount`; pack items needing custom model data use `withSlot(int, String, CustomModelData)`.
+
+#### Menu recipes
+
+`MinecraftContainerGenerator.fromRecipe(String)` parses a JSON transcription of a menu and returns a preconfigured builder. Pack selection and scale factor are not part of the document - set them on the returned builder:
+
+```java
+MinecraftContainerGenerator menu = MinecraftContainerGenerator.fromRecipe("""
+    {
+      "rows": 3,
+      "title": [
+        {"text": "\\uE001", "font": "emberveil:menu"},
+        {"text": "Reliquary", "color": "#3F3F3F", "bold": true}
+      ],
+      "slots": {
+        "11": "emberveil:item/ember_blade",
+        "13": "diamond_sword,enchant",
+        "15": "emberveil:item/ashen_idol:16"
+      }
+    }""")
+    .withPack("emberveil:main")
+    .build();
+```
+
+The full schema:
+
+- `rows` (required): chest rows, an integer 1-6.
+- `title` (optional): an array of run objects concatenated into one line. Each run takes `text` (required), `font` (a resource location, e.g. a pack font), `color` (strict `#RRGGBB`), and boolean `bold` / `italic` (absent means false).
+- `slots` (optional): an object mapping 1-based row-major slot indices (`"1"` is the top-left slot, `"rows * 9"` the bottom-right) to item spec strings: a vanilla material or pack item ref, optional modifiers (`enchant`, `hover`, ...), optional durability, and an optional trailing `:amount` (1-64).
+- Parsing is strict by design, so a bad transcription fails loudly instead of rendering a silently wrong menu: unknown keys, duplicate keys anywhere, non-canonical slot keys (`"01"`, `"+1"`), out-of-range slot indices, malformed colors or font ids, and trailing content are all rejected.
+
+### Pack item models
+
+Items can be addressed by their `minecraft:item_model` component value, and item model definitions that dispatch on `minecraft:custom_model_data` evaluate against caller-supplied data:
+
+```java
+// Address an item by its item model definition
+new MinecraftItemGenerator.Builder()
+    .withItemModel("emberveil:item/ember_blade")
+    .withPack("emberveil:main")
+    .isBigImage()
+    .build();
+
+// Evaluate custom_model_data dispatch nodes and tint sources
+new MinecraftItemGenerator.Builder()
+    .withItemModel("emberveil:item/soul_lantern")
+    .withCustomModelData(new CustomModelData(
+        List.of(3.0f),        // floats:  range_dispatch
+        List.of(true),        // flags:   condition
+        List.of("lit"),       // strings: select
+        List.of(0xFF7A1F)))   // colors:  custom_model_data tint sources
+    .withPack("emberveil:main")
+    .build();
+```
+
+- Flat `layer0` models render as sprites exactly like retextured vanilla items; elements-based models rasterize through a flat front projection directly at the target resolution, so sub-pixel geometry survives at any scale.
+- `oversized_in_gui` items skip slot clipping: in container renders their art anchors on the slot center and spans neighboring slots, exactly like the in-game client.
+- `condition`, `select`, `range_dispatch` and `composite` nodes are supported, along with constant and `custom_model_data` tint sources.
+
+### HUD lines
+
+Servers render HUD text through bossbar names with the bar sprites blanked by the pack. `MinecraftHudLineGenerator` renders such a stack of centered text lines at the exact vanilla bossbar anchors - line `k`'s top edge at GUI `y = 3 + 19 * k` on a canvas whose top is the screen top:
+
+```java
+new MinecraftHudLineGenerator.Builder()
+    .withLine(TitleRun.of("\uE010", "emberveil:hud")) // glyph art line
+    .withLine(TitleRun.of("Ember Rush "), TitleRun.of("02:41", "emberveil:timer"))
+    .withLine()                                       // blank spacer line
+    .withLine(TitleRun.of("Collect 30 embers"))
+    .withPack("emberveil:main")
+    .build();
+```
+
+- Lines center on the canvas middle in whole GUI px - vanilla's exact `width / 2 - textWidth / 2` integer math - with extent-aware measurement, so trailing negative advances do not skew the centering. The default canvas width is 320 GUI px (a 1280 px screen at GUI scale 4); override it with `withGuiWidth(...)`.
+- Runs without an explicit color draw in white with a drop shadow, matching vanilla bossbar names.
+- `TitleRun` is the same styled-run type the container title uses, so pack fonts, colors, bold and italic behave identically in both.
+
+### Limitations
+
+Documented edges of the pack renderer, all deliberate:
+
+- **Fonts:** `ttf`, `unihex` and `legacy_unicode` providers parse but do not render; codepoints they would serve fall back to the built-in fonts (a warning is logged once per font).
+- **Model rotations:** model elements with non-zero rotations fail loudly rather than render wrong. `display.gui` rotations snap to the identity or the horizontal mirror when within 5 degrees of them about y (absorbing decorative tilts); anything else fails loudly.
+- **True 3D:** elements models render as layered, viewer-facing quads with no perspective - correct for UI-flat pack art, wrong-but-defined for deep 3D models; east/west/up/down faces never render.
+- **Tall glyphs in tooltips:** the standard tooltip canvas stays line-height based, so glyph art much taller than the line clips there. The container generator expands its canvas from measured art extents on every side; the HUD generator grows its canvas bottom for deep art, but its top edge stays the screen top, so art crossing the top or side edges clips exactly as in game.
+- **Effects on elements renders in slots:** container slot modifiers (`enchant`, `hover`, durability) are ignored for elements-model slot items, with a warning. The standalone item generator is not limited this way - it applies its effect pipeline to elements renders like any other render.
+- **Animation:** container renders are static images; animated slot items and animated GUI sprites contribute their first frame.
+- **Shaders:** shader-driven effects (core shader text animations and the like) are out of scope.
+
 ## Features
 
 - **Tooltip rendering** with full Minecraft formatting code support (colors, bold, italic, obfuscation, strikethrough, underline), hex colors, gradients, text wrapping, rarity coloring, and configurable padding and borders
-- **Resource pack support** to render with a loaded resource pack's item textures, tooltip styles, and glyphs (for example, Hypixel SkyBlock), with vanilla as the default
+- **Resource pack support** to render with a loaded resource pack's item textures, item model definitions, custom fonts, tooltip styles, and glyphs (for example, Hypixel SkyBlock), with vanilla as the default
 - **Inventory rendering** with item placement, stack counts, titles, and configurable rows and columns
+- **Container screen rendering** of generic chest menus with pack backgrounds, title-glyph menu art, and a strict JSON recipe format for menu transcriptions
+- **HUD line rendering** of bossbar-anchored text stacks, pack glyph art included
 - **Item rendering** with enchantment glint animations, hover effects, durability bars, and colored overlays
 - **Player head rendering** from player names, texture URLs, base64 data, or hex texture hashes
 - **NBT parsing** that auto-detects multiple Minecraft NBT formats (1.20.5+ components, 1.13-1.20.4 post-flattening, and pre-1.13)

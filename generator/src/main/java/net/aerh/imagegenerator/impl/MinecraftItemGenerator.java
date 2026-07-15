@@ -142,7 +142,7 @@ public class MinecraftItemGenerator implements Generator {
      * the vanilla spritesheet keyed by the reference's path.
      */
     private BufferedImage resolveBaseTexture() {
-        boolean usingPack = packId != null && !PackId.VANILLA.equals(packId);
+        boolean usingPack = PackId.isActive(packId);
         String packRef = itemModel != null ? namespacedItemModel() : itemId;
         if (usingPack) {
             var visual = packRepository.resolveItemVisual(packId, packRef, customModelData, ELEMENTS_PX_PER_GUI_PX);

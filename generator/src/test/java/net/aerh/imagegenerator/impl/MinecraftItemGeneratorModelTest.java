@@ -3,6 +3,7 @@ package net.aerh.imagegenerator.impl;
 import net.aerh.imagegenerator.cache.GeneratorCacheKey;
 import net.aerh.imagegenerator.exception.GeneratorException;
 import net.aerh.imagegenerator.exception.PackResolveException;
+import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.pack.CustomModelData;
 import net.aerh.imagegenerator.pack.PackId;
 import net.aerh.imagegenerator.pack.PackLimits;
@@ -20,6 +21,7 @@ import java.util.List;
 
 import static net.aerh.imagegenerator.testsupport.CustomModelDatas.floats;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -125,6 +127,28 @@ class MinecraftItemGeneratorModelTest {
             () -> packBuilder().withItem("testpack:item/badspin").build().generate());
         assertThrows(PackResolveException.class,
             () -> packBuilder().withItem("testpack:item/mixed").build().generate());
+    }
+
+    /**
+     * Regression: unlike container slots (which drop item modifiers for elements-model slot
+     * items with a warning), the standalone item generator applies its effect pipeline to
+     * elements renders like any other render. The README documents both behaviors; this pins
+     * the item-generator side so the two paths cannot drift silently.
+     */
+    @Test
+    void effectPipelineAppliesToElementsRenders() {
+        GeneratedObject plain = packBuilder().withItem("testpack:item/flat").build().generate();
+        GeneratedObject enchanted = packBuilder().withItem("testpack:item/flat")
+            .isEnchanted(true).build().generate();
+        GeneratedObject hovered = packBuilder().withItem("testpack:item/flat")
+            .withHoverEffect(true).build().generate();
+
+        assertFalse(plain.isAnimated(), "the unmodified elements render stays static");
+        assertTrue(enchanted.isAnimated(), "the enchant glint animates the elements render");
+        ImageAssertions.assertPixelsDiffer(plain.getImage(), enchanted.getImage(),
+            "glint over the elements raster");
+        ImageAssertions.assertPixelsDiffer(plain.getImage(), hovered.getImage(),
+            "hover over the elements raster");
     }
 
     @Test

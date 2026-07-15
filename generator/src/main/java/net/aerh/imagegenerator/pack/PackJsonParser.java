@@ -77,7 +77,7 @@ class PackJsonParser {
                 case "constant" -> new ItemModelNode.TintSpec.Constant(requireColor(tint, "value"));
                 case "custom_model_data" -> new ItemModelNode.TintSpec.CustomModelDataTint(
                     optionalIndex(tint),
-                    tint.has("default") ? requireColor(tint, "default") : 0xFFFFFF);
+                    tint.has("default") ? requireColor(tint, "default") : GuiModelResolver.WHITE);
                 default -> new ItemModelNode.TintSpec.Unsupported(type);
             });
         }

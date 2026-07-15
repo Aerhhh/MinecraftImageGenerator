@@ -49,6 +49,10 @@ class GuiModelResolver {
         return resolveGui(root, CustomModelData.EMPTY).stream().map(GuiModel::modelRef).toList();
     }
 
+    /**
+     * Resolves the node tree against the supplied custom model data into the ordered model
+     * layers to composite, tint sources unevaluated (see the class javadoc).
+     */
     public static List<GuiModel> resolveGui(ItemModelNode root, CustomModelData data) {
         List<GuiModel> models = new ArrayList<>();
         collect(root, data, models);

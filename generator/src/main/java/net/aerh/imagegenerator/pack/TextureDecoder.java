@@ -494,6 +494,14 @@ class TextureDecoder {
         return argb;
     }
 
+    /**
+     * Crops a decoded flipbook texture to its static first frame (the frame the mcmeta's frames
+     * list starts at). The crop is an exact per-pixel copy: like {@link #decode}'s ARGB
+     * conversion it composites with {@link AlphaComposite#Src}, so translucent pixels keep their
+     * exact channel values instead of drifting by one through SrcOver premultiplication.
+     *
+     * @throws PackLoadException when the frame index or size falls outside the texture bounds
+     */
     public static BufferedImage firstFrame(BufferedImage image, AnimationMeta meta) {
         int frameWidth = meta.frameWidth() != null ? meta.frameWidth() : image.getWidth();
         // Vanilla default: square frames sized by texture width, stacked vertically.
@@ -509,6 +517,8 @@ class TextureDecoder {
         BufferedImage frame = new BufferedImage(frameWidth, frameHeight, BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = frame.createGraphics();
         try {
+            // Src, not the default SrcOver: see toArgb - the crop must copy pixels exactly.
+            graphics.setComposite(AlphaComposite.Src);
             graphics.drawImage(image.getSubimage(0, (int) y, frameWidth, frameHeight), 0, 0, null);
         } finally {
             graphics.dispose();

@@ -84,7 +84,9 @@ public class MinecraftInventoryGenerator implements Generator {
             }
             return ImageUtil.resizeImage(ImageIO.read(slotStream), size, size, BufferedImage.TYPE_INT_ARGB);
         } catch (IOException e) {
-            log.error("Failed to load slot texture", e);
+            // Warn, not error, matching the missing-resource branch above: both outcomes are
+            // recovered by the programmatic slot outlines.
+            log.warn("Failed to load slot texture; slots render with programmatic outlines", e);
             return null;
         }
     }
@@ -326,7 +328,8 @@ public class MinecraftInventoryGenerator implements Generator {
 
                     return;
                 } catch (IOException e) {
-                    log.error("Failed to encode animated inventory, falling back to static frame", e);
+                    // Warn, not error: the render still succeeds with the static first frame.
+                    log.warn("Failed to encode animated inventory, falling back to static frame", e);
                     this.inventoryImage = frames.getFirst();
                 }
             }

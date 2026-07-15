@@ -12,6 +12,7 @@ import net.aerh.imagegenerator.pack.font.FontResolver;
 import net.aerh.imagegenerator.pack.font.PackFont;
 import org.jetbrains.annotations.Nullable;
 
+import java.awt.AlphaComposite;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
@@ -418,7 +419,7 @@ final class LoadedPack {
             return Optional.empty();
         }
         return Optional.of(composeSpriteLayers(itemRef,
-            GuiModelResolver.resolveGui(entry.node(), CustomModelData.EMPTY), CustomModelData.EMPTY));
+            resolveGuiModels(itemRef, entry, CustomModelData.EMPTY), CustomModelData.EMPTY));
     }
 
     /**
@@ -454,7 +455,7 @@ final class LoadedPack {
         if (entry == null) {
             return Optional.empty();
         }
-        List<GuiModelResolver.GuiModel> models = GuiModelResolver.resolveGui(entry.node(), data);
+        List<GuiModelResolver.GuiModel> models = resolveGuiModels(itemRef, entry, data);
         List<ChainData> chains = new ArrayList<>(models.size());
         boolean anyElements = false;
         boolean allElements = !models.isEmpty();
@@ -481,7 +482,7 @@ final class LoadedPack {
             instances.add(new ElementModelRenderer.ModelInstance(
                 chain.elements(), chain.textures(),
                 chain.guiTransform() != null ? chain.guiTransform() : GuiTransform.IDENTITY,
-                GuiModelResolver.evaluateTints(models.get(i).tints(), data)));
+                evaluateElementTints(itemRef, models.get(i).tints(), data)));
         }
         ElementModelRenderer.Raster raster = ElementModelRenderer.render(
             instances, pixelsPerGuiPx, entry.oversizedInGui(), this::loadElementTexture,
@@ -517,6 +518,39 @@ final class LoadedPack {
                 itemRef, id.toString(), entry.error());
         }
         return entry;
+    }
+
+    /**
+     * Resolves the item's model node tree against the supplied data, prefixing dispatch errors
+     * (unsupported node types, select/range_dispatch dead ends) with the item and pack:
+     * {@link GuiModelResolver} is item-agnostic, and resolve-time failures must name their
+     * offender like every other resolve error this class raises.
+     */
+    private List<GuiModelResolver.GuiModel> resolveGuiModels(String itemRef, ItemEntry entry, CustomModelData data) {
+        try {
+            return GuiModelResolver.resolveGui(entry.node(), data);
+        } catch (PackResolveException e) {
+            throw withItemContext(itemRef, e);
+        }
+    }
+
+    /**
+     * Evaluates an elements layer's tint sources strictly, prefixing unsupported-source errors
+     * with the item and pack; see {@link #resolveGuiModels}.
+     */
+    private List<Integer> evaluateElementTints(String itemRef, List<ItemModelNode.TintSpec> tints,
+                                               CustomModelData data) {
+        try {
+            return GuiModelResolver.evaluateTints(tints, data);
+        } catch (PackResolveException e) {
+            throw withItemContext(itemRef, e);
+        }
+    }
+
+    /** Wraps an item-agnostic resolve error with the item ref and pack id it belongs to. */
+    private PackResolveException withItemContext(String itemRef, PackResolveException cause) {
+        return new PackResolveException(GeneratorException.formatMessage(
+            "Item `%s` in pack `%s`: %s", itemRef, id.toString(), cause.getMessage()), cause);
     }
 
     /**
@@ -695,23 +729,36 @@ final class LoadedPack {
         return image;
     }
 
+    /**
+     * An exact per-pixel copy: {@link AlphaComposite#Src}, aligned with the decode path in
+     * {@link TextureDecoder}, so defensively copied cache instances keep their exact translucent
+     * channel values instead of drifting by one through SrcOver premultiplication.
+     */
     private static BufferedImage copy(BufferedImage source) {
         BufferedImage target = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_ARGB);
-        drawOnto(target, source);
-        return target;
-    }
-
-    private static BufferedImage stack(BufferedImage base, BufferedImage layer) {
-        drawOnto(base, layer);
-        return base;
-    }
-
-    private static void drawOnto(BufferedImage target, BufferedImage layer) {
         Graphics2D graphics = target.createGraphics();
         try {
-            graphics.drawImage(layer, 0, 0, target.getWidth(), target.getHeight(), null);
+            graphics.setComposite(AlphaComposite.Src);
+            graphics.drawImage(source, 0, 0, null);
         } finally {
             graphics.dispose();
         }
+        return target;
+    }
+
+    /**
+     * Alpha-blends {@code layer} over {@code base} (scaled to the base's size), mutating and
+     * returning {@code base}. Deliberately the DEFAULT SrcOver compositing - unlike
+     * {@link #copy}, stacking composite layers is real alpha blending, exactly how the vanilla
+     * client bakes {@code item/generated} layers over one another.
+     */
+    private static BufferedImage stack(BufferedImage base, BufferedImage layer) {
+        Graphics2D graphics = base.createGraphics();
+        try {
+            graphics.drawImage(layer, 0, 0, base.getWidth(), base.getHeight(), null);
+        } finally {
+            graphics.dispose();
+        }
+        return base;
     }
 }

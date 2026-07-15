@@ -179,15 +179,17 @@ public class MinecraftContainerGenerator implements Generator {
     }
 
     /**
-     * One styled run of the container title line. Runs concatenate into a single line rendered
-     * through the same segment machinery as tooltip lines, so pack font glyphs (including
+     * One styled run of a composed text line - the container title here, HUD lines in
+     * {@link MinecraftHudLineGenerator}. Runs concatenate into a single line rendered through
+     * the same segment machinery as tooltip lines, so pack font glyphs (including
      * negative-advance padding fonts) work exactly as they do in tooltips.
      *
      * @param text   the run's text (required; may be empty)
      * @param fontId optional resource-pack font id (e.g. {@code wynn:menu}); null uses the
      *               default font (which a pack may still override via {@code minecraft:default})
-     * @param color  optional text color; null uses the vanilla container title default
-     *               {@link #DEFAULT_TITLE_COLOR}
+     * @param color  optional text color; null uses the rendering generator's default - the
+     *               vanilla container title {@link #DEFAULT_TITLE_COLOR} here, white for HUD
+     *               lines
      * @param bold   whether the run renders bold
      * @param italic whether the run renders italic
      */
@@ -206,6 +208,22 @@ public class MinecraftContainerGenerator implements Generator {
         /** A run in a specific (pack) font with default color and no styles. */
         public static TitleRun of(String text, @Nullable String fontId) {
             return new TitleRun(text, fontId, null, false, false);
+        }
+
+        /**
+         * Converts this run to a tooltip segment, the single run-to-segment conversion shared
+         * by every compositor that renders run lists through the tooltip line machinery.
+         *
+         * @param defaultColor the color runs without an explicit {@link #color()} render in
+         */
+        ColorSegment toSegment(TextColor defaultColor) {
+            return ColorSegment.builder()
+                .withText(text)
+                .withColor(color != null ? color : defaultColor)
+                .withPackFontId(fontId)
+                .isBold(bold)
+                .isItalic(italic)
+                .build();
         }
     }
 
@@ -272,35 +290,16 @@ public class MinecraftContainerGenerator implements Generator {
     private MinecraftTooltip buildTitleLine() {
         List<ColorSegment> segments = new ArrayList<>(title.size());
         for (TitleRun run : title) {
-            segments.add(ColorSegment.builder()
-                .withText(run.text())
-                .withColor(run.color() != null ? run.color() : DEFAULT_TITLE_COLOR)
-                .withPackFontId(run.fontId())
-                .isBold(run.bold())
-                .isItalic(run.italic())
-                .build());
+            segments.add(run.toSegment(DEFAULT_TITLE_COLOR));
         }
         return MinecraftTooltip.builder()
             .setRenderBorder(false)
             .hasFirstLinePadding(false)
             .withScaleFactor(scaleFactor)
             .withTextShadow(false)
-            .withPackFontSource(resolvePackFontSource())
+            .withPackFontSource(PackGlyphDispatcher.FontSource.forPack(packId, packRepository))
             .withSegments(segments)
             .build();
-    }
-
-    /**
-     * The pack font resolver handed to the title renderer, or null without an active pack
-     * (keeping no-pack rendering entirely on the built-in font path).
-     */
-    private PackGlyphDispatcher.FontSource resolvePackFontSource() {
-        if (!hasActivePack()) {
-            return null;
-        }
-        PackRepository repository = repository();
-        PackId activePack = packId;
-        return fontId -> repository.resolveFont(activePack, fontId);
     }
 
     /**
@@ -313,7 +312,7 @@ public class MinecraftContainerGenerator implements Generator {
      * the GUI rect's last row unpainted - exactly like the in-game screen.
      */
     private void drawBackground(Graphics2D graphics, int originX, int originY, int pixelSize, int guiHeight) {
-        BufferedImage packBackground = hasActivePack()
+        BufferedImage packBackground = PackId.isActive(packId)
             ? repository().resolveContainerBackground(packId).orElse(null)
             : null;
         if (packBackground == null) {
@@ -443,7 +442,7 @@ public class MinecraftContainerGenerator implements Generator {
     @Nullable
     private PackItemVisual.ElementsRaster resolveElementsRaster(InventoryItem item, CustomModelData data,
                                                                 int pixelSize) {
-        if (!hasActivePack() || isVanillaPlayerHead(item.getItemName())) {
+        if (!PackId.isActive(packId) || isVanillaPlayerHead(item.getItemName())) {
             return null;
         }
         Optional<PackItemVisual.ElementsRaster> raster = elementsRasterCache.computeIfAbsent(
@@ -486,7 +485,7 @@ public class MinecraftContainerGenerator implements Generator {
         return itemVisualCache.computeIfAbsent(
             new ItemVisualKey(item.getItemName(), item.getExtraContent(), item.getDurabilityPercent()),
             key -> MinecraftInventoryGenerator
-                .generateSlotObject(item, generationContext, hasActivePack() ? packId : null, packRepository)
+                .generateSlotObject(item, generationContext, PackId.isActive(packId) ? packId : null, packRepository)
                 .getImage());
     }
 
@@ -501,10 +500,6 @@ public class MinecraftContainerGenerator implements Generator {
             joined.append(spec.spec()).append(':').append(entry.getKey()).append(',').append(spec.amount());
         }
         return joined.toString();
-    }
-
-    private boolean hasActivePack() {
-        return packId != null && !PackId.VANILLA.equals(packId);
     }
 
     private PackRepository repository() {
@@ -803,6 +798,10 @@ public class MinecraftContainerGenerator implements Generator {
         return element.getAsBoolean();
     }
 
+    /**
+     * Builds {@link MinecraftContainerGenerator} instances. Construct one directly, or preloaded
+     * with a document's rows, title and slots via {@link #fromRecipe(String)}.
+     */
     public static class Builder implements ClassBuilder<MinecraftContainerGenerator> {
 
         private int rows;
@@ -913,6 +912,12 @@ public class MinecraftContainerGenerator implements Generator {
             return this;
         }
 
+        /**
+         * Validates the slot indices against the final row count and builds the generator.
+         *
+         * @throws IllegalArgumentException when {@code rows} was never set (or is out of range),
+         *                                  or a slot index exceeds {@code rows * 9}
+         */
         @Override
         public @NotNull MinecraftContainerGenerator build() {
             if (rows < MIN_ROWS || rows > MAX_ROWS) {

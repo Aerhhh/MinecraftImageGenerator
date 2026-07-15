@@ -61,6 +61,11 @@ public record PackLimits(int maxEntries, long maxEntryBytes, int maxTextureDim, 
         }
     }
 
+    /**
+     * Reads every limit from its {@code generator.pack.*} system property, applying the secure
+     * defaults for absent properties: 20,000 entries, 8 MiB per entry, 1024 px item textures,
+     * a 64 MiB texture cache and 8192 px sheet textures.
+     */
     public static PackLimits fromSystemProperties() {
         return new PackLimits(
             Integer.getInteger("generator.pack.maxEntries", 20_000),

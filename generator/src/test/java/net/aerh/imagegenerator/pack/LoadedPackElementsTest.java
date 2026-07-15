@@ -158,6 +158,10 @@ class LoadedPackElementsTest {
         PackResolveException exception = assertThrows(PackResolveException.class,
             () -> pack.resolveItemVisual("testpack:item/unknown_tint", CustomModelData.EMPTY, SCALE));
         assertTrue(exception.getMessage().contains("dye"));
+        assertTrue(exception.getMessage().contains("testpack:item/unknown_tint"),
+            "tint errors name the offending item like every other resolve error: " + exception.getMessage());
+        assertTrue(exception.getMessage().contains("test:elements"),
+            "tint errors name the pack: " + exception.getMessage());
     }
 
     @Test

@@ -1,16 +1,23 @@
 package net.aerh.imagegenerator.text;
 
 import net.aerh.imagegenerator.exception.PackResolveException;
+import net.aerh.imagegenerator.pack.PackId;
+import net.aerh.imagegenerator.pack.PackLimits;
+import net.aerh.imagegenerator.pack.PackRepository;
+import net.aerh.imagegenerator.pack.PackSource;
 import net.aerh.imagegenerator.pack.font.FontFilter;
 import net.aerh.imagegenerator.pack.font.FontProviderDefinition;
 import net.aerh.imagegenerator.pack.font.PackFont;
+import net.aerh.imagegenerator.testsupport.FixturePacks;
 import net.aerh.imagegenerator.text.segment.ColorSegment;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -22,6 +29,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -67,6 +76,37 @@ class PackGlyphDispatcherTest {
         assertTrue(PackGlyphDispatcher.disabled().dispatch(segment("A"), 'A').isEmpty());
         assertSame(PackGlyphDispatcher.disabled(), PackGlyphDispatcher.of(null),
             "null source is the disabled dispatcher");
+    }
+
+    @Test
+    void forPackReturnsNullWithoutAnActivePack() {
+        assertNull(PackGlyphDispatcher.FontSource.forPack(null, new PackRepository()),
+            "no pack selection means no dispatch");
+        assertNull(PackGlyphDispatcher.FontSource.forPack(PackId.VANILLA, new PackRepository()),
+            "the built-in vanilla pack never dispatches pack glyphs");
+    }
+
+    @Test
+    void forPackResolvesFontsAgainstTheSelectedPack(@TempDir Path packDir) {
+        FixturePacks.writeFontPack(packDir);
+        PackRepository repository = new PackRepository();
+        PackId packId = repository.register("test:fontsource",
+            PackSource.directory(packDir, PackLimits.fromSystemProperties()));
+
+        PackGlyphDispatcher.FontSource source = PackGlyphDispatcher.FontSource.forPack(packId, repository);
+        assertNotNull(source, "an active pack yields a source");
+        assertTrue(source.resolveFont("testpack:pixel").isPresent(), "pack fonts resolve");
+        assertTrue(source.resolveFont("testpack:absent").isEmpty(), "unknown fonts stay empty");
+    }
+
+    @Test
+    void forPackBindsTheInjectedRepositoryNotTheGlobalOne() {
+        PackRepository empty = new PackRepository();
+        PackGlyphDispatcher.FontSource source =
+            PackGlyphDispatcher.FontSource.forPack(PackId.parse("test:unregistered"), empty);
+        assertNotNull(source);
+        assertThrows(PackResolveException.class, () -> source.resolveFont("minecraft:default"),
+            "the source must consult the injected repository, where this pack is not registered");
     }
 
     @Test
