@@ -16,24 +16,26 @@ package net.aerh.imagegenerator.pack;
  * {@link PackRepository#register(String, PackSource, PackLimits)} so read-time and index-time
  * limits agree.
  *
- * <p><b>Font textures get their own cap:</b> {@link #maxTextureDim()} is the image-bomb guard
- * for item and GUI sprite textures, where vanilla-scale art stays far below the 1024 default.
- * Font glyph sheets are legitimately much larger - real server packs ship sheets in the
- * 2048-8192 pixel range - so font sheet decodes are bounded by the separate
- * {@link #fontTextureMaxDim()} (default 8192, {@code generator.pack.fontTextureMaxDim}). The
- * 4-argument constructor keeps the pre-font record shape working and applies the font default.
+ * <p><b>Sheet textures get their own cap:</b> {@link #maxTextureDim()} is the image-bomb guard
+ * for item and general GUI textures, where vanilla-scale art stays far below the 1024 default.
+ * Sheet-shaped textures are legitimately much larger: font glyph sheets run 2048-8192 pixels in
+ * real server packs, and animated tooltip sprite strips stack many square frames vertically
+ * (146x2482 ships in the wild). Both decode under the separate {@link #sheetTextureMaxDim()}
+ * (default 8192, {@code generator.pack.sheetTextureMaxDim}); item textures keep the strict
+ * {@link #maxTextureDim()}. The 4-argument constructor keeps the pre-font record shape working
+ * and applies the sheet default.
  */
 public record PackLimits(int maxEntries, long maxEntryBytes, int maxTextureDim, long textureCacheMaxBytes,
-                         int fontTextureMaxDim) {
+                         int sheetTextureMaxDim) {
 
-    private static final int DEFAULT_FONT_TEXTURE_MAX_DIM = 8_192;
+    private static final int DEFAULT_SHEET_TEXTURE_MAX_DIM = 8_192;
 
     /**
      * Compatibility constructor predating font support: applies the default
-     * {@link #fontTextureMaxDim()} of 8192.
+     * {@link #sheetTextureMaxDim()} of 8192.
      */
     public PackLimits(int maxEntries, long maxEntryBytes, int maxTextureDim, long textureCacheMaxBytes) {
-        this(maxEntries, maxEntryBytes, maxTextureDim, textureCacheMaxBytes, DEFAULT_FONT_TEXTURE_MAX_DIM);
+        this(maxEntries, maxEntryBytes, maxTextureDim, textureCacheMaxBytes, DEFAULT_SHEET_TEXTURE_MAX_DIM);
     }
 
     public PackLimits {
@@ -53,9 +55,9 @@ public record PackLimits(int maxEntries, long maxEntryBytes, int maxTextureDim, 
             throw new IllegalArgumentException(
                 "generator.pack.textureCache.maxBytes must be positive, got: " + textureCacheMaxBytes);
         }
-        if (fontTextureMaxDim <= 0) {
+        if (sheetTextureMaxDim <= 0) {
             throw new IllegalArgumentException(
-                "generator.pack.fontTextureMaxDim must be positive, got: " + fontTextureMaxDim);
+                "generator.pack.sheetTextureMaxDim must be positive, got: " + sheetTextureMaxDim);
         }
     }
 
@@ -65,7 +67,7 @@ public record PackLimits(int maxEntries, long maxEntryBytes, int maxTextureDim, 
             Long.getLong("generator.pack.maxEntryBytes", 8L * 1024 * 1024),
             Integer.getInteger("generator.pack.maxTextureDim", 1_024),
             Long.getLong("generator.pack.textureCache.maxBytes", 64L * 1024 * 1024),
-            Integer.getInteger("generator.pack.fontTextureMaxDim", DEFAULT_FONT_TEXTURE_MAX_DIM)
+            Integer.getInteger("generator.pack.sheetTextureMaxDim", DEFAULT_SHEET_TEXTURE_MAX_DIM)
         );
     }
 

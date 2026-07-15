@@ -162,6 +162,39 @@ public final class PackGlyphDispatcher {
         }
 
         /**
+         * Whether {@link #draw} paints any pixels at all: false for space glyphs and for bitmap
+         * glyphs whose cell is fully transparent. Canvas-sizing callers use this to skip art
+         * extents for glyphs that only move the cursor.
+         */
+        public boolean drawsArt() {
+            return !space && !glyph.isEmpty();
+        }
+
+        /**
+         * Whether the captured segment style renders this glyph italic. Italic art shears each
+         * drawn row horizontally ({@code 1 - 0.25 * guiPxBelowLineTop} GUI px), so measurement
+         * callers must widen their horizontal extents by the shear at the cell's first and last
+         * rows.
+         */
+        public boolean isItalic() {
+            return italic;
+        }
+
+        /**
+         * Provider {@code ascent} in GUI pixels (negative legal; 0 for space glyphs). The glyph
+         * cell's top edge sits {@code ascent} GUI pixels above the baseline, i.e. at
+         * {@code lineTop + 7 - ascent}.
+         */
+        public int ascentGuiPx() {
+            return glyph.ascent();
+        }
+
+        /** Provider {@code height} in GUI pixels (0 for space glyphs): the drawn cell height. */
+        public int heightGuiPx() {
+            return glyph.height();
+        }
+
+        /**
          * Draws the glyph in vanilla order: the full shadow pass first (tinted
          * {@code shadowColor} at {@code +1,+1} GUI px, bold copy at a further {@code +1} GUI
          * px), then the main pass (bold copy again at {@code +1}). Space glyphs and blank cells

@@ -69,6 +69,12 @@ public class MinecraftTooltip {
     @Getter
     private final int scaleFactor;
     private final boolean aprilFools;
+    /**
+     * Whether text draws its drop shadow (built-in runs, pack glyph shadow passes and decoration
+     * shadow passes alike). On for tooltips - vanilla tooltips always shadow - and switched off
+     * by compositors drawing shadowless vanilla surfaces, e.g. container screen titles.
+     */
+    private final boolean textShadow;
     private final TooltipSprites themeSprites;
     private final TextColorRemap textColorRemap;
     private final PackGlyphDispatcher packGlyphs;
@@ -118,6 +124,21 @@ public class MinecraftTooltip {
      * keeping the left padding behavior unchanged.
      */
     private transient int leftShift;
+    /**
+     * Topmost drawn-art extent (canvas px, never above 0) of the current line, relative to the
+     * line top, tracked by the measure pass: pack glyph cells top out at
+     * {@code (7 - ascent) * pixelSize} below the line top, which is NEGATIVE for large ascents.
+     * Consumed through {@link #measureLineExtents} by external compositors; {@link #render}
+     * itself keeps the historical line-height-based canvas (tall art clips there by design).
+     */
+    private transient double lineArtTop;
+    /**
+     * Bottommost drawn-art extent (canvas px, never below 0) of the current line, relative to
+     * the line top; the counterpart of {@link #lineArtTop}. Built-in runs count as the standard
+     * 9 GUI px line box plus the shadow row; pack glyph cells bottom out at
+     * {@code (7 - ascent + height) * pixelSize} plus the shadow row.
+     */
+    private transient double lineArtBottom;
     /** Per-frame counter feeding deterministic pack glyph obfuscation seeds. */
     private transient int packObfuscationCounter;
     private transient int largestWidth = 0;
@@ -139,11 +160,12 @@ public class MinecraftTooltip {
      * @param animationFrameCount The number of frames to generate for the animation.
      * @param scaleFactor         The scale factor to apply to all pixel sizes.
      * @param aprilFools          Whether to randomly swap characters to alternate fonts.
+     * @param textShadow          Whether text draws its drop shadow; see {@link #textShadow}.
      * @param themeSprites        Pack tooltip sprites replacing the programmatic chrome, or null.
      * @param textColorRemap      Shader-equivalent text color replacement table, or null.
      * @param packFontSource      Resolver for pack font ids, or null when no pack is active.
      */
-    private MinecraftTooltip(List<LineSegment> lines, TextColor defaultColor, int alpha, int padding, boolean firstLinePadding, boolean renderBorder, boolean centeredText, int frameDelayMs, int animationFrameCount, int scaleFactor, boolean aprilFools, TooltipSprites themeSprites, TextColorRemap textColorRemap, PackGlyphDispatcher.FontSource packFontSource) {
+    private MinecraftTooltip(List<LineSegment> lines, TextColor defaultColor, int alpha, int padding, boolean firstLinePadding, boolean renderBorder, boolean centeredText, int frameDelayMs, int animationFrameCount, int scaleFactor, boolean aprilFools, boolean textShadow, TooltipSprites themeSprites, TextColorRemap textColorRemap, PackGlyphDispatcher.FontSource packFontSource) {
         this.lines = lines;
         this.currentColor = defaultColor;
         this.alpha = alpha;
@@ -155,6 +177,7 @@ public class MinecraftTooltip {
         this.animationFrameCount = animationFrameCount;
         this.scaleFactor = scaleFactor;
         this.aprilFools = aprilFools;
+        this.textShadow = textShadow;
         this.themeSprites = themeSprites;
         this.textColorRemap = textColorRemap;
         this.packGlyphs = PackGlyphDispatcher.of(packFontSource);
@@ -340,6 +363,8 @@ public class MinecraftTooltip {
         this.locationX = 0;
         this.lineMaxExtent = 0;
         this.lineMinExtent = 0;
+        this.lineArtTop = 0;
+        this.lineArtBottom = 0;
         for (ColorSegment segment : line.getSegments()) {
             Font baseFont = MinecraftFonts.getFont(segment.getFont(), segment.isBold(), segment.isItalic());
             Font font = scaleFactor > 1 ? baseFont.deriveFont(baseFont.getSize2D() * scaleFactor) : baseFont;
@@ -360,11 +385,13 @@ public class MinecraftTooltip {
                 if (packGlyph != null) {
                     // Obfuscation substitutes have equal ceil(advance), so measuring the
                     // original glyph is exact for them too.
+                    foldPackGlyphArtExtents(packGlyph);
                     advanceCursor(packGlyph.advanceGuiPx() * (double) pixelSize);
                     i += Character.charCount(codePoint);
                     continue;
                 }
 
+                foldBuiltInArtExtents();
                 String charStr = new String(Character.toChars(codePoint));
 
                 if (font.canDisplayUpTo(charStr) == -1) {
@@ -397,6 +424,130 @@ public class MinecraftTooltip {
         this.lineMaxExtent = Math.max(this.lineMaxExtent, Math.max(this.locationX, next));
         this.lineMinExtent = Math.min(this.lineMinExtent, Math.min(this.locationX, next));
         this.locationX = next;
+    }
+
+    /**
+     * Folds one pack glyph's drawn-cell span into the line extents. Space glyphs and blank
+     * cells paint nothing and contribute nothing; the shadow pass extends the bottom by one GUI
+     * px when shadows are on (bold copies only extend horizontally). Vertically the cell spans
+     * {@link #lineArtTop}/{@link #lineArtBottom}; horizontally an ITALIC glyph also shears each
+     * drawn row by {@code 1 - 0.25 * guiPxBelowLineTop} GUI px (see {@code BitmapGlyph.draw}),
+     * so the shear at the cell's first and last rows is folded into
+     * {@link #lineMinExtent}/{@link #lineMaxExtent} - tall-ascent cells shear right above the
+     * line top, deep cells shear left below it, and both must stay inside canvases sized from
+     * {@link #measureLineExtents}.
+     */
+    private void foldPackGlyphArtExtents(PackGlyphDispatcher.Dispatched packGlyph) {
+        if (!packGlyph.drawsArt()) {
+            return;
+        }
+        double topGuiPx = 7 - packGlyph.ascentGuiPx();
+        double top = topGuiPx * (double) pixelSize;
+        double bottom = top + packGlyph.heightGuiPx() * (double) pixelSize + (this.textShadow ? pixelSize : 0);
+        this.lineArtTop = Math.min(this.lineArtTop, top);
+        this.lineArtBottom = Math.max(this.lineArtBottom, bottom);
+
+        if (packGlyph.isItalic()) {
+            double firstRowShear = 1 - 0.25 * topGuiPx;
+            double lastRowShear = 1 - 0.25 * (topGuiPx + packGlyph.heightGuiPx() - 1);
+            // The advance bounds the visible art width (ink width + 1, bold included), so the
+            // cursor position plus advance plus rightmost shear covers every sheared row.
+            double artWidth = Math.max(0, packGlyph.advanceGuiPx()) * (double) pixelSize;
+            double leftShear = Math.min(firstRowShear, lastRowShear) * pixelSize;
+            double rightShear = Math.max(firstRowShear, lastRowShear) * pixelSize;
+            this.lineMinExtent = Math.min(this.lineMinExtent, this.locationX + leftShear);
+            this.lineMaxExtent = Math.max(this.lineMaxExtent, this.locationX + artWidth + rightShear);
+        }
+    }
+
+    /**
+     * Folds the built-in text art box into the vertical extents: the standard 9 GUI px line
+     * (which also covers underline placement at baseline + 1 GUI px) plus the shadow row when
+     * shadows are on. Built-in glyphs never draw above the line top.
+     */
+    private void foldBuiltInArtExtents() {
+        this.lineArtBottom = Math.max(this.lineArtBottom, (this.textShadow ? 10 : 9) * (double) pixelSize);
+    }
+
+    /**
+     * Measured extents of one line of this tooltip, in canvas px relative to the line's origin:
+     * the point built-in text is drawn from, whose y is the LINE TOP (the baseline sits 7 GUI px
+     * below it).
+     *
+     * @param minX      leftmost art extent, {@code <= 0}; negative when leading negative pack
+     *                  advances move art left of the origin, or when the italic row shear pushes
+     *                  a deep glyph's bottom rows left of it
+     * @param maxX      rightmost art extent, {@code >= 0}: the cursor travel plus any italic
+     *                  shear past it, used for canvas sizing
+     * @param artTop    topmost drawn-art extent relative to the line top, {@code <= 0}; negative
+     *                  when a pack glyph's ascent lifts its cell above the line
+     * @param artBottom bottommost drawn-art extent relative to the line top, {@code >= 0}
+     */
+    public record LineExtents(double minX, double maxX, double artTop, double artBottom) {
+    }
+
+    /**
+     * Measures one line's full art extents for external compositors that draw tooltip lines
+     * onto their own canvases via {@link #drawLineOnto}. Unlike {@link #render()}'s canvas
+     * sizing - which stays line-height-based and clips tall glyph art - these extents cover the
+     * complete drawn cells of every pack glyph, so a caller can expand its canvas before
+     * drawing.
+     *
+     * @param lineIndex index into this tooltip's lines
+     *
+     * @return the measured extents
+     * @throws IndexOutOfBoundsException when the line index is out of range
+     */
+    public LineExtents measureLineExtents(int lineIndex) {
+        LineSegment line = this.getLines().get(lineIndex);
+        BufferedImage dummyImage = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D measureGraphics = dummyImage.createGraphics();
+        try {
+            measureGraphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
+            calculateLineWidth(measureGraphics, line);
+            return new LineExtents(this.lineMinExtent, this.lineMaxExtent, this.lineArtTop, this.lineArtBottom);
+        } finally {
+            measureGraphics.dispose();
+        }
+    }
+
+    /**
+     * Draws one line's segments onto an EXTERNAL canvas through the exact segment machinery
+     * {@link #render()} uses (same {@link PackGlyphDispatcher} dispatch, same built-in font
+     * path, same decoration geometry), without any background, border, clipping or padding -
+     * the compositor owns the canvas. Art extending past the canvas clips there; size the
+     * canvas from {@link #measureLineExtents} first. External composition is single-frame:
+     * obfuscated pack glyph runs draw their deterministic frame-0 substitution, while
+     * obfuscated built-in runs substitute randomly exactly like a single tooltip frame does -
+     * compositors that need deterministic output should not pass obfuscated segments.
+     *
+     * <p>Sets the text anti-aliasing hint OFF on {@code graphics}, matching every tooltip
+     * surface.
+     *
+     * @param graphics         target canvas graphics
+     * @param lineIndex        index into this tooltip's lines
+     * @param lineOriginX      canvas x of the line origin (text start; art may draw left of it
+     *                         through negative advances)
+     * @param lineTopY         canvas y of the line TOP (the baseline lands 7 GUI px lower).
+     *                         Must be a whole multiple of the canvas pixel size
+     *                         ({@code 2 * scaleFactor}) so the baseline stays GUI-aligned
+     * @throws IndexOutOfBoundsException when the line index is out of range
+     * @throws IllegalArgumentException  when {@code lineTopY} is not a multiple of the canvas
+     *                                   pixel size
+     */
+    public void drawLineOnto(Graphics2D graphics, int lineIndex, int lineOriginX, int lineTopY) {
+        LineSegment line = this.getLines().get(lineIndex);
+        if (lineTopY % pixelSize != 0) {
+            throw new IllegalArgumentException(
+                "lineTopY must be a multiple of the canvas pixel size " + pixelSize + ", got: " + lineTopY);
+        }
+        graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
+        this.locationX = lineOriginX;
+        this.locationY = lineTopY + 7 * pixelSize;
+        this.packObfuscationCounter = 0;
+        for (ColorSegment segment : line.getSegments()) {
+            this.drawString(graphics, segment, 0);
+        }
     }
 
     /**
@@ -641,7 +792,7 @@ public class MinecraftTooltip {
             // the line top; locationY is always a whole multiple of pixelSize.
             double lineTopGuiPx = this.locationY / (double) pixelSize - 7.0;
             packGlyph.draw(graphics, this.locationX / (double) pixelSize, lineTopGuiPx, pixelSize,
-                foregroundColor(), shadowColor());
+                foregroundColor(), this.textShadow ? shadowColor() : null);
         }
 
         drawDecorations(graphics, colorSegment, width, drawX, false);
@@ -732,8 +883,10 @@ public class MinecraftTooltip {
         drawDecorations(frameGraphics, colorSegment, width, drawX, true);
 
         // Draw Drop Shadow Text
-        frameGraphics.setColor(shadowColor());
-        frameGraphics.drawString(textToDraw, drawX + pixelSize, this.locationY + pixelSize);
+        if (this.textShadow) {
+            frameGraphics.setColor(shadowColor());
+            frameGraphics.drawString(textToDraw, drawX + pixelSize, this.locationY + pixelSize);
+        }
 
         // Draw Text
         frameGraphics.setColor(foregroundColor());
@@ -767,6 +920,9 @@ public class MinecraftTooltip {
      * Draws a thick line on the image with optional drop shadow.
      */
     private void drawThickLineInternal(Graphics2D frameGraphics, int width, int xPosition, int yPosition, int xOffset, int yOffset, boolean dropShadow) {
+        if (dropShadow && !this.textShadow) {
+            return;
+        }
         int xPosition1 = xPosition;
         int xPosition2 = xPosition + width + xOffset;
         yPosition += yOffset;
@@ -922,6 +1078,7 @@ public class MinecraftTooltip {
         private int animationFrameCount = 10;
         private int scaleFactor = 1;
         private boolean aprilFools = false;
+        private boolean textShadow = true;
         private TooltipSprites themeSprites;
         private TextColorRemap textColorRemap;
         private PackGlyphDispatcher.FontSource packFontSource;
@@ -1005,6 +1162,17 @@ public class MinecraftTooltip {
         }
 
         /**
+         * Whether text draws its drop shadow (default true, the vanilla tooltip behavior).
+         * Compositors rendering shadowless vanilla text - the container screen title - disable
+         * this; it turns off the shadow pass of built-in runs, pack glyphs and
+         * strikethrough/underline decorations alike.
+         */
+        public Builder withTextShadow(boolean textShadow) {
+            this.textShadow = textShadow;
+            return this;
+        }
+
+        /**
          * Replaces the programmatic background and borders with pack tooltip sprites. Only
          * applies while the border is enabled; the sprites carry their own alpha, so the alpha
          * knob is ignored in themed renders.
@@ -1044,6 +1212,7 @@ public class MinecraftTooltip {
                 this.animationFrameCount,
                 this.scaleFactor,
                 this.aprilFools,
+                this.textShadow,
                 this.themeSprites,
                 this.textColorRemap,
                 this.packFontSource

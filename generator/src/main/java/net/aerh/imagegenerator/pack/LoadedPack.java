@@ -44,6 +44,19 @@ final class LoadedPack {
     // pair, not a <style>_background naming-convention entry.
     private static final String DEFAULT_BACKGROUND_PATH = "assets/minecraft/textures/gui/sprites/tooltip/background.png";
     private static final String DEFAULT_FRAME_PATH = "assets/minecraft/textures/gui/sprites/tooltip/frame.png";
+    private static final Pattern CONTAINER_TEXTURE_PATH =
+        Pattern.compile("assets/([^/]+)/textures/gui/container/(.+)\\.png");
+    // The vanilla texture behind every generic 9-by-N chest menu; packs restyle chest screens by
+    // overriding it (fully transparent overrides are how glyph-art menu packs blank the chrome).
+    private static final String GENERIC_CONTAINER_PATH = "assets/minecraft/textures/gui/container/generic_54.png";
+    /**
+     * Texture cache key prefix selecting the {@link PackLimits#sheetTextureMaxDim() sheet cap}
+     * instead of the strict item cap. Call sites that legitimately read sheet-shaped textures
+     * (tooltip sprites) prefix their cache keys; every other lookup - item layers included, even
+     * ones whose models point at tooltip-sprite paths - decodes under the item cap. Texture
+     * paths always start with {@code assets/}, so the prefix can never collide with a real path.
+     */
+    private static final String SHEET_CAPPED_KEY_PREFIX = "sheet:";
     private static final int MAX_PARENT_DEPTH = 8;
     /**
      * Pack ids whose textures use alpha 252 as an "opaque full-bright" emissive marker (a
@@ -72,6 +85,7 @@ final class LoadedPack {
     private final Map<String, String> fontPaths = new HashMap<>();
     private final BitmapProviderCache fontProviderCache = new BitmapProviderCache();
     private boolean hasTooltipSprites;
+    private boolean hasContainerTextures;
     private final LoadingCache<String, BufferedImage> textureCache;
     private final LoadingCache<String, PackFont> fontCache;
 
@@ -89,7 +103,7 @@ final class LoadedPack {
             .softValues()
             .build(this::loadTexture);
         // Resolved fonts retain their glyph cell rasters, which for glyph-art sheets (bounded by
-        // fontTextureMaxDim, not maxTextureDim) can dwarf item textures. Bound and soft-reference
+        // sheetTextureMaxDim, not maxTextureDim) can dwarf item textures. Bound and soft-reference
         // them exactly like the texture cache, reusing the same byte budget as a separate
         // allowance, so a pack full of huge sheets cannot pin unbounded memory.
         this.fontCache = Caffeine.newBuilder()
@@ -143,6 +157,10 @@ final class LoadedPack {
                 indexTooltipSprite(tooltipMatcher.group(1), tooltipMatcher.group(2), path);
                 continue;
             }
+            if (CONTAINER_TEXTURE_PATH.matcher(path).matches()) {
+                hasContainerTextures = true;
+                continue;
+            }
             Matcher fontMatcher = FONT_PATH.matcher(path);
             if (fontMatcher.matches()) {
                 // Skip files that are not valid resource locations (mirroring vanilla): indexing
@@ -158,9 +176,9 @@ final class LoadedPack {
                 fontPaths.put(fontMatcher.group(1) + ":" + fontMatcher.group(2), path);
             }
         }
-        if (items.isEmpty() && !hasTooltipSprites && fontPaths.isEmpty()) {
+        if (items.isEmpty() && !hasTooltipSprites && fontPaths.isEmpty() && !hasContainerTextures) {
             throw new PackLoadException(
-                "Pack %s contains no item definitions under assets/*/items/, no tooltip sprites under assets/*/textures/gui/sprites/tooltip/, and no fonts under assets/*/font/",
+                "Pack %s contains no item definitions under assets/*/items/, no tooltip sprites under assets/*/textures/gui/sprites/tooltip/, no fonts under assets/*/font/, and no container textures under assets/*/textures/gui/container/",
                 id.toString());
         }
         if (errors > 0) {
@@ -202,6 +220,11 @@ final class LoadedPack {
      * {@code hypixel_skyblock:epic}; a bare ref defaults to the {@code minecraft} namespace) to
      * its background and frame sprites.
      *
+     * <p>Tooltip sprite decodes are bounded by {@link PackLimits#sheetTextureMaxDim()}, NOT
+     * {@link PackLimits#maxTextureDim()}: animated tooltip sprites are vertical flipbook strips
+     * of square frames that real packs ship far beyond the item texture cap. An animated sprite
+     * is cropped to the first frame of its mcmeta frames list before use.
+     *
      * @return empty when the pack defines no such style - callers decide the fallback policy
      * @throws IllegalArgumentException when the style ref itself is malformed (caller input)
      * @throws PackResolveException     when the style exists but is broken (a sprite is missing
@@ -241,6 +264,25 @@ final class LoadedPack {
     }
 
     /**
+     * Resolves the pack's override of the generic chest container background
+     * ({@code minecraft:textures/gui/container/generic_54.png}), the texture behind every
+     * 9-by-N chest menu. Decoded under the strict {@link PackLimits#maxTextureDim()} like other
+     * GUI textures; an animation mcmeta crops to the first frame as usual.
+     *
+     * @return empty when the pack does not override the texture - callers fall back to the
+     *     procedural vanilla-style chrome
+     * @throws PackResolveException when the texture exists but fails to decode
+     */
+    public Optional<BufferedImage> resolveContainerBackground() {
+        if (!source.exists(GENERIC_CONTAINER_PATH)) {
+            return Optional.empty();
+        }
+        // Defensive copy, mirroring loadGuiSprite: the cached instance is shared and the image
+        // is handed to callers.
+        return Optional.of(copy(textureCache.get(GENERIC_CONTAINER_PATH)));
+    }
+
+    /**
      * Style refs with both sprites present, sorted, for discovery/autocomplete. A style listed
      * here can still fail at resolve time (e.g. malformed gui scaling mcmeta) - loudly.
      */
@@ -260,7 +302,7 @@ final class LoadedPack {
      * references (mirroring the texture cache), so repeated callers get the cached instance
      * while huge glyph-art fonts stay reclaimable instead of pinning unbounded memory.
      *
-     * <p>Font sheet decodes are bounded by {@link PackLimits#fontTextureMaxDim()}, NOT
+     * <p>Font sheet decodes are bounded by {@link PackLimits#sheetTextureMaxDim()}, NOT
      * {@link PackLimits#maxTextureDim()}: real packs ship glyph sheets far beyond the item
      * texture cap. Sheets are decoded once per DISTINCT bitmap provider (fonts referencing the
      * same sheet share one built provider) and released after the per-glyph cells are copied
@@ -321,13 +363,13 @@ final class LoadedPack {
     /**
      * Loads a bitmap provider sheet. The {@code file} reference includes its extension (vanilla
      * resolves it directly beneath {@code textures/}), and the decode is bounded by the dedicated
-     * font cap; see {@link #resolveFont(String)} for why this bypasses the item texture cache.
+     * sheet cap; see {@link #resolveFont(String)} for why this bypasses the item texture cache.
      */
     private BufferedImage loadFontSheet(String textureFileRef) {
         ResourceRef ref = parseRefOrResolveError(textureFileRef, "minecraft");
         String path = "assets/" + ref.namespace() + "/textures/" + ref.path();
         try {
-            return TextureDecoder.decode(source.read(path), limits.fontTextureMaxDim(), normalizeEmissiveAlpha);
+            return TextureDecoder.decode(source.read(path), limits.sheetTextureMaxDim(), normalizeEmissiveAlpha);
         } catch (PackLoadException e) {
             throw new PackResolveException(GeneratorException.formatMessage(
                 "Font texture `%s` in pack `%s` failed to load: %s", path, id.toString(), e.getMessage()), e);
@@ -336,7 +378,8 @@ final class LoadedPack {
 
     private GuiSprite loadGuiSprite(String texturePath) {
         // Defensive copy: the cache instance is shared and GuiSprite hands the image to callers.
-        return new GuiSprite(copy(textureCache.get(texturePath)), guiScalingFor(texturePath));
+        // Sheet-capped: tooltip sprites are the sheet-shaped textures the looser cap exists for.
+        return new GuiSprite(copy(textureCache.get(SHEET_CAPPED_KEY_PREFIX + texturePath)), guiScalingFor(texturePath));
     }
 
     private GuiScaling guiScalingFor(String texturePath) {
@@ -437,10 +480,21 @@ final class LoadedPack {
         }
     }
 
-    private BufferedImage loadTexture(String texturePath) {
+    /**
+     * Cache loader; {@code cacheKey} is the texture path, optionally prefixed with
+     * {@link #SHEET_CAPPED_KEY_PREFIX}. The decode cap is selected by the PREFIX - i.e. by how
+     * the call site USES the texture - never by the path itself: tooltip sprite sheets
+     * legitimately exceed the item cap (real packs ship animated frame strips like 146x2482),
+     * but an item model referencing a texture stored under the tooltip sprite path must still
+     * fail at the strict item cap, or the image-bomb guard would be bypassable by path choice.
+     */
+    private BufferedImage loadTexture(String cacheKey) {
+        boolean sheetCapped = cacheKey.startsWith(SHEET_CAPPED_KEY_PREFIX);
+        String texturePath = sheetCapped ? cacheKey.substring(SHEET_CAPPED_KEY_PREFIX.length()) : cacheKey;
+        int maxDim = sheetCapped ? limits.sheetTextureMaxDim() : limits.maxTextureDim();
         BufferedImage image;
         try {
-            image = TextureDecoder.decode(source.read(texturePath), limits.maxTextureDim(), normalizeEmissiveAlpha);
+            image = TextureDecoder.decode(source.read(texturePath), maxDim, normalizeEmissiveAlpha);
         } catch (PackLoadException e) {
             throw new PackResolveException(GeneratorException.formatMessage(
                 "Texture `%s` in pack `%s` failed to load: %s", texturePath, id.toString(), e.getMessage()), e);

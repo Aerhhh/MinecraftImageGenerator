@@ -65,13 +65,27 @@ public class MinecraftInventoryGenerator implements Generator {
             log.info("Using fallback values: item size: {}, scale factor: {}, slot size: {}", itemSize, scaleFactor, slotSize);
         }
 
+        slotTexture = loadSlotTexture(slotSize);
+    }
+
+    /**
+     * Loads the bundled vanilla slot texture resized to {@code size} x {@code size} canvas px,
+     * or null when the resource is missing or unreadable (callers fall back to the programmatic
+     * outlines in {@link #drawSlot(Graphics2D, int, int, int, BufferedImage)}). The SINGLE
+     * production loader, shared with {@link MinecraftContainerGenerator}, so the resource path
+     * and missing-resource behavior can never fork between the two composites.
+     */
+    @Nullable
+    static BufferedImage loadSlotTexture(int size) {
         try (InputStream slotStream = MinecraftInventoryGenerator.class.getResourceAsStream("/minecraft/assets/textures/slot.png")) {
-            if (slotStream != null) {
-                BufferedImage originalSlot = ImageIO.read(slotStream);
-                slotTexture = ImageUtil.resizeImage(originalSlot, slotSize, slotSize, BufferedImage.TYPE_INT_ARGB);
+            if (slotStream == null) {
+                log.warn("Slot texture resource missing; slots render with programmatic outlines");
+                return null;
             }
+            return ImageUtil.resizeImage(ImageIO.read(slotStream), size, size, BufferedImage.TYPE_INT_ARGB);
         } catch (IOException e) {
             log.error("Failed to load slot texture", e);
+            return null;
         }
     }
 
@@ -161,41 +175,49 @@ public class MinecraftInventoryGenerator implements Generator {
     }
 
     private void drawMinecraftBorder() {
-        int imageWidth = inventoryImage.getWidth();
-        int imageHeight = inventoryImage.getHeight();
+        drawVanillaChrome(g2d, inventoryImage.getWidth(), inventoryImage.getHeight(), scaleFactor);
+    }
 
+    /**
+     * Draws the programmatic vanilla-style container chrome (gray background, black outline,
+     * white highlight and dark shadow) over a {@code width} x {@code height} canvas at
+     * {@code scale} canvas px per GUI px. Shared by this generator's bordered inventories and
+     * {@link MinecraftContainerGenerator}'s no-pack fallback so the two styles can never drift
+     * apart.
+     */
+    static void drawVanillaChrome(Graphics2D g2d, int width, int height, int scale) {
         // Drawing the background
         g2d.setColor(BORDER_COLOR);
-        g2d.fillRect(scaleFactor * 3, scaleFactor * 3, imageWidth - scaleFactor * 6, imageHeight - scaleFactor * 6);
-        g2d.fillRect(imageWidth - scaleFactor * 3, scaleFactor * 2, scaleFactor, scaleFactor); // top right
-        g2d.fillRect(scaleFactor * 2, imageHeight - scaleFactor * 3, scaleFactor, scaleFactor); // bottom left
+        g2d.fillRect(scale * 3, scale * 3, width - scale * 6, height - scale * 6);
+        g2d.fillRect(width - scale * 3, scale * 2, scale, scale); // top right
+        g2d.fillRect(scale * 2, height - scale * 3, scale, scale); // bottom left
 
         // Drawing the dark gray shadow
         g2d.setColor(DARK_BORDER_COLOR);
-        g2d.fillRect(imageWidth - scaleFactor * 3, scaleFactor * 3, scaleFactor * 2, imageHeight - scaleFactor * 4); // vertical right
-        g2d.fillRect(scaleFactor * 3, imageHeight - scaleFactor * 3, imageWidth - scaleFactor * 6, scaleFactor * 2); // horizontal bottom
-        g2d.fillRect(imageWidth - scaleFactor * 4, imageHeight - scaleFactor * 4, scaleFactor, scaleFactor); // square bottom right
+        g2d.fillRect(width - scale * 3, scale * 3, scale * 2, height - scale * 4); // vertical right
+        g2d.fillRect(scale * 3, height - scale * 3, width - scale * 6, scale * 2); // horizontal bottom
+        g2d.fillRect(width - scale * 4, height - scale * 4, scale, scale); // square bottom right
 
         // Drawing the white highlight
         g2d.setColor(Color.WHITE);
-        g2d.fillRect(scaleFactor, scaleFactor, scaleFactor * 2, imageHeight - scaleFactor * 4); // vertical left
-        g2d.fillRect(scaleFactor * 3, scaleFactor, imageWidth - scaleFactor * 6, scaleFactor * 2); // horizontal top
-        g2d.fillRect(scaleFactor * 3, scaleFactor * 3, scaleFactor, scaleFactor); // square top left
+        g2d.fillRect(scale, scale, scale * 2, height - scale * 4); // vertical left
+        g2d.fillRect(scale * 3, scale, width - scale * 6, scale * 2); // horizontal top
+        g2d.fillRect(scale * 3, scale * 3, scale, scale); // square top left
 
         g2d.setColor(Color.BLACK);
         // vertical black lines
-        g2d.fillRect(0, scaleFactor * 2, scaleFactor, imageHeight - scaleFactor * 5); // vertical left
-        g2d.fillRect(imageWidth - scaleFactor, scaleFactor * 3, scaleFactor, imageHeight - scaleFactor * 5); // vertical right
+        g2d.fillRect(0, scale * 2, scale, height - scale * 5); // vertical left
+        g2d.fillRect(width - scale, scale * 3, scale, height - scale * 5); // vertical right
         // horizontal black lines
-        g2d.fillRect(scaleFactor * 2, 0, imageWidth - scaleFactor * 5, scaleFactor); // horizontal top
-        g2d.fillRect(scaleFactor * 3, imageHeight - scaleFactor, imageWidth - scaleFactor * 5, scaleFactor); // horizontal bottom
+        g2d.fillRect(scale * 2, 0, width - scale * 5, scale); // horizontal top
+        g2d.fillRect(scale * 3, height - scale, width - scale * 5, scale); // horizontal bottom
         // black corners
-        g2d.fillRect(scaleFactor, scaleFactor, scaleFactor, scaleFactor); // top left
-        g2d.fillRect(imageWidth - scaleFactor * 3, scaleFactor, scaleFactor, scaleFactor); // top right - upper
-        g2d.fillRect(imageWidth - scaleFactor * 2, scaleFactor * 2, scaleFactor, scaleFactor); // top right - lower
-        g2d.fillRect(imageWidth - scaleFactor * 2, imageHeight - scaleFactor * 2, scaleFactor, scaleFactor); // bottom right
-        g2d.fillRect(scaleFactor, imageHeight - scaleFactor * 3, scaleFactor, scaleFactor); // bottom left - upper
-        g2d.fillRect(scaleFactor * 2, imageHeight - scaleFactor * 2, scaleFactor, scaleFactor); // bottom left - lower
+        g2d.fillRect(scale, scale, scale, scale); // top left
+        g2d.fillRect(width - scale * 3, scale, scale, scale); // top right - upper
+        g2d.fillRect(width - scale * 2, scale * 2, scale, scale); // top right - lower
+        g2d.fillRect(width - scale * 2, height - scale * 2, scale, scale); // bottom right
+        g2d.fillRect(scale, height - scale * 3, scale, scale); // bottom left - upper
+        g2d.fillRect(scale * 2, height - scale * 2, scale, scale); // bottom left - lower
     }
 
     private void drawSlots() {
@@ -218,26 +240,40 @@ public class MinecraftInventoryGenerator implements Generator {
     }
 
     private void drawSlot(int x, int y) {
+        drawSlot(g2d, x, y, scaleFactor, slotTexture);
+    }
+
+    /**
+     * Draws one 18-GUI-px slot whose rect origin is {@code (x, y)} at {@code scale} canvas px
+     * per GUI px: the resized slot texture when present, the programmatic outlines (background,
+     * double border, highlight) otherwise. Shared by this generator and
+     * {@link MinecraftContainerGenerator}'s fallback chrome so slot rendering - including the
+     * missing-texture fallback - can never drift between the two composites.
+     */
+    static void drawSlot(Graphics2D target, int x, int y, int scale, @Nullable BufferedImage slotTexture) {
         if (slotTexture != null) {
-            g2d.drawImage(slotTexture, x, y, null);
-        } else {
-            // Background
-            g2d.setColor(INVENTORY_BACKGROUND);
-            g2d.fillRect(x + scaleFactor, y + scaleFactor, slotSize - 2 * scaleFactor, slotSize - 2 * scaleFactor);
-
-            // Slot border
-            g2d.setColor(DARK_BORDER_COLOR);
-            g2d.drawRect(x, y, slotSize - SLOT_BORDER_THICKNESS, slotSize - SLOT_BORDER_THICKNESS);
-            g2d.drawRect(x + SLOT_INNER_BORDER_OFFSET, y + SLOT_INNER_BORDER_OFFSET,
-                slotSize - SLOT_INNER_BORDER_REDUCTION, slotSize - SLOT_INNER_BORDER_REDUCTION);
-
-            // Highlight
-            g2d.setColor(Color.WHITE);
-            g2d.drawLine(x + slotSize - SLOT_BORDER_THICKNESS, y,
-                x + slotSize - SLOT_BORDER_THICKNESS, y + slotSize - SLOT_BORDER_THICKNESS);
-            g2d.drawLine(x, y + slotSize - SLOT_BORDER_THICKNESS,
-                x + slotSize - SLOT_BORDER_THICKNESS, y + slotSize - SLOT_BORDER_THICKNESS);
+            target.drawImage(slotTexture, x, y, null);
+            return;
         }
+
+        int size = 18 * scale;
+
+        // Background
+        target.setColor(INVENTORY_BACKGROUND);
+        target.fillRect(x + scale, y + scale, size - 2 * scale, size - 2 * scale);
+
+        // Slot border
+        target.setColor(DARK_BORDER_COLOR);
+        target.drawRect(x, y, size - SLOT_BORDER_THICKNESS, size - SLOT_BORDER_THICKNESS);
+        target.drawRect(x + SLOT_INNER_BORDER_OFFSET, y + SLOT_INNER_BORDER_OFFSET,
+            size - SLOT_INNER_BORDER_REDUCTION, size - SLOT_INNER_BORDER_REDUCTION);
+
+        // Highlight
+        target.setColor(Color.WHITE);
+        target.drawLine(x + size - SLOT_BORDER_THICKNESS, y,
+            x + size - SLOT_BORDER_THICKNESS, y + size - SLOT_BORDER_THICKNESS);
+        target.drawLine(x, y + size - SLOT_BORDER_THICKNESS,
+            x + size - SLOT_BORDER_THICKNESS, y + size - SLOT_BORDER_THICKNESS);
     }
 
     private void drawTitle() {
@@ -371,6 +407,18 @@ public class MinecraftInventoryGenerator implements Generator {
     }
 
     private GeneratedObject generateSlotObject(InventoryItem item, @Nullable GenerationContext generationContext) {
+        return generateSlotObject(item, generationContext, packId, packRepository);
+    }
+
+    /**
+     * Generates one slot item's imagery through the standard item pipeline: player heads route
+     * to {@link MinecraftPlayerHeadGenerator}, everything else to {@link MinecraftItemGenerator}
+     * with the item's enchant/hover/durability modifiers (and the selected pack, when one is
+     * active). Shared by this generator and {@link MinecraftContainerGenerator} so slot items
+     * render identically in both composites.
+     */
+    static GeneratedObject generateSlotObject(InventoryItem item, @Nullable GenerationContext generationContext,
+                                              @Nullable PackId packId, @Nullable PackRepository packRepository) {
         if (item.getItemName().contains("player_head")) {
             String skinValue = item.getExtraContent();
             if (skinValue != null && skinValue.contains(",")) {
@@ -488,25 +536,36 @@ public class MinecraftInventoryGenerator implements Generator {
     }
 
     private void drawStackCount(Graphics2D target, int amount, int slotX, int slotY) {
+        drawStackCount(target, amount, slotX, slotY, scaleFactor);
+    }
+
+    /**
+     * Draws a stack count badge at the bottom-right of an 18-GUI-px slot whose rect origin is
+     * {@code (slotX, slotY)}, white with a drop shadow, at {@code scale} canvas px per GUI px.
+     * Shared by this generator and {@link MinecraftContainerGenerator} so count rendering never
+     * drifts between the two composites.
+     */
+    static void drawStackCount(Graphics2D target, int amount, int slotX, int slotY, int scale) {
         String amountText = String.valueOf(amount);
+        int scaledSlotSize = 18 * scale;
 
         Font originalFont = target.getFont();
-        Font stackFont = MinecraftFonts.getFont(MinecraftFonts.REGULAR).deriveFont((float) scaleFactor * 8);
+        Font stackFont = MinecraftFonts.getFont(MinecraftFonts.REGULAR).deriveFont((float) scale * 8);
         target.setFont(stackFont);
 
         // Calculate text position (bottom-right of slot)
         int textWidth = target.getFontMetrics().stringWidth(amountText);
-        int textX = slotX + slotSize - textWidth + 1;
-        int textY = slotY + slotSize - scaleFactor + 1;
+        int textX = slotX + scaledSlotSize - textWidth + 1;
+        int textY = slotY + scaledSlotSize - scale + 1;
 
         // Draw text with drop shadow
-        int shadowOffset = scaleFactor;
+        int shadowOffset = scale;
         target.setColor(DROP_SHADOW_COLOR);
         target.drawString(amountText, textX + shadowOffset - 1, textY + shadowOffset - 1);
 
         target.setColor(NORMAL_TEXT_COLOR);
         target.drawString(amountText, textX - 1, textY - 1);
-        
+
         target.setFont(originalFont);
     }
 

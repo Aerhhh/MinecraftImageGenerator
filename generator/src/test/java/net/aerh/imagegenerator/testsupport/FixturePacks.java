@@ -193,6 +193,73 @@ public final class FixturePacks {
     }
 
     /**
+     * Writes a pack exercising tooltip sprite sheets at real-pack scale, mirroring the animated
+     * tooltip frame strips large server packs ship (many width-square frames stacked vertically,
+     * far past the item texture cap).
+     *
+     * <p>Contents (all in the {@code testpack} namespace):
+     * <ul>
+     * <li>Style {@code tallstrip}: the background is a 146x2482 flipbook of 17 frames of
+     *     146x146. Frame 0 is solid 0xFF112233 with four distinct corner marker pixels
+     *     (top-left 0xFFAA0000, top-right 0xFF00AA00, bottom-left 0xFF0000AA, bottom-right
+     *     0xFFAAAA00); frames 1..16 are solid near-black. Its mcmeta combines an animation
+     *     section whose frames list is {@code [0,1,...,16,{"index":0,"time":100}]} (int entries
+     *     plus a trailing object entry, the real-pack shape) with nine-slice gui scaling at the
+     *     146 nominal size, a per-side border object (left 8, top 9, right 10, bottom 11) and
+     *     {@code stretch_inner}. The frame sprite is a 146x146 ring without mcmeta.</li>
+     * <li>Item {@code oversized}: definition -> model -> 146x2482 texture, the SAME dimensions
+     *     as the strip, proving item textures stay under the strict item cap while tooltip
+     *     sheets get the sheet cap.</li>
+     * <li>Item {@code smuggled}: definition -> model whose layer0 references the tallstrip
+     *     background texture UNDER THE TOOLTIP SPRITE PATH, proving the sheet cap is selected
+     *     by usage rather than path.</li>
+     * </ul>
+     */
+    public static Path writeTallAnimatedTooltipPack(Path root) {
+        try {
+            write(root, "pack.mcmeta", """
+                {"pack":{"pack_format":88,"description":"tall animated tooltip test fixture"}}""");
+
+            BufferedImage strip = transparent(146, 17 * 146);
+            fillFrame(strip, 0, 146, 0xFF112233);
+            strip.setRGB(0, 0, 0xFFAA0000);
+            strip.setRGB(145, 0, 0xFF00AA00);
+            strip.setRGB(0, 145, 0xFF0000AA);
+            strip.setRGB(145, 145, 0xFFAAAA00);
+            for (int i = 1; i < 17; i++) {
+                fillFrame(strip, i, 146, 0xFF000000 | i);
+            }
+            tooltipSprite(root, NAMESPACE, "tallstrip_background", strip);
+            StringBuilder framesList = new StringBuilder();
+            for (int i = 0; i < 17; i++) {
+                framesList.append(i).append(',');
+            }
+            framesList.append("{\"index\":0,\"time\":100}");
+            write(root, "assets/testpack/textures/gui/sprites/tooltip/tallstrip_background.png.mcmeta",
+                "{\"animation\":{\"frametime\":2,\"frames\":[" + framesList + "]},"
+                    + "\"gui\":{\"scaling\":{\"type\":\"nine_slice\",\"width\":146,\"height\":146,"
+                    + "\"border\":{\"left\":8,\"top\":9,\"right\":10,\"bottom\":11},\"stretch_inner\":true}}}");
+            tooltipSprite(root, NAMESPACE, "tallstrip_frame", ring(146, 146, 4, 0xFF445566));
+
+            item(root, "oversized", """
+                {"model":{"type":"minecraft:model","model":"testpack:item/oversized"}}""");
+            model(root, "oversized", "item/generated", "testpack:item/oversized");
+            texture(root, "oversized", transparent(146, 2482));
+
+            // Item whose model references the strip ALREADY stored under the tooltip sprite
+            // path: the decode cap is chosen by usage, not path, so resolving this ITEM must
+            // still fail at the strict item cap even though the same file decodes as a sheet.
+            item(root, "smuggled", """
+                {"model":{"type":"minecraft:model","model":"testpack:item/smuggled"}}""");
+            model(root, "smuggled", "item/generated", "testpack:gui/sprites/tooltip/tallstrip_background");
+
+            return root;
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to write tall animated tooltip fixture pack", e);
+        }
+    }
+
+    /**
      * Writes a minimal valid pack (one item -> model -> texture chain) padded with filler JSON
      * files until exactly {@code assetFileCount} regular files exist under {@code assets/}. Used
      * by entry-cap wiring tests that need a precise asset file count; {@code pack.mcmeta} sits
@@ -357,6 +424,131 @@ public final class FixturePacks {
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to write text font fixture pack", e);
         }
+    }
+
+    /**
+     * Writes a pack for CONTAINER COMPOSITOR tests: the title-glyph background technique over a
+     * fully transparent container texture. Everything is synthetic and generated at test runtime.
+     *
+     * <p>Contents:
+     * <ul>
+     * <li>{@code minecraft:textures/gui/container/generic_54.png}: fully transparent 256x256
+     *     (the MCC style - the pack blanks the chrome and draws menus via title glyphs).</li>
+     * <li>{@code testpack:menu}: bitmap font with three glyph-art cells plus a space provider:
+     *     <ul>
+     *     <li>U+E100 "background": 32x32 solid 0xFF336699 cell, height 64, ascent 5 - scale 2,
+     *         drawn 64x64 GUI px, advance 65.</li>
+     *     <li>U+E101 "tall": 8x8 solid 0xFF993366 cell, height 40, ascent 30 - scale 5, drawn
+     *         40x40 GUI px topping out ABOVE the title line, advance 41.</li>
+     *     <li>U+E102 "deep": 8x8 solid 0xFF663399 cell, height 160, ascent 5 - scale 20, drawn
+     *         160x160 GUI px reaching far below a 1-row GUI rect, advance 161.</li>
+     *     <li>space advances: U+E10A -> -8.0, U+E10B -> 120.0.</li>
+     *     </ul></li>
+     * <li>Item {@code testpack:item/marker}: definition -> model -> 16x16 solid 0xFFAA5500
+     *     texture, for slot-position and z-order assertions.</li>
+     * </ul>
+     */
+    public static Path writeContainerPack(Path root) {
+        try {
+            write(root, "pack.mcmeta", """
+                {"pack":{"pack_format":88,"description":"container test fixture"}}""");
+
+            containerTexture(root, transparent(256, 256));
+
+            fontTexture(root, NAMESPACE, "menu_bg.png", solid(32, 32, 0xFF336699));
+            fontTexture(root, NAMESPACE, "menu_tall.png", solid(8, 8, 0xFF993366));
+            fontTexture(root, NAMESPACE, "menu_deep.png", solid(8, 8, 0xFF663399));
+            fontJson(root, NAMESPACE, "menu", """
+                {"providers":[
+                  {"type":"bitmap","file":"testpack:font/menu_bg.png",
+                   "height":64,"ascent":5,"chars":["\\uE100"]},
+                  {"type":"bitmap","file":"testpack:font/menu_tall.png",
+                   "height":40,"ascent":30,"chars":["\\uE101"]},
+                  {"type":"bitmap","file":"testpack:font/menu_deep.png",
+                   "height":160,"ascent":5,"chars":["\\uE102"]},
+                  {"type":"space","advances":{"\\uE10A":-8.0,"\\uE10B":120.0}}]}""");
+
+            item(root, "marker", """
+                {"model":{"type":"minecraft:model","model":"testpack:item/marker"}}""");
+            model(root, "marker", "item/generated", "testpack:item/marker");
+            texture(root, "marker", solid(16, 16, 0xFFAA5500));
+
+            return root;
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to write container fixture pack", e);
+        }
+    }
+
+    /**
+     * Writes a pack containing ONLY a painted {@code generic_54} container texture (no items,
+     * fonts or tooltip sprites) at the default 256x256 size - both the pack-emptiness-check
+     * coverage for container textures and the sampling fixture for the vanilla two-section
+     * background stitch. See {@link #writeContainerArtPack(Path, int)}.
+     */
+    public static Path writeContainerArtPack(Path root) {
+        return writeContainerArtPack(root, 256);
+    }
+
+    /**
+     * Writes the container art pack at an arbitrary square texture size ({@code textureSize}
+     * must be a multiple of 256, e.g. 512 for an HD pack): all marker positions scale with the
+     * texture so the 256-normalized sampling must place them at IDENTICAL canvas positions for
+     * every size.
+     *
+     * <p>The texture paints the full 6-row GUI region (0,0)-(176,222) (in 256-normalized texel
+     * units) in 0xFF224488 with marker texels of one normalized unit each:
+     * <ul>
+     * <li>(0,0) = 0xFFFF0000 and (175,0) = 0xFF00FF00: chest-section top corners.</li>
+     * <li>(0,34) = 0xFFFF00FF: the LAST chest-section row of a 1-row container
+     *     ({@code rows * 18 + 17} rows for rows = 1).</li>
+     * <li>(0,35) = 0xFF00FFFF: skipped by a 1-row render (between the sections), visible for
+     *     larger row counts.</li>
+     * <li>(0,125) = 0xFF7700FF: the seam row NO row count ever samples (the chest section ends
+     *     at v = 124 even for 6 rows; the bottom section starts at v = 126).</li>
+     * <li>(0,126) = 0xFFFFA500: the bottom section's first row.</li>
+     * <li>(0,221) = 0xFFFFFF00: the bottom section's last row (the GUI rect's final row stays
+     *     unpainted, exactly like the vanilla client).</li>
+     * </ul>
+     */
+    public static Path writeContainerArtPack(Path root, int textureSize) {
+        if (textureSize % 256 != 0) {
+            throw new IllegalArgumentException("textureSize must be a multiple of 256, got: " + textureSize);
+        }
+        try {
+            write(root, "pack.mcmeta", """
+                {"pack":{"pack_format":88,"description":"container art test fixture"}}""");
+
+            int unit = textureSize / 256;
+            BufferedImage art = transparent(textureSize, textureSize);
+            fillUnits(art, unit, 0, 0, 176, 222, 0xFF224488);
+            fillUnits(art, unit, 0, 0, 1, 1, 0xFFFF0000);
+            fillUnits(art, unit, 175, 0, 1, 1, 0xFF00FF00);
+            fillUnits(art, unit, 0, 34, 1, 1, 0xFFFF00FF);
+            fillUnits(art, unit, 0, 35, 1, 1, 0xFF00FFFF);
+            fillUnits(art, unit, 0, 125, 1, 1, 0xFF7700FF);
+            fillUnits(art, unit, 0, 126, 1, 1, 0xFFFFA500);
+            fillUnits(art, unit, 0, 221, 1, 1, 0xFFFFFF00);
+            containerTexture(root, art);
+
+            return root;
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to write container art fixture pack", e);
+        }
+    }
+
+    /** Fills a rectangle given in 256-normalized texel units, scaled by {@code unit} px per unit. */
+    private static void fillUnits(BufferedImage image, int unit, int x, int y, int width, int height, int argb) {
+        for (int py = y * unit; py < (y + height) * unit; py++) {
+            for (int px = x * unit; px < (x + width) * unit; px++) {
+                image.setRGB(px, py, argb);
+            }
+        }
+    }
+
+    private static void containerTexture(Path root, BufferedImage image) throws IOException {
+        Path path = root.resolve("assets/minecraft/textures/gui/container/generic_54.png");
+        Files.createDirectories(path.getParent());
+        ImageIO.write(image, "png", path.toFile());
     }
 
     private static void fontJson(Path root, String namespace, String name, String json) throws IOException {

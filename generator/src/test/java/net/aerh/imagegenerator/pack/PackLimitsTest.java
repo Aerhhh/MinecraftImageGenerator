@@ -15,7 +15,7 @@ class PackLimitsTest {
         System.clearProperty("generator.pack.maxEntryBytes");
         System.clearProperty("generator.pack.maxTextureDim");
         System.clearProperty("generator.pack.textureCache.maxBytes");
-        System.clearProperty("generator.pack.fontTextureMaxDim");
+        System.clearProperty("generator.pack.sheetTextureMaxDim");
     }
 
     @Test
@@ -25,7 +25,7 @@ class PackLimitsTest {
         assertEquals(8L * 1024 * 1024, limits.maxEntryBytes());
         assertEquals(1_024, limits.maxTextureDim());
         assertEquals(64L * 1024 * 1024, limits.textureCacheMaxBytes());
-        assertEquals(8_192, limits.fontTextureMaxDim());
+        assertEquals(8_192, limits.sheetTextureMaxDim());
     }
 
     @Test
@@ -34,18 +34,18 @@ class PackLimitsTest {
         System.setProperty("generator.pack.maxEntryBytes", "1024");
         System.setProperty("generator.pack.maxTextureDim", "64");
         System.setProperty("generator.pack.textureCache.maxBytes", "2048");
-        System.setProperty("generator.pack.fontTextureMaxDim", "256");
+        System.setProperty("generator.pack.sheetTextureMaxDim", "256");
         PackLimits limits = PackLimits.fromSystemProperties();
         assertEquals(5, limits.maxEntries());
         assertEquals(1024L, limits.maxEntryBytes());
         assertEquals(64, limits.maxTextureDim());
         assertEquals(2048L, limits.textureCacheMaxBytes());
-        assertEquals(256, limits.fontTextureMaxDim());
+        assertEquals(256, limits.sheetTextureMaxDim());
     }
 
     @Test
-    void fourArgConstructorAppliesDefaultFontTextureCap() {
-        assertEquals(8_192, new PackLimits(1, 32, 1, 1).fontTextureMaxDim());
+    void fourArgConstructorAppliesDefaultSheetTextureCap() {
+        assertEquals(8_192, new PackLimits(1, 32, 1, 1).sheetTextureMaxDim());
     }
 
     @Test
@@ -128,17 +128,17 @@ class PackLimitsTest {
     }
 
     @Test
-    void fontTextureMaxDimZeroThrowsNamingTheKnob() {
+    void sheetTextureMaxDimZeroThrowsNamingTheKnob() {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
             () -> new PackLimits(100, 32, 1024, 1024, 0));
-        assertTrue(exception.getMessage().contains("generator.pack.fontTextureMaxDim"));
+        assertTrue(exception.getMessage().contains("generator.pack.sheetTextureMaxDim"));
     }
 
     @Test
-    void fontTextureMaxDimNegativeThrowsNamingTheKnob() {
+    void sheetTextureMaxDimNegativeThrowsNamingTheKnob() {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
             () -> new PackLimits(100, 32, 1024, 1024, -5));
-        assertTrue(exception.getMessage().contains("generator.pack.fontTextureMaxDim"));
+        assertTrue(exception.getMessage().contains("generator.pack.sheetTextureMaxDim"));
         assertTrue(exception.getMessage().contains("-5"));
     }
 }

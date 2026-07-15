@@ -7,6 +7,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -38,6 +39,12 @@ class LoadedPackTooltipTest {
         return new LoadedPack(PackId.parse("test:theme"),
             PackSource.directory(dir, PackLimits.fromSystemProperties()),
             PackLimits.fromSystemProperties());
+    }
+
+    private static LoadedPack loadTallStripPack(Path dir, PackLimits limits) {
+        FixturePacks.writeTallAnimatedTooltipPack(dir);
+        return new LoadedPack(PackId.parse("test:tallstrip"),
+            PackSource.directory(dir, limits), limits);
     }
 
     @Test
@@ -95,6 +102,65 @@ class LoadedPackTooltipTest {
         assertEquals(0xFF0000FF, sprites.background().texture().getRGB(4, 4), "frames list starts at index 2 (blue)");
         assertEquals(new GuiScaling.NineSlice(8, 8, new GuiScaling.NineSlice.Border(1, 1, 1, 1), false),
             sprites.background().scaling());
+    }
+
+    @Test
+    void tallAnimatedStripDecodesUnderSheetCapAndCropsToFirstFrame(@TempDir Path tallDir) {
+        // 146x2482 strip: over the 1024 item texture cap, under the 8192 sheet cap.
+        LoadedPack tallPack = loadTallStripPack(tallDir, PackLimits.fromSystemProperties());
+        TooltipSprites sprites = tallPack.resolveTooltipSprites("testpack:tallstrip").orElseThrow();
+        assertEquals(146, sprites.background().texture().getWidth());
+        assertEquals(146, sprites.background().texture().getHeight(),
+            "flipbook cropped to one width-square frame");
+        assertEquals(0xFF112233, sprites.background().texture().getRGB(73, 73),
+            "frames list [0..16,{index:0,time:100}] starts at index 0");
+        assertEquals(new GuiScaling.NineSlice(146, 146, new GuiScaling.NineSlice.Border(8, 9, 10, 11), true),
+            sprites.background().scaling(), "per-side border object and stretch_inner survive the crop");
+    }
+
+    @Test
+    void tallAnimatedStripRendersNineSliceFromCroppedFirstFrame(@TempDir Path tallDir) {
+        LoadedPack tallPack = loadTallStripPack(tallDir, PackLimits.fromSystemProperties());
+        GuiSprite background = tallPack.resolveTooltipSprites("testpack:tallstrip").orElseThrow().background();
+        BufferedImage rendered = GuiSpriteRenderer.render(background.texture(), background.scaling(), 200, 60);
+        assertEquals(0xFFAA0000, rendered.getRGB(0, 0), "top-left corner copied 1:1 from frame 0");
+        assertEquals(0xFF00AA00, rendered.getRGB(199, 0), "top-right corner copied 1:1 from frame 0");
+        assertEquals(0xFF0000AA, rendered.getRGB(0, 59), "bottom-left corner copied 1:1 from frame 0");
+        assertEquals(0xFFAAAA00, rendered.getRGB(199, 59), "bottom-right corner copied 1:1 from frame 0");
+        assertEquals(0xFF112233, rendered.getRGB(100, 30), "stretch_inner center sampled from frame 0");
+    }
+
+    @Test
+    void tallAnimatedStripOverSheetCapFailsLoudly(@TempDir Path tallDir) {
+        PackLimits cappedSheets = new PackLimits(20_000, 8L * 1024 * 1024, 1_024, 64L * 1024 * 1024, 2_048);
+        LoadedPack tallPack = loadTallStripPack(tallDir, cappedSheets);
+        PackResolveException exception = assertThrows(PackResolveException.class,
+            () -> tallPack.resolveTooltipSprites("testpack:tallstrip"));
+        assertTrue(exception.getMessage().contains("2048"), exception.getMessage());
+    }
+
+    @Test
+    void itemTexturesKeepTheStrictItemCap(@TempDir Path tallDir) {
+        // The same 146x2482 dimensions that decode as a tooltip sheet fail as an item texture:
+        // the sheet cap is scoped to tooltip sprite usage, not item art.
+        LoadedPack tallPack = loadTallStripPack(tallDir, PackLimits.fromSystemProperties());
+        PackResolveException exception = assertThrows(PackResolveException.class,
+            () -> tallPack.resolveSprite("testpack:item/oversized"));
+        assertTrue(exception.getMessage().contains("1024"), exception.getMessage());
+    }
+
+    @Test
+    void itemTextureUnderTheTooltipSpritePathStillFailsAtTheItemCap(@TempDir Path tallDir) {
+        // The decode cap is selected by USAGE, never by path: an item model whose layer0 points
+        // at the oversized strip stored under assets/*/textures/gui/sprites/tooltip/ must fail
+        // at the strict item cap even after the same file decoded fine as a tooltip sheet -
+        // otherwise the item image-bomb guard would be bypassable by path choice.
+        LoadedPack tallPack = loadTallStripPack(tallDir, PackLimits.fromSystemProperties());
+        assertTrue(tallPack.resolveTooltipSprites("testpack:tallstrip").isPresent(),
+            "the strip itself decodes as a tooltip sheet");
+        PackResolveException exception = assertThrows(PackResolveException.class,
+            () -> tallPack.resolveSprite("testpack:item/smuggled"));
+        assertTrue(exception.getMessage().contains("1024"), exception.getMessage());
     }
 
     @Test

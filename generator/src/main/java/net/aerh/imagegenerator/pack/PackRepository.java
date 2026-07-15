@@ -128,6 +128,19 @@ public final class PackRepository {
     }
 
     /**
+     * Resolves a registered pack's override of the generic chest container background
+     * ({@code minecraft:textures/gui/container/generic_54.png}).
+     *
+     * @return empty when the pack does not override the texture - callers fall back to the
+     *     procedural vanilla-style chrome
+     * @throws PackResolveException when the pack is not registered, or the texture exists but
+     *                              fails to decode
+     */
+    public Optional<BufferedImage> resolveContainerBackground(PackId packId) {
+        return requireRegistered(packId).resolveContainerBackground();
+    }
+
+    /**
      * Resolves a font id (e.g. {@code minecraft:default}; a bare id defaults to the
      * {@code minecraft} namespace) against a registered pack.
      *
