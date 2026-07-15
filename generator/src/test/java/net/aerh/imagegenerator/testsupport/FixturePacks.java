@@ -192,6 +192,126 @@ public final class FixturePacks {
         }
     }
 
+    /**
+     * Writes a minimal valid pack (one item -> model -> texture chain) padded with filler JSON
+     * files until exactly {@code assetFileCount} regular files exist under {@code assets/}. Used
+     * by entry-cap wiring tests that need a precise asset file count; {@code pack.mcmeta} sits
+     * outside {@code assets/} and does not count.
+     */
+    public static Path writeMinimalPack(Path root, int assetFileCount) {
+        if (assetFileCount < 3) {
+            throw new IllegalArgumentException("Minimal pack needs at least 3 asset files, got: " + assetFileCount);
+        }
+        try {
+            write(root, "pack.mcmeta", """
+                {"pack":{"pack_format":88,"description":"minimal test fixture"}}""");
+            item(root, "simple", """
+                {"model":{"type":"minecraft:model","model":"testpack:item/simple"}}""");
+            model(root, "simple", "item/generated", "testpack:item/simple");
+            texture(root, "simple", solid(16, 16, 0xFFFF0000));
+            for (int i = 3; i < assetFileCount; i++) {
+                write(root, "assets/testpack/filler/f" + i + ".json", "{}");
+            }
+            return root;
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to write minimal fixture pack", e);
+        }
+    }
+
+    /**
+     * Writes a pack containing ONLY fonts (no items, no tooltip sprites) - the shape of a
+     * dedicated server font pack. Everything is synthetic and generated at test runtime.
+     *
+     * <p>Contents (all in the {@code testpack} namespace unless noted):
+     * <ul>
+     * <li>{@code pixel}: bitmap font, 16x8 sheet cut 2x1 ({@code chars: ["AB"]}, 8x8 cells,
+     *     height 8, ascent 7, scale 1). Cell 'A' has one opaque pixel at cell (5, 0) - ink 6,
+     *     advance 7. Cell 'B' is fully transparent - ink 0, advance 1.</li>
+     * <li>{@code alias}: reference to {@code testpack:pixel} followed by a space provider
+     *     ({@code " "} -> 4.5).</li>
+     * <li>{@code minecraft:barefont}: space-only font in the {@code minecraft} namespace, for
+     *     bare-id default-namespace resolution.</li>
+     * <li>{@code broken}: malformed JSON.</li>
+     * <li>{@code dangling}: reference to a nonexistent font.</li>
+     * <li>{@code cycle_a} / {@code cycle_b}: mutual references.</li>
+     * <li>{@code bigsheet}: bitmap font whose 2048x8 sheet exceeds the default item texture cap
+     *     (1024) but not the font cap (8192); 'A' has ink 1, advance 2.</li>
+     * <li>{@code ttf_only}: single TTF provider with {@code skip: "xyz"} - loads, renders
+     *     nothing.</li>
+     * <li>{@code notexture}: bitmap font whose sheet PNG does not exist.</li>
+     * <li>{@code sub/deco}: nested-path space-only font, mirroring real ids like
+     *     {@code minecraft:tooltip/emblem/frame}.</li>
+     * <li>{@code Fancy.json}: an INVALID resource location (uppercase); must be skipped at index
+     *     time, never advertised by {@code fontIds()}.</li>
+     * </ul>
+     */
+    public static Path writeFontPack(Path root) {
+        try {
+            write(root, "pack.mcmeta", """
+                {"pack":{"pack_format":88,"description":"font-only test fixture"}}""");
+
+            BufferedImage pixelSheet = transparent(16, 8);
+            pixelSheet.setRGB(5, 0, 0xFFFFFFFF);
+            fontTexture(root, NAMESPACE, "pixel.png", pixelSheet);
+            fontJson(root, NAMESPACE, "pixel", """
+                {"providers":[{"type":"bitmap","file":"testpack:font/pixel.png",
+                  "height":8,"ascent":7,"chars":["AB"]}]}""");
+
+            fontJson(root, NAMESPACE, "alias", """
+                {"providers":[{"type":"reference","id":"testpack:pixel"},
+                  {"type":"space","advances":{" ":4.5}}]}""");
+
+            fontJson(root, "minecraft", "barefont", """
+                {"providers":[{"type":"space","advances":{" ":6.0}}]}""");
+
+            write(root, "assets/testpack/font/broken.json", "{nope");
+
+            fontJson(root, NAMESPACE, "dangling", """
+                {"providers":[{"type":"reference","id":"testpack:nope"}]}""");
+
+            fontJson(root, NAMESPACE, "cycle_a", """
+                {"providers":[{"type":"reference","id":"testpack:cycle_b"}]}""");
+            fontJson(root, NAMESPACE, "cycle_b", """
+                {"providers":[{"type":"reference","id":"testpack:cycle_a"}]}""");
+
+            BufferedImage bigSheet = transparent(2048, 8);
+            bigSheet.setRGB(0, 0, 0xFFFFFFFF);
+            fontTexture(root, NAMESPACE, "big.png", bigSheet);
+            fontJson(root, NAMESPACE, "bigsheet", """
+                {"providers":[{"type":"bitmap","file":"testpack:font/big.png",
+                  "ascent":7,"chars":["AB"]}]}""");
+
+            fontJson(root, NAMESPACE, "ttf_only", """
+                {"providers":[{"type":"ttf","file":"testpack:font/fake.ttf","skip":"xyz"}]}""");
+
+            fontJson(root, NAMESPACE, "notexture", """
+                {"providers":[{"type":"bitmap","file":"testpack:font/missing.png",
+                  "ascent":7,"chars":["A"]}]}""");
+
+            fontJson(root, NAMESPACE, "sub/deco", """
+                {"providers":[{"type":"space","advances":{" ":3.0}}]}""");
+
+            // Uppercase file name: not a valid resource location, so vanilla (and this library)
+            // must skip it at index time rather than advertise an unresolvable font id.
+            write(root, "assets/testpack/font/Fancy.json", """
+                {"providers":[{"type":"space","advances":{" ":1.0}}]}""");
+
+            return root;
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to write font fixture pack", e);
+        }
+    }
+
+    private static void fontJson(Path root, String namespace, String name, String json) throws IOException {
+        write(root, "assets/" + namespace + "/font/" + name + ".json", json);
+    }
+
+    private static void fontTexture(Path root, String namespace, String fileName, BufferedImage image) throws IOException {
+        Path path = root.resolve("assets/" + namespace + "/textures/font/" + fileName);
+        Files.createDirectories(path.getParent());
+        ImageIO.write(image, "png", path.toFile());
+    }
+
     private static void item(Path root, String name, String json) throws IOException {
         write(root, "assets/testpack/items/item/" + name + ".json", json);
     }

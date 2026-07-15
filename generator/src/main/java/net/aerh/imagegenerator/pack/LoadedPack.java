@@ -6,6 +6,10 @@ import lombok.extern.slf4j.Slf4j;
 import net.aerh.imagegenerator.exception.GeneratorException;
 import net.aerh.imagegenerator.exception.PackLoadException;
 import net.aerh.imagegenerator.exception.PackResolveException;
+import net.aerh.imagegenerator.pack.font.BitmapProviderCache;
+import net.aerh.imagegenerator.pack.font.FontProviderDefinition;
+import net.aerh.imagegenerator.pack.font.FontResolver;
+import net.aerh.imagegenerator.pack.font.PackFont;
 
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
@@ -21,6 +25,10 @@ import java.util.regex.Pattern;
 /**
  * A registered resource pack: eagerly indexed item definitions and models (JSON parsed once at
  * construction, per-item errors tolerated), with textures decoded lazily through a bounded cache.
+ * Font JSONs are indexed by path at construction and parsed lazily on
+ * {@link #resolveFont(String)}, with resolved fonts held in a bounded, GC-friendly cache
+ * mirroring the texture cache (resolved fonts retain their glyph cell rasters, which for large
+ * glyph-art sheets can be substantial).
  */
 @Slf4j
 final class LoadedPack {
@@ -29,6 +37,7 @@ final class LoadedPack {
     private static final Pattern MODEL_PATH = Pattern.compile("assets/([^/]+)/models/(.+)\\.json");
     private static final Pattern TOOLTIP_SPRITE_PATH =
         Pattern.compile("assets/([^/]+)/textures/gui/sprites/tooltip/(.+)\\.png");
+    private static final Pattern FONT_PATH = Pattern.compile("assets/([^/]+)/font/(.+)\\.json");
     private static final String BACKGROUND_SUFFIX = "_background";
     private static final String FRAME_SUFFIX = "_frame";
     // The styleless default tooltip is the fixed minecraft:tooltip/background + frame sprite
@@ -36,6 +45,13 @@ final class LoadedPack {
     private static final String DEFAULT_BACKGROUND_PATH = "assets/minecraft/textures/gui/sprites/tooltip/background.png";
     private static final String DEFAULT_FRAME_PATH = "assets/minecraft/textures/gui/sprites/tooltip/frame.png";
     private static final int MAX_PARENT_DEPTH = 8;
+    /**
+     * Pack ids whose textures use alpha 252 as an "opaque full-bright" emissive marker (a
+     * Hypixel SkyBlock shader convention). Only these packs get the alpha normalized to fully
+     * opaque at decode time; other packs may ship legitimate alpha-252 pixels that must be
+     * preserved. Add a pack id here if another pack is confirmed to use the same convention.
+     */
+    private static final Set<String> EMISSIVE_ALPHA_PACK_IDS = Set.of("hypixel:skyblock");
 
     private record ItemEntry(ItemModelNode node, String error) {
     }
@@ -48,17 +64,22 @@ final class LoadedPack {
     private final PackId id;
     private final PackSource source;
     private final PackLimits limits;
+    private final boolean normalizeEmissiveAlpha;
     private final Set<String> namespaces = new HashSet<>();
     private final Map<String, ItemEntry> items = new HashMap<>();
     private final Map<String, ModelInfo> models = new HashMap<>();
     private final Map<String, TooltipStyleEntry> tooltipStyles = new HashMap<>();
+    private final Map<String, String> fontPaths = new HashMap<>();
+    private final BitmapProviderCache fontProviderCache = new BitmapProviderCache();
     private boolean hasTooltipSprites;
     private final LoadingCache<String, BufferedImage> textureCache;
+    private final LoadingCache<String, PackFont> fontCache;
 
     LoadedPack(PackId id, PackSource source, PackLimits limits) {
         this.id = id;
         this.source = source;
         this.limits = limits;
+        this.normalizeEmissiveAlpha = EMISSIVE_ALPHA_PACK_IDS.contains(id.toString());
         this.textureCache = Caffeine.newBuilder()
             .maximumWeight(limits.textureCacheMaxBytes())
             // long arithmetic: large custom maxTextureDim configs can overflow int and silently
@@ -67,6 +88,16 @@ final class LoadedPack {
                 (int) Math.min(Integer.MAX_VALUE, Math.max(1L, (long) image.getWidth() * image.getHeight() * 4)))
             .softValues()
             .build(this::loadTexture);
+        // Resolved fonts retain their glyph cell rasters, which for glyph-art sheets (bounded by
+        // fontTextureMaxDim, not maxTextureDim) can dwarf item textures. Bound and soft-reference
+        // them exactly like the texture cache, reusing the same byte budget as a separate
+        // allowance, so a pack full of huge sheets cannot pin unbounded memory.
+        this.fontCache = Caffeine.newBuilder()
+            .maximumWeight(limits.textureCacheMaxBytes())
+            .weigher((String key, PackFont font) ->
+                (int) Math.min(Integer.MAX_VALUE, Math.max(1L, font.retainedCellBytes())))
+            .softValues()
+            .build(this::resolveFontUncached);
         buildIndex();
     }
 
@@ -110,18 +141,34 @@ final class LoadedPack {
             if (tooltipMatcher.matches()) {
                 hasTooltipSprites = true;
                 indexTooltipSprite(tooltipMatcher.group(1), tooltipMatcher.group(2), path);
+                continue;
+            }
+            Matcher fontMatcher = FONT_PATH.matcher(path);
+            if (fontMatcher.matches()) {
+                // Skip files that are not valid resource locations (mirroring vanilla): indexing
+                // them would make fontIds() advertise ids that resolveFont() must reject as
+                // malformed caller input, breaking the fontIds -> resolveFont round-trip.
+                if (!isValidResourceLocation(fontMatcher.group(1), fontMatcher.group(2))) {
+                    log.warn("Pack {}: skipping font with invalid resource location: {}", id, path);
+                    continue;
+                }
+                namespaces.add(fontMatcher.group(1));
+                // Index the path only; the JSON parses lazily at resolve time so a broken font
+                // fails loudly when requested instead of degrading the whole pack at register.
+                fontPaths.put(fontMatcher.group(1) + ":" + fontMatcher.group(2), path);
             }
         }
-        if (items.isEmpty() && !hasTooltipSprites) {
+        if (items.isEmpty() && !hasTooltipSprites && fontPaths.isEmpty()) {
             throw new PackLoadException(
-                "Pack %s contains no item definitions under assets/*/items/ and no tooltip sprites under assets/*/textures/gui/sprites/tooltip/",
+                "Pack %s contains no item definitions under assets/*/items/, no tooltip sprites under assets/*/textures/gui/sprites/tooltip/, and no fonts under assets/*/font/",
                 id.toString());
         }
         if (errors > 0) {
-            log.warn("Pack {}: indexed {} items and {} models with {} malformed entries",
-                id, items.size(), models.size(), errors);
+            log.warn("Pack {}: indexed {} items, {} models and {} fonts with {} malformed entries",
+                id, items.size(), models.size(), fontPaths.size(), errors);
         } else {
-            log.info("Pack {}: indexed {} items and {} models", id, items.size(), models.size());
+            log.info("Pack {}: indexed {} items, {} models and {} fonts",
+                id, items.size(), models.size(), fontPaths.size());
         }
     }
 
@@ -203,6 +250,88 @@ final class LoadedPack {
             .map(Map.Entry::getKey)
             .sorted()
             .toList();
+    }
+
+    /**
+     * Resolves a font id (e.g. {@code minecraft:default}, {@code mcc:chest_backgrounds}; a bare
+     * id defaults to the {@code minecraft} namespace) to its resolved font: references expanded,
+     * filters applied for Force Unicode OFF / jp OFF, bitmap sheets decoded and metrics computed.
+     * Resolved fonts are held in a cache bounded by retained glyph-cell bytes and soft
+     * references (mirroring the texture cache), so repeated callers get the cached instance
+     * while huge glyph-art fonts stay reclaimable instead of pinning unbounded memory.
+     *
+     * <p>Font sheet decodes are bounded by {@link PackLimits#fontTextureMaxDim()}, NOT
+     * {@link PackLimits#maxTextureDim()}: real packs ship glyph sheets far beyond the item
+     * texture cap. Sheets are decoded once per DISTINCT bitmap provider (fonts referencing the
+     * same sheet share one built provider) and released after the per-glyph cells are copied
+     * out, so they intentionally bypass the item texture cache (caching a sheet of up to
+     * 8192x8192 pixels would blow the cache budget for no repeat-read benefit).
+     *
+     * @return empty when the pack defines no such font - callers fall back to built-in fonts
+     * @throws IllegalArgumentException when the font id itself is malformed (caller input)
+     * @throws PackResolveException     when the font exists but is broken (malformed JSON,
+     *                                  missing or cyclic reference, missing or oversized sheet)
+     */
+    public Optional<PackFont> resolveFont(String fontId) {
+        ResourceRef ref = ResourceRef.parse(fontId, "minecraft");
+        String key = ref.toString();
+        if (!fontPaths.containsKey(key)) {
+            return Optional.empty();
+        }
+        return Optional.of(fontCache.get(key));
+    }
+
+    /** Cache loader for {@link #resolveFont(String)}; {@code key} is the normalized font id. */
+    private PackFont resolveFontUncached(String key) {
+        List<FontProviderDefinition> resolved = FontResolver.resolveProviders(key, this::fontDefinitions);
+        return PackFont.create(key, resolved, this::loadFontSheet, fontProviderCache);
+    }
+
+    private static boolean isValidResourceLocation(String namespace, String path) {
+        try {
+            new ResourceRef(namespace, path);
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    /** Sorted font ids defined by this pack, for discovery/autocomplete. */
+    public List<String> fontIds() {
+        return fontPaths.keySet().stream().sorted().toList();
+    }
+
+    /**
+     * {@link FontResolver.DefinitionLookup} backed by this pack's font index: empty for unknown
+     * ids (the resolver decides whether that is fatal), loud for present-but-malformed JSON.
+     */
+    private Optional<List<FontProviderDefinition>> fontDefinitions(String fontId) {
+        String path = fontPaths.get(fontId);
+        if (path == null) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(PackFontParser.parse(source.read(path)));
+        } catch (PackLoadException e) {
+            throw new PackResolveException(GeneratorException.formatMessage(
+                "Font `%s` in pack `%s` is malformed: %s", fontId, id.toString(), e.getMessage()), e);
+        }
+    }
+
+    /**
+     * Loads a bitmap provider sheet. The {@code file} reference includes its extension (vanilla
+     * resolves it directly beneath {@code textures/}), and the decode is bounded by the dedicated
+     * font cap; see {@link #resolveFont(String)} for why this bypasses the item texture cache.
+     */
+    private BufferedImage loadFontSheet(String textureFileRef) {
+        ResourceRef ref = parseRefOrResolveError(textureFileRef, "minecraft");
+        String path = "assets/" + ref.namespace() + "/textures/" + ref.path();
+        try {
+            return TextureDecoder.decode(source.read(path), limits.fontTextureMaxDim(), normalizeEmissiveAlpha);
+        } catch (PackLoadException e) {
+            throw new PackResolveException(GeneratorException.formatMessage(
+                "Font texture `%s` in pack `%s` failed to load: %s", path, id.toString(), e.getMessage()), e);
+        }
     }
 
     private GuiSprite loadGuiSprite(String texturePath) {
@@ -311,7 +440,7 @@ final class LoadedPack {
     private BufferedImage loadTexture(String texturePath) {
         BufferedImage image;
         try {
-            image = TextureDecoder.decode(source.read(texturePath), limits.maxTextureDim());
+            image = TextureDecoder.decode(source.read(texturePath), limits.maxTextureDim(), normalizeEmissiveAlpha);
         } catch (PackLoadException e) {
             throw new PackResolveException(GeneratorException.formatMessage(
                 "Texture `%s` in pack `%s` failed to load: %s", texturePath, id.toString(), e.getMessage()), e);

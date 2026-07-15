@@ -1,5 +1,6 @@
 package net.aerh.imagegenerator.pack;
 
+import net.aerh.imagegenerator.exception.PackLoadException;
 import net.aerh.imagegenerator.exception.PackResolveException;
 import net.aerh.imagegenerator.testsupport.FixturePacks;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,6 +29,9 @@ class PackRepositoryTest {
 
     @TempDir
     Path packDir;
+
+    @TempDir
+    Path miniPackDir;
 
     private PackRepository repository;
 
@@ -117,6 +121,31 @@ class PackRepositoryTest {
         PackId id = repository.register("test:pack", fixtureSource());
         assertTrue(repository.resolve(id, "testpack:item/simple").isPresent(),
             "16x16 fixture texture resolves fine under the default 1024px maxTextureDim");
+    }
+
+    @Test
+    void packExceedingSmallEntryCapFailsLoudlyAtRegister() {
+        // 6 asset files against a cap of 5: proves the maxEntries wiring actually bites during
+        // registration (index time), not lazily at resolve.
+        FixturePacks.writeMinimalPack(miniPackDir, 6);
+        PackLimits smallCap = new PackLimits(5, 8L * 1024 * 1024, 1024, 64L * 1024 * 1024);
+        PackSource source = PackSource.directory(miniPackDir, smallCap);
+        PackLoadException exception = assertThrows(PackLoadException.class,
+            () -> repository.register("test:overcap", source, smallCap));
+        assertTrue(exception.getMessage().contains("max entry count"),
+            "the failure must come from the entry-cap guard, not some unrelated register error");
+    }
+
+    @Test
+    void packLargerThanSmallCapLoadsWithExplicitHigherLimitsOnBothSourceAndRegister() {
+        // The large-server-pack recipe (see PackLimits javadoc): one raised PackLimits instance
+        // passed to BOTH the source factory and register. 6 files over a cap of 5 stands in for
+        // a Wynncraft-scale pack (~36k files) over the 20k default; the wiring is identical.
+        FixturePacks.writeMinimalPack(miniPackDir, 6);
+        PackLimits raised = new PackLimits(10, 8L * 1024 * 1024, 1024, 64L * 1024 * 1024);
+        PackId id = repository.register("test:bigpack", PackSource.directory(miniPackDir, raised), raised);
+        assertTrue(repository.resolve(id, "testpack:item/simple").isPresent(),
+            "the pack indexes and resolves under the raised entry cap");
     }
 
     @Test

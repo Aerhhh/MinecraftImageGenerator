@@ -189,7 +189,7 @@ class PackJsonParser {
             throw new PackLoadException("nine_slice gui scaling is missing 'border'");
         }
         if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isNumber()) {
-            int uniform = integralInt(element, "border");
+            int uniform = integralInt(element, "border", "gui scaling");
             return new GuiScaling.NineSlice.Border(uniform, uniform, uniform, uniform);
         }
         if (element.isJsonObject()) {
@@ -212,18 +212,27 @@ class PackJsonParser {
     }
 
     private static int requireScalingInt(JsonObject node, String member) {
-        JsonElement element = node.get(member);
-        if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isNumber()) {
-            throw new PackLoadException("gui scaling is missing numeric member '%s'", member);
-        }
-        return integralInt(element, member);
+        return requireIntegralInt(node, member, "gui scaling");
     }
 
-    private static int integralInt(JsonElement element, String member) {
+    /**
+     * Requires a numeric member with an exactly integral value; {@code owner} names the JSON
+     * shape (e.g. {@code "gui scaling"}, {@code "Font provider"}) for the diagnostic. Shared
+     * across the pack parsers so numeric validation and messages stay consistent.
+     */
+    static int requireIntegralInt(JsonObject node, String member, String owner) {
+        JsonElement element = node.get(member);
+        if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isNumber()) {
+            throw new PackLoadException("%s is missing numeric member '%s'", owner, member);
+        }
+        return integralInt(element, member, owner);
+    }
+
+    private static int integralInt(JsonElement element, String member, String owner) {
         double value = element.getAsDouble();
         int intValue = (int) value;
         if (value != intValue) {
-            throw new PackLoadException("gui scaling member '%s' must be an integer, got %s", member, String.valueOf(value));
+            throw new PackLoadException("%s member '%s' must be an integer, got %s", owner, member, String.valueOf(value));
         }
         return intValue;
     }
@@ -257,14 +266,27 @@ class PackJsonParser {
         return node.has("fallback") ? parseNode(requireObject(node, "fallback")) : null;
     }
 
-    private static String normalize(String type) {
+    /**
+     * Strips the optional {@code minecraft:} prefix from a type discriminator. Shared across the
+     * pack parsers (fonts included) so prefix handling never drifts.
+     */
+    static String normalize(String type) {
         return type.startsWith(MINECRAFT_PREFIX) ? type.substring(MINECRAFT_PREFIX.length()) : type;
     }
 
     private static String requireString(JsonObject node, String member) {
+        return requireString(node, member, "Item definition node");
+    }
+
+    /**
+     * Requires a string member; {@code owner} names the JSON shape (e.g.
+     * {@code "Item definition node"}, {@code "Font provider"}) for the diagnostic. Shared across
+     * the pack parsers so string validation and messages stay consistent.
+     */
+    static String requireString(JsonObject node, String member, String owner) {
         JsonElement element = node.get(member);
         if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString()) {
-            throw new PackLoadException("Item definition node is missing string member '%s'", member);
+            throw new PackLoadException("%s is missing string member '%s'", owner, member);
         }
         return element.getAsString();
     }

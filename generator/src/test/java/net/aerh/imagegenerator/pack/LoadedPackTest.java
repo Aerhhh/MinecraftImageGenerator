@@ -75,9 +75,20 @@ class LoadedPackTest {
     }
 
     @Test
-    void emissiveAlphaIsNormalized() {
+    void emissiveAlphaPreservedForNonHypixelPacks() {
+        // Alpha 252 is a Hypixel SkyBlock shader convention; other packs may ship legitimate
+        // alpha-252 pixels which must survive decode untouched.
         BufferedImage sprite = pack.resolveSprite("testpack:item/emissive").orElseThrow();
-        assertEquals(0xFFFFAA00, sprite.getRGB(0, 0));
+        assertEquals((252 << 24) | 0xFFAA00, sprite.getRGB(0, 0));
+    }
+
+    @Test
+    void emissiveAlphaNormalizedForHypixelSkyblockPack() {
+        LoadedPack hypixelPack = new LoadedPack(PackId.parse("hypixel:skyblock"),
+            PackSource.directory(packDir, PackLimits.fromSystemProperties()),
+            PackLimits.fromSystemProperties());
+        BufferedImage sprite = hypixelPack.resolveSprite("testpack:item/emissive").orElseThrow();
+        assertEquals(0xFFFFAA00, sprite.getRGB(0, 0), "alpha 252 becomes opaque under the Hypixel convention");
     }
 
     @Test

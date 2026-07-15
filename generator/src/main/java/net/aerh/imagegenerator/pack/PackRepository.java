@@ -2,6 +2,7 @@ package net.aerh.imagegenerator.pack;
 
 import lombok.extern.slf4j.Slf4j;
 import net.aerh.imagegenerator.exception.PackResolveException;
+import net.aerh.imagegenerator.pack.font.PackFont;
 
 import java.awt.image.BufferedImage;
 import java.io.IOException;
@@ -51,6 +52,12 @@ public final class PackRepository {
      * <p>{@code limits} governs texture decode and the per-pack texture cache for this pack only;
      * pass the same instance you gave the {@link PackSource} factory ({@link PackSource#directory}
      * / {@link PackSource#zip}) so read-time and decode-time limits agree.
+     *
+     * <p>Large server packs (Wynncraft-class packs run to ~36,000 files) exceed the default
+     * {@link PackLimits#maxEntries()} and need explicitly raised limits on BOTH the source factory
+     * and this call. Note the count semantics differ by source: ZIP sources count every
+     * central-directory record including directory entries, directory sources count only regular
+     * files under {@code assets/}. See the {@link PackLimits} javadoc for sizing guidance.
      *
      * @throws IllegalArgumentException on duplicate registration or the reserved vanilla ID
      */
@@ -118,6 +125,29 @@ public final class PackRepository {
      */
     public List<String> tooltipStyles(PackId packId) {
         return requireRegistered(packId).tooltipStyleRefs();
+    }
+
+    /**
+     * Resolves a font id (e.g. {@code minecraft:default}; a bare id defaults to the
+     * {@code minecraft} namespace) against a registered pack.
+     *
+     * @return empty when the pack defines no such font - callers fall back to built-in fonts
+     * @throws IllegalArgumentException when the font id itself is malformed
+     * @throws PackResolveException     when the pack is not registered, or the font exists but
+     *                                  is broken (malformed JSON, missing or cyclic reference,
+     *                                  missing or oversized glyph sheet)
+     */
+    public Optional<PackFont> resolveFont(PackId packId, String fontId) {
+        return requireRegistered(packId).resolveFont(fontId);
+    }
+
+    /**
+     * Sorted font ids defined by a registered pack, for discovery/autocomplete.
+     *
+     * @throws PackResolveException when the pack is not registered
+     */
+    public List<String> fontIds(PackId packId) {
+        return requireRegistered(packId).fontIds();
     }
 
     private LoadedPack requireRegistered(PackId packId) {
