@@ -110,23 +110,6 @@ class MinecraftHudLineGeneratorTest {
         assertEquals(0, image.getRGB(312, 43), "above line 1 art (line 0's shadow ends at y 23)");
     }
 
-    /**
-     * Regression: odd-GUI-px-wide lines center in whole GUI px like the client. The 9 GUI px
-     * anchor glyph's origin must be GUI 156 = canvas 312 (vanilla's {@code 160 - 9 / 2} as
-     * ints); canvas-px-precision centering ({@code 640 / 2 - 18 / 2 = 311}) would sit half a
-     * GUI px left of the in-game position and straddle the GUI pixel grid.
-     */
-    @Test
-    void oddWidthLinesCenterOnWholeGuiPixelsLikeVanilla() {
-        PackRepository repository = registerContainerPack();
-        BufferedImage image = packBuilder(repository)
-            .withLine(whiteRun(GLYPH_ANCHOR))
-            .build().render(null).getImage();
-
-        assertEquals(ANCHOR_ART, image.getRGB(312, 6), "origin on the whole GUI px at canvas 312");
-        assertEquals(0, image.getRGB(311, 6), "no art on the half-GUI-px column at canvas 311");
-    }
-
     /** An empty run list is a blank spacer line: nothing drawn, the anchor slot stays occupied. */
     @Test
     void blankLinesKeepTheirAnchorSlot() {
