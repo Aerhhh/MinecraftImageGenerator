@@ -10,6 +10,7 @@ import net.aerh.imagegenerator.pack.font.BitmapProviderCache;
 import net.aerh.imagegenerator.pack.font.FontProviderDefinition;
 import net.aerh.imagegenerator.pack.font.FontResolver;
 import net.aerh.imagegenerator.pack.font.PackFont;
+import net.aerh.imagegenerator.pack.font.VanillaFontSheets;
 import org.jetbrains.annotations.Nullable;
 
 import java.awt.AlphaComposite;
@@ -133,6 +134,30 @@ final class LoadedPack {
         @Override
         public boolean exists(String textureFileRef) {
             return source.exists(fontSheetPath(textureFileRef));
+        }
+
+        @Override
+        public Optional<BufferedImage> vanillaFallbackSheet(String textureFileRef) {
+            ResourceRef ref = parseRefOrResolveError(textureFileRef, "minecraft");
+            return VanillaFontSheets.sheet(ref.namespace(), ref.path());
+        }
+
+        @Override
+        public Optional<byte[]> ttfFontData(String fontFileRef) {
+            // Vanilla resolves a ttf provider `file` beneath assets/<ns>/font/, not textures/.
+            ResourceRef ref = parseRefOrResolveError(fontFileRef, "minecraft");
+            String path = "assets/" + ref.namespace() + "/font/" + ref.path();
+            if (!source.exists(path)) {
+                return Optional.empty();
+            }
+            try {
+                return Optional.of(source.read(path));
+            } catch (PackLoadException e) {
+                // Oversized (over maxEntryBytes) or unreadable: degrade to the never-claim
+                // unsupported entry rather than fail the whole font.
+                log.warn("Pack {}: TTF font `{}` failed to read: {}", id, path, e.getMessage());
+                return Optional.empty();
+            }
         }
     };
 
@@ -475,13 +500,18 @@ final class LoadedPack {
      * 8192x8192 pixels would blow the cache budget for no repeat-read benefit).
      *
      * <p><b>Deviation from vanilla, by design:</b> a bitmap provider whose sheet texture is
-     * ABSENT from the pack is skipped with a warning instead of failing the font. Vanilla fails
-     * the whole font, but real server packs override {@code minecraft:default} with providers
-     * referencing vanilla client sheets (e.g. {@code minecraft:font/ascii.png}) that this
-     * library does not bundle; skipping just those providers keeps every glyph the pack
-     * actually ships renderable. A font whose providers ALL skip still resolves, as an empty
-     * font claiming no codepoint. Present-but-broken sheets (undecodable, oversized) keep
-     * failing loudly.
+     * ABSENT from the pack is resolved in two steps. Real server packs override
+     * {@code minecraft:default} (and {@code default_offset}) with providers referencing vanilla
+     * client sheets (e.g. {@code minecraft:font/ascii.png}) they do not ship, assuming the vanilla
+     * client already has them. Those three vanilla sheets are bundled ({@link VanillaFontSheets}),
+     * so such a provider renders REAL bitmap glyphs from the bundled copy, keeping the pack's own
+     * metrics (a {@code default_offset} font's re-declared ascent still shifts the text down). Only
+     * when no bundled vanilla sheet matches - a non-vanilla sheet this library does not bundle - is
+     * the provider skipped with a warning instead of failing the whole font, keeping every glyph
+     * the pack actually ships renderable. A font whose providers ALL skip still resolves, as an
+     * empty font claiming no codepoint. A pack that ships its OWN copy of a vanilla sheet wins: the
+     * provider is present, so the bundled fallback is never consulted. Present-but-broken sheets
+     * (undecodable, oversized) keep failing loudly.
      *
      * @return empty when the pack defines no such font - callers fall back to built-in fonts
      * @throws IllegalArgumentException when the font id itself is malformed (caller input)

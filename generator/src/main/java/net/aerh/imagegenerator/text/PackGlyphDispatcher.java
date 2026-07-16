@@ -204,6 +204,33 @@ public final class PackGlyphDispatcher {
         }
 
         /**
+         * Whether the captured segment style renders this glyph bold. A bold glyph draws a second
+         * copy one GUI px to the right, so measurement callers folding the drawn ink box must
+         * extend its right edge by {@code +1} GUI px.
+         */
+        public boolean isBold() {
+            return bold;
+        }
+
+        /**
+         * Left edge of the glyph's drawn ink relative to the pen origin, GUI px; see
+         * {@link PackGlyph#inkLeftGuiPx()}. Meaningful only when {@link #inkRightGuiPx()} exceeds
+         * it (a TTF cell shifted or wider than its advance); bitmap and space glyphs report a
+         * degenerate {@code [0, 0]} box the advance already bounds.
+         */
+        public double inkLeftGuiPx() {
+            return glyph.inkLeftGuiPx();
+        }
+
+        /**
+         * Right edge of the glyph's drawn ink relative to the pen origin, GUI px (the unbold cell,
+         * bold copy excluded); see {@link PackGlyph#inkRightGuiPx()}.
+         */
+        public double inkRightGuiPx() {
+            return glyph.inkRightGuiPx();
+        }
+
+        /**
          * Provider {@code ascent} in GUI pixels (negative legal; 0 for space glyphs). The glyph
          * cell's top edge sits {@code ascent} GUI pixels above the baseline, i.e. at
          * {@code lineTop + 7 - ascent}.

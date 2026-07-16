@@ -460,6 +460,14 @@ public final class FixturePacks {
      *     'C' is unmapped, and the space advance survives.</li>
      * <li>{@code sub/deco}: nested-path space-only font, mirroring real ids like
      *     {@code minecraft:tooltip/emblem/frame}.</li>
+     * <li>{@code minecraft:vanilla_ascii}: a bitmap provider referencing
+     *     {@code minecraft:font/ascii.png} (NOT shipped by this pack) with the vanilla 16x16 grid;
+     *     resolves real glyphs from the bundled vanilla sheet - 'A' advance 6, 'i' advance 2.</li>
+     * <li>{@code minecraft:vanilla_offset}: same as {@code vanilla_ascii} but ascent -3 (vanilla
+     *     ascii ascent is 7), the shape of MCC's {@code default_offset_10} shift-down font.</li>
+     * <li>{@code minecraft:vanilla_unmapped}: references {@code minecraft:font/unifont.png}, a
+     *     minecraft-namespace sheet NOT in the bundled fallback set; the provider skips (no
+     *     fallback) and the font resolves empty.</li>
      * <li>{@code Fancy.json}: an INVALID resource location (uppercase); must be skipped at index
      *     time, never advertised by {@code fontIds()}.</li>
      * </ul>
@@ -514,6 +522,17 @@ public final class FixturePacks {
 
             fontJson(root, NAMESPACE, "sub/deco", """
                 {"providers":[{"type":"space","advances":{" ":3.0}}]}""");
+
+            // Vanilla-sheet fallback: this pack does NOT ship any minecraft:font sheet. A provider
+            // referencing minecraft:font/ascii.png resolves REAL glyphs from the bundled vanilla
+            // copy (see VanillaFontSheets) with the pack's own metrics.
+            fontJson(root, "minecraft", "vanilla_ascii", vanillaAsciiFontJson("minecraft:font/ascii.png", 7));
+            // Same bundled sheet, ascent re-declared -3 (vanilla ascii ascent is 7): the shape of
+            // MCC's default_offset_10 font, which shifts text down 10 GUI px purely via ascent.
+            fontJson(root, "minecraft", "vanilla_offset", vanillaAsciiFontJson("minecraft:font/ascii.png", -3));
+            // A minecraft-namespace sheet NOT in the bundled vanilla set: no fallback exists, so the
+            // provider skips exactly like a non-vanilla absent sheet and the font resolves empty.
+            fontJson(root, "minecraft", "vanilla_unmapped", vanillaAsciiFontJson("minecraft:font/unifont.png", 7));
 
             // Uppercase file name: not a valid resource location, so vanilla (and this library)
             // must skip it at index time rather than advertise an unresolvable font id.
@@ -1085,6 +1104,91 @@ public final class FixturePacks {
         Path path = root.resolve("assets/minecraft/textures/gui/container/generic_54.png");
         Files.createDirectories(path.getParent());
         ImageIO.write(image, "png", path.toFile());
+    }
+
+    /**
+     * A pack that SHIPS its own {@code minecraft:font/ascii.png} (128x128, so the 16x16 grid cuts
+     * vanilla-sized 8x8 cells at scale 1) and a {@code minecraft:vanilla_ascii} font referencing it
+     * with the same 16x16 grid as {@link #vanillaAsciiFontJson}. The shipped 'A' cell has a single
+     * inked pixel in its leftmost column (ink 1, advance 2), unlike the bundled vanilla 'A' (ink 5,
+     * advance 6). Because the sheet is present, the bundled vanilla fallback is never consulted -
+     * proving a pack-shipped sheet wins over the fallback.
+     */
+    public static Path writeVanillaShippedFontPack(Path root) {
+        try {
+            packMcmeta(root, "vanilla-sheet-shipped test fixture");
+            // 128x128 sheet -> 8x8 cells at scale 1, like vanilla. 'A' is col 1, row 4: its cell
+            // spans x [8,16), y [32,40). One inked pixel in the leftmost column gives ink 1.
+            BufferedImage shipped = transparent(128, 128);
+            shipped.setRGB(8, 32, 0xFFFFFFFF);
+            Path path = root.resolve("assets/minecraft/textures/font/ascii.png");
+            Files.createDirectories(path.getParent());
+            ImageIO.write(shipped, "png", path.toFile());
+            fontJson(root, "minecraft", "vanilla_ascii", vanillaAsciiFontJson("minecraft:font/ascii.png", 7));
+            return root;
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to write vanilla-shipped font fixture pack", e);
+        }
+    }
+
+    /**
+     * A pack that SHIPS a real TTF and renders it: {@code testpack:otf} is a single {@code ttf}
+     * provider ({@code size 8, oversample 4} -> ppem 32) pointing at the shipped
+     * {@code assets/testpack/font/pixel.ttf}, and {@code minecraft:default} references it so plain
+     * (font-less) segments render through the TTF too. A companion {@code testpack:otf_broken}
+     * ships a corrupt {@code broken.ttf} to exercise the degrade-to-unsupported path.
+     *
+     * <p>{@code ttf} is supplied by the caller (built with {@code MinimalTrueTypeFont}) so tests
+     * can ship different fonts under the same internal name and prove the fonts never collide
+     * globally.
+     */
+    public static Path writeOtfFontPack(Path root, byte[] ttf) {
+        try {
+            packMcmeta(root, "ttf font test fixture");
+            writeBytes(root, "assets/testpack/font/pixel.ttf", ttf);
+            writeBytes(root, "assets/testpack/font/broken.ttf", "not a real font".getBytes());
+            fontJson(root, NAMESPACE, "otf", """
+                {"providers":[{"type":"ttf","file":"testpack:pixel.ttf","size":8.0,"oversample":4.0}]}""");
+            fontJson(root, NAMESPACE, "otf_broken", """
+                {"providers":[{"type":"ttf","file":"testpack:broken.ttf"}]}""");
+            fontJson(root, "minecraft", "default", """
+                {"providers":[{"type":"reference","id":"testpack:otf"}]}""");
+            return root;
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to write ttf font fixture pack", e);
+        }
+    }
+
+    private static void writeBytes(Path root, String relative, byte[] bytes) throws IOException {
+        Path path = root.resolve(relative);
+        Files.createDirectories(path.getParent());
+        Files.write(path, bytes);
+    }
+
+    /**
+     * A single-provider bitmap font JSON referencing {@code file} with the vanilla
+     * {@code font/ascii.png} 16x16 grid (8x8 cells at 128x128), populating only 'A' (col 1, row 4)
+     * and 'i' (col 9, row 6); every other cell is U+0000. The {@code \\u0000} escape is written
+     * literally so Gson decodes it to a NUL codepoint, exactly as real pack files store unused
+     * cells. Height is 8; {@code ascent} is the caller's (7 for vanilla, other values re-declare
+     * the offset).
+     */
+    private static String vanillaAsciiFontJson(String file, int ascent) {
+        StringBuilder chars = new StringBuilder("[");
+        for (int row = 0; row < 16; row++) {
+            if (row > 0) {
+                chars.append(',');
+            }
+            chars.append('"');
+            for (int col = 0; col < 16; col++) {
+                char glyph = (row == 4 && col == 1) ? 'A' : (row == 6 && col == 9) ? 'i' : '\0';
+                chars.append(glyph == '\0' ? "\\u0000" : String.valueOf(glyph));
+            }
+            chars.append('"');
+        }
+        chars.append(']');
+        return "{\"providers\":[{\"type\":\"bitmap\",\"file\":\"" + file
+            + "\",\"height\":8,\"ascent\":" + ascent + ",\"chars\":" + chars + "}]}";
     }
 
     private static void fontJson(Path root, String namespace, String name, String json) throws IOException {

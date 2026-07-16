@@ -381,4 +381,162 @@ class PackFontTest {
     void idIsExposed() {
         assertEquals("test:metrics", metricsFont(8, 7).id());
     }
+
+    /** A loader whose sheets are all ABSENT but whose vanilla fallback returns {@code fallback}. */
+    private static PackFont.TextureLoader fallbackLoader(BufferedImage fallback) {
+        return new PackFont.TextureLoader() {
+            @Override
+            public BufferedImage load(String textureFileRef) {
+                throw new AssertionError("absent sheets must not be loaded: " + textureFileRef);
+            }
+
+            @Override
+            public boolean exists(String textureFileRef) {
+                return false;
+            }
+
+            @Override
+            public Optional<BufferedImage> vanillaFallbackSheet(String textureFileRef) {
+                return Optional.of(fallback);
+            }
+        };
+    }
+
+    @Test
+    void absentSheetRendersFromVanillaFallback() {
+        // The pack references a sheet it does not ship; the bundled fallback supplies the pixels
+        // and the pack's own metrics cut them, so 'A' renders with its real ink-6 advance.
+        PackFont font = PackFont.create("test:fallback",
+            List.of(bitmap("minecraft:font/ascii.png", 8, 7, List.of("AB", "CD"))),
+            fallbackLoader(metricsSheet()));
+        assertEquals(7.0f, font.advanceOf('A', false), "the fallback sheet's 'A' (ink 6) renders");
+        assertFalse(font.glyph('A').orElseThrow().isEmpty(), "a real bitmap glyph, not an empty fallthrough");
+    }
+
+    @Test
+    void fallbackKeepsPackDeclaredAscent() {
+        // MCC's default_offset fonts re-declare ascent to shift text; the fallback must apply the
+        // PACK's ascent (here -3), not any vanilla default, so the shift survives.
+        PackFont font = PackFont.create("test:offset",
+            List.of(bitmap("minecraft:font/ascii.png", 8, -3, List.of("AB", "CD"))),
+            fallbackLoader(metricsSheet()));
+        PackGlyph a = font.glyph('A').orElseThrow();
+        assertEquals(-3, a.ascent(), "the pack's re-declared ascent applies to the fallback sheet");
+        assertEquals(8, a.height());
+    }
+
+    @Test
+    void presentPackSheetIsNeverOverriddenByFallback() {
+        PackFont.TextureLoader loader = new PackFont.TextureLoader() {
+            @Override
+            public BufferedImage load(String textureFileRef) {
+                return metricsSheet();
+            }
+
+            @Override
+            public boolean exists(String textureFileRef) {
+                return true;
+            }
+
+            @Override
+            public Optional<BufferedImage> vanillaFallbackSheet(String textureFileRef) {
+                throw new AssertionError("a present sheet must never consult the fallback");
+            }
+        };
+        PackFont font = PackFont.create("test:present",
+            List.of(bitmap("minecraft:font/ascii.png", 8, 7, List.of("AB", "CD"))), loader);
+        assertEquals(7.0f, font.advanceOf('A', false));
+    }
+
+    /** A tiny synthetic pixel TTF ('A' box advance 20, 'B' box advance 12) built at runtime. */
+    private static byte[] pixelTtf() {
+        java.util.LinkedHashMap<Integer, net.aerh.imagegenerator.testsupport.MinimalTrueTypeFont.Glyph> glyphs =
+            new java.util.LinkedHashMap<>();
+        glyphs.put((int) 'A', net.aerh.imagegenerator.testsupport.MinimalTrueTypeFont.Glyph.box(20, 0, 0, 16, 24));
+        glyphs.put((int) 'B', net.aerh.imagegenerator.testsupport.MinimalTrueTypeFont.Glyph.box(12, 0, 0, 8, 16));
+        return net.aerh.imagegenerator.testsupport.MinimalTrueTypeFont.build(32, glyphs);
+    }
+
+    /** A loader whose ttf file resolves to {@code ttf} (or absent when null); no sheets. */
+    private static PackFont.TextureLoader ttfLoader(byte[] ttf) {
+        return new PackFont.TextureLoader() {
+            @Override
+            public BufferedImage load(String textureFileRef) {
+                throw new AssertionError("no sheets in a ttf-only fixture");
+            }
+
+            @Override
+            public Optional<byte[]> ttfFontData(String fontFileRef) {
+                return Optional.ofNullable(ttf);
+            }
+        };
+    }
+
+    private static FontProviderDefinition.Ttf ttf(Set<Integer> skip) {
+        return new FontProviderDefinition.Ttf("test:font/pixel.ttf", 8.0f, 4.0f, 0.0f, 0.0f, skip, FontFilter.none());
+    }
+
+    @Test
+    void loadableTtfClaimsItsCodepointsFirstWins() {
+        // ttf ['A' box] listed before a space provider that also maps 'A': the ttf claims 'A' first.
+        PackFont font = PackFont.create("test:ttfclaim", List.of(
+            ttf(Set.of()), space(Map.of((int) 'A', 99.0f))), ttfLoader(pixelTtf()));
+        assertEquals(5.0f, font.advanceOf('A', false), "the ttf glyph (advance 20/4) wins over the later space");
+        assertFalse(font.glyph('A').orElseThrow().isEmpty(), "a real rasterized glyph");
+    }
+
+    @Test
+    void ttfSkipSetLetsLaterProviderServe() {
+        // 'A' is in the ttf skip set, so the later space provider serves it; 'B' stays with the ttf.
+        PackFont font = PackFont.create("test:ttfskipserve", List.of(
+            ttf(Set.of((int) 'A')), space(Map.of((int) 'A', 7.0f))), ttfLoader(pixelTtf()));
+        assertEquals(7.0f, font.advanceOf('A', false), "skip excludes 'A' from the ttf, space serves it");
+        assertEquals(3.0f, font.advanceOf('B', false), "'B' is still claimed by the ttf (advance 12/4)");
+    }
+
+    @Test
+    void loadableTtfClearsTheUnsupportedFidelityGap() {
+        PackFont font = PackFont.create("test:ttfgap", List.of(ttf(Set.of())), ttfLoader(pixelTtf()));
+        assertFalse(font.hasUnsupportedProviderFor('A'), "a rendered ttf no longer flags a fidelity gap");
+        assertFalse(font.hasUnsupportedProviderFor('Z'), "codepoints the font cannot display are simply unclaimed");
+    }
+
+    @Test
+    void missingTtfDegradesToUnsupportedEntryWithoutThrowing() {
+        // The ttf file is absent; the provider degrades to the never-claim unsupported entry and a
+        // later provider serves the codepoint, exactly like the pre-render behavior.
+        PackFont font = PackFont.create("test:ttfmissing", List.of(
+            ttf(Set.of()), space(Map.of((int) 'A', 4.0f))), ttfLoader(null));
+        assertEquals(4.0f, font.advanceOf('A', false), "the later space provider serves 'A'");
+        assertTrue(font.hasUnsupportedProviderFor('A'), "the degraded ttf still reports the fidelity gap");
+    }
+
+    @Test
+    void brokenTtfDegradesToUnsupportedEntryWithoutThrowing() {
+        PackFont font = PackFont.create("test:ttfbroken", List.of(
+            ttf(Set.of()), space(Map.of((int) 'A', 4.0f))), ttfLoader("garbage".getBytes()));
+        assertEquals(4.0f, font.advanceOf('A', false), "an unloadable ttf falls through to the space provider");
+        assertEquals(Optional.empty(), font.glyph('B'), "and claims nothing itself");
+    }
+
+    @Test
+    void absentSheetWithoutFallbackSkipsAndLaterProviderServes() {
+        PackFont.TextureLoader loader = new PackFont.TextureLoader() {
+            @Override
+            public BufferedImage load(String textureFileRef) {
+                throw new AssertionError("absent sheets are not loaded");
+            }
+
+            @Override
+            public boolean exists(String textureFileRef) {
+                return false;
+            }
+            // vanillaFallbackSheet defaults to empty: no bundled match, so the provider skips.
+        };
+        PackFont font = PackFont.create("test:skip", List.of(
+            bitmap("test:font/missing.png", 8, 7, List.of("A")),
+            space(Map.of((int) ' ', 4.0f))), loader);
+        assertEquals(Optional.empty(), font.glyph('A'), "the absent sheet's provider skips");
+        assertEquals(4.0f, font.advanceOf(' ', false), "the trailing space provider survives the skip");
+    }
 }

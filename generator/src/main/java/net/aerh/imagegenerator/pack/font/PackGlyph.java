@@ -32,6 +32,29 @@ public interface PackGlyph {
     int ascent();
 
     /**
+     * Left edge of the glyph's drawn ink relative to the pen origin, in GUI pixels (may be
+     * negative when a side bearing or a negative {@code shiftX} draws ink left of the origin).
+     * Meaningful only when {@link #inkRightGuiPx()} exceeds this; the default (bitmap and space
+     * glyphs, whose ink never leaves {@code [origin, origin + advance]}) reports a degenerate
+     * {@code [0, 0]} box so extent folding treats the advance as the horizontal bound - keeping
+     * bitmap and no-pack canvas sizing byte-identical.
+     */
+    default double inkLeftGuiPx() {
+        return 0.0;
+    }
+
+    /**
+     * Right edge of the glyph's drawn ink relative to the pen origin, in GUI pixels. When this
+     * exceeds {@link #inkLeftGuiPx()} the glyph draws ink outside {@code [origin, origin +
+     * advance]} - a TTF glyph wider than its advance, or shifted by {@code shift[x]} - so
+     * measurement must fold this box, not just the advance, or a tight canvas clips the ink.
+     * The default reports {@code 0} (see {@link #inkLeftGuiPx()}).
+     */
+    default double inkRightGuiPx() {
+        return 0.0;
+    }
+
+    /**
      * Draws the FULL glyph cell (leading blank columns included) nearest-neighbor scaled so the
      * cell renders {@code height()} GUI pixels tall, top edge at
      * {@code lineTopGuiPx + 7 - ascent()} GUI pixels, left edge at {@code xGuiPx}. The glyph

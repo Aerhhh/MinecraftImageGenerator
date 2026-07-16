@@ -71,7 +71,7 @@ final class BitmapFontProvider {
                     : copyCell(sheet, column * cellWidth, rowIndex * cellHeight, cellWidth, cellHeight);
                 int advance = (int) (0.5f + inkWidth * scale) + 1;
                 BitmapGlyph previous = glyphs.put(codePoint,
-                    new BitmapGlyph(cell, inkWidth, advance, definition.height(), definition.ascent(), scale));
+                    new BitmapGlyph(cell, advance, definition.height(), definition.ascent(), scale));
                 if (previous != null) {
                     log.warn("Font {}: duplicate codepoint U+{} in bitmap provider {}; last occurrence wins",
                         fontId, Integer.toHexString(codePoint).toUpperCase(), definition.file());

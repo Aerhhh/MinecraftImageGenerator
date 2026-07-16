@@ -136,11 +136,119 @@ class LoadedPackFontTest {
     }
 
     @Test
+    void vanillaSheetFallbackResolvesRealGlyphs() {
+        // vanilla_ascii references minecraft:font/ascii.png, which the pack does not ship; the
+        // bundled vanilla sheet supplies real bitmap glyphs (not the OTF fallback).
+        PackFont font = pack.resolveFont("minecraft:vanilla_ascii").orElseThrow();
+        assertEquals(6.0f, font.advanceOf('A', false), "vanilla ascii 'A' ink 5 -> advance 6");
+        assertEquals(2.0f, font.advanceOf('i', false), "vanilla ascii 'i' ink 1 -> advance 2");
+        assertFalse(font.glyph('A').orElseThrow().isEmpty(), "a real inked bitmap glyph");
+        assertEquals(7, font.glyph('A').orElseThrow().ascent(), "the pack's declared vanilla ascent");
+    }
+
+    @Test
+    void defaultOffsetReDeclaredAscentShiftsRenderingDown() {
+        // vanilla_offset is the same bundled sheet with ascent -3 (vanilla ascii ascent is 7); the
+        // 10 GUI px shift comes entirely from the re-declared ascent, the advance is unchanged.
+        PackFont normal = pack.resolveFont("minecraft:vanilla_ascii").orElseThrow();
+        PackFont offset = pack.resolveFont("minecraft:vanilla_offset").orElseThrow();
+        assertEquals(7, normal.glyph('A').orElseThrow().ascent());
+        assertEquals(-3, offset.glyph('A').orElseThrow().ascent(),
+            "ascent 7 -> -3 places the cell top 10 GUI px lower");
+        assertEquals(normal.advanceOf('A', false), offset.advanceOf('A', false),
+            "only vertical placement shifts; the horizontal advance is unchanged");
+    }
+
+    @Test
+    void minecraftSheetOutsideBundledSetStillSkips() {
+        // minecraft:font/unifont.png is a minecraft-namespace sheet NOT in the bundled fallback
+        // set, so the provider skips exactly like any non-vanilla absent sheet.
+        PackFont font = pack.resolveFont("minecraft:vanilla_unmapped").orElseThrow();
+        assertEquals(Optional.empty(), font.glyph('A'), "no bundled fallback for this sheet");
+        assertEquals(List.of(), font.mappedCodePoints());
+    }
+
+    @Test
+    void packShippedVanillaSheetWinsOverBundle(@TempDir Path shippedDir) {
+        // The pack ships its OWN minecraft:font/ascii.png (a 16x16 sheet, 1x1 cells): 'A' resolves
+        // from the shipped ink-1 cell (advance 2), never the bundled vanilla sheet (advance 6).
+        FixturePacks.writeVanillaShippedFontPack(shippedDir);
+        LoadedPack shippedPack = new LoadedPack(PackId.parse("test:shipped"),
+            PackSource.directory(shippedDir, PackLimits.fromSystemProperties()),
+            PackLimits.fromSystemProperties());
+        PackFont font = shippedPack.resolveFont("minecraft:vanilla_ascii").orElseThrow();
+        assertEquals(2.0f, font.advanceOf('A', false),
+            "the shipped 1x1 cell (ink 1) wins over the bundled vanilla sheet (ink 5)");
+    }
+
+    @Test
     void ttfOnlyFontLoadsButClaimsNothing() {
         PackFont font = pack.resolveFont("testpack:ttf_only").orElseThrow();
         assertEquals(Optional.empty(), font.glyph('a'));
         assertTrue(font.hasUnsupportedProviderFor('a'));
         assertFalse(font.hasUnsupportedProviderFor('x'), "'x' is in the TTF skip set");
+    }
+
+    /** 'A' box advance 20, 'B' box advance 12, at ppem 32 (size 8, oversample 4). */
+    private static byte[] narrowTtf() {
+        java.util.LinkedHashMap<Integer, net.aerh.imagegenerator.testsupport.MinimalTrueTypeFont.Glyph> glyphs =
+            new java.util.LinkedHashMap<>();
+        glyphs.put((int) 'A', net.aerh.imagegenerator.testsupport.MinimalTrueTypeFont.Glyph.box(20, 0, 0, 16, 24));
+        glyphs.put((int) 'B', net.aerh.imagegenerator.testsupport.MinimalTrueTypeFont.Glyph.box(12, 0, 0, 8, 16));
+        return net.aerh.imagegenerator.testsupport.MinimalTrueTypeFont.build(32, glyphs);
+    }
+
+    /** The same internal font name but a wider 'A' box (advance 28), for the no-collision test. */
+    private static byte[] wideTtf() {
+        java.util.LinkedHashMap<Integer, net.aerh.imagegenerator.testsupport.MinimalTrueTypeFont.Glyph> glyphs =
+            new java.util.LinkedHashMap<>();
+        glyphs.put((int) 'A', net.aerh.imagegenerator.testsupport.MinimalTrueTypeFont.Glyph.box(28, 0, 0, 28, 24));
+        return net.aerh.imagegenerator.testsupport.MinimalTrueTypeFont.build(32, glyphs);
+    }
+
+    private static LoadedPack loadOtfPack(Path dir, byte[] ttf) {
+        FixturePacks.writeOtfFontPack(dir, ttf);
+        return new LoadedPack(PackId.parse("test:otf"),
+            PackSource.directory(dir, PackLimits.fromSystemProperties()),
+            PackLimits.fromSystemProperties());
+    }
+
+    @Test
+    void shippedTtfRendersRealVectorGlyphs(@TempDir Path otfDir) {
+        LoadedPack otfPack = loadOtfPack(otfDir, narrowTtf());
+        PackFont font = otfPack.resolveFont("testpack:otf").orElseThrow();
+        assertEquals(5.0f, font.advanceOf('A', false), "ttf 'A' device advance 20 / oversample 4");
+        assertFalse(font.glyph('A').orElseThrow().isEmpty(), "a real rasterized glyph, not the OTF fallthrough");
+        assertEquals(6, font.glyph('A').orElseThrow().ascent(), "24 device px above baseline / oversample 4");
+        assertEquals(Optional.empty(), font.glyph('Z'), "codepoints the font cannot display stay unclaimed");
+    }
+
+    @Test
+    void minecraftDefaultReferencingTtfRendersTheTtfGlyph(@TempDir Path otfDir) {
+        // The fixture's minecraft:default references testpack:otf, so default-font text renders the
+        // ttf glyph rather than the bundled OTF.
+        LoadedPack otfPack = loadOtfPack(otfDir, narrowTtf());
+        PackFont font = otfPack.resolveFont("minecraft:default").orElseThrow();
+        assertEquals(5.0f, font.advanceOf('A', false), "the referenced ttf serves 'A'");
+    }
+
+    @Test
+    void shippedButBrokenTtfDegradesToUnsupported(@TempDir Path otfDir) {
+        LoadedPack otfPack = loadOtfPack(otfDir, narrowTtf());
+        PackFont font = otfPack.resolveFont("testpack:otf_broken").orElseThrow();
+        assertEquals(Optional.empty(), font.glyph('A'), "an unloadable shipped ttf claims nothing");
+        assertTrue(font.hasUnsupportedProviderFor('A'), "and still reports the fidelity gap");
+    }
+
+    @Test
+    void sameNamedTtfInTwoPacksDoesNotCollide(@TempDir Path narrowDir, @TempDir Path wideDir) {
+        // Both fonts share the internal name "TestPixel"; per-pack createFont (never a global
+        // registerFont) means each pack renders its OWN 'A' geometry.
+        LoadedPack narrow = loadOtfPack(narrowDir, narrowTtf());
+        LoadedPack wide = loadOtfPack(wideDir, wideTtf());
+        assertEquals(5.0f, narrow.resolveFont("testpack:otf").orElseThrow().advanceOf('A', false));
+        assertEquals(7.0f, wide.resolveFont("testpack:otf").orElseThrow().advanceOf('A', false),
+            "the second pack's wider 'A' (device advance 28 / 4) is unaffected by the first");
     }
 
     @Test

@@ -3,7 +3,9 @@ package net.aerh.imagegenerator.pack.font;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 
+import java.awt.image.BufferedImage;
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * Shares built bitmap providers across the fonts of one pack, mirroring vanilla's resolve-once
@@ -31,13 +33,26 @@ public final class BitmapProviderCache {
 
     /**
      * The shared provider for a bitmap definition, building it (one sheet load + cell copies) on
-     * first use. Log and error context uses the font id that triggered the build.
+     * first use from the pack's own sheet. Log and error context uses the font id that triggered
+     * the build.
      */
     BitmapFontProvider bitmapProvider(FontProviderDefinition.Bitmap definition,
                                       PackFont.TextureLoader textures, String fontId) {
+        return bitmapProvider(definition, () -> textures.load(definition.file()), fontId);
+    }
+
+    /**
+     * The shared provider for a bitmap definition whose sheet comes from {@code sheetSupplier}
+     * rather than the pack, used for the bundled vanilla-sheet fallback (see
+     * {@link PackFont#create}). The supplier is invoked at most once per distinct sheet key (on a
+     * cache miss); the metrics still come from the pack's own definition, so a fallback provider is
+     * cached and shared exactly like a pack-sheet provider.
+     */
+    BitmapFontProvider bitmapProvider(FontProviderDefinition.Bitmap definition,
+                                      Supplier<BufferedImage> sheetSupplier, String fontId) {
         SheetKey key = new SheetKey(definition.file(), definition.height(), definition.ascent(),
             definition.charRows());
         return providers.get(key,
-            ignored -> BitmapFontProvider.create(definition, textures.load(definition.file()), fontId));
+            ignored -> BitmapFontProvider.create(definition, sheetSupplier.get(), fontId));
     }
 }

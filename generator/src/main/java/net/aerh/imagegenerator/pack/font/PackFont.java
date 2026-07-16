@@ -22,18 +22,30 @@ import java.util.TreeSet;
  * codepoint wins, including across reference boundaries (a reference expands inline at its
  * position).
  *
- * <p>Deviation from vanilla, by design: ttf, unihex and legacy_unicode providers are unsupported
- * for rendering in this library, so they never claim a codepoint here - {@link #glyph} returns
- * empty for them and LATER providers may serve the codepoint instead (vanilla would serve the
- * TTF glyph and stop). {@link #hasUnsupportedProviderFor} reports whether such a provider might
- * have served a codepoint so callers can log the fidelity gap once.
+ * <p>TTF providers render as real vector glyphs (Tier 1): when a {@code ttf} provider's font file
+ * resolves from the pack and loads, it becomes an {@link OtfFontProvider} that CLAIMS the
+ * codepoints its font can display (minus its {@code skip} set), first-wins like any provider. A
+ * missing or unloadable TTF degrades to the never-claim behavior below so a later provider still
+ * serves the codepoint.
+ *
+ * <p>Deviation from vanilla, by design: unihex and legacy_unicode providers (and a TTF that failed
+ * to load) are unsupported for rendering in this library, so they never claim a codepoint here -
+ * {@link #glyph} returns empty for them and LATER providers may serve the codepoint instead
+ * (vanilla would serve their glyph and stop). {@link #hasUnsupportedProviderFor} reports whether
+ * such a provider might have served a codepoint so callers can log the fidelity gap once.
  *
  * <p>Second deviation, also by design: a bitmap provider whose sheet texture is ABSENT (per
- * {@link TextureLoader#exists}) is skipped with a warning instead of failing the whole font.
- * Vanilla fails the font, but real server packs reference vanilla client sheets this library
- * does not bundle (e.g. {@code minecraft:font/ascii.png}), and dropping just those providers
- * keeps every glyph the pack actually ships renderable. A font whose providers all skip still
- * resolves - as an empty font that claims no codepoint.
+ * {@link TextureLoader#exists}) is handled in two steps. First the loader's bundled vanilla
+ * fallback set is consulted ({@link TextureLoader#vanillaFallbackSheet}): a pack that references a
+ * vanilla client sheet it does not ship (e.g. {@code minecraft:font/ascii.png}, as MCC's
+ * {@code minecraft:default} and {@code default_offset} fonts do) renders real bitmap glyphs from
+ * the bundled copy, combined with the pack's OWN metrics (so a re-declared ascent still shifts the
+ * text). Only when no bundled sheet matches is the provider skipped with a warning instead of
+ * failing the whole font - real packs also reference non-vanilla sheets this library does not
+ * bundle, and dropping just those providers keeps every glyph the pack actually ships renderable. A
+ * font whose providers all skip still resolves - as an empty font that claims no codepoint. A pack
+ * that DOES ship its own sheet always wins: its provider is present, so the fallback is never
+ * consulted.
  */
 @Slf4j
 public final class PackFont {
@@ -62,12 +74,49 @@ public final class PackFont {
         default boolean exists(String textureFileRef) {
             return true;
         }
+
+        /**
+         * The bundled vanilla fallback sheet for an ABSENT pack texture, consulted by
+         * {@link #create} before the skip-with-warn when {@link #exists} is false. This lets a pack
+         * that references a vanilla client sheet it does not ship (e.g.
+         * {@code minecraft:font/ascii.png}) still render real bitmap glyphs from the bundled copy.
+         * The returned sheet is combined with the PACK's own provider metrics (height, ascent,
+         * grid), so a re-declared ascent still applies. The default returns empty: loaders with no
+         * bundled set keep the plain skip-with-warn for every absent sheet.
+         *
+         * @param textureFileRef the bitmap provider {@code file} value, extension included
+         * @return the decoded fallback sheet, or empty when no bundled sheet matches
+         * @throws PackResolveException when the reference itself is malformed
+         */
+        default Optional<BufferedImage> vanillaFallbackSheet(String textureFileRef) {
+            return Optional.empty();
+        }
+
+        /**
+         * The raw bytes of a {@code ttf} provider's font file, resolved beneath
+         * {@code assets/<ns>/font/} (the vanilla TTF location, NOT {@code textures/}). Consulted by
+         * {@link #create} to build an {@link OtfFontProvider}; empty (the default) means the file is
+         * absent or unreadable, so the TTF provider degrades to a never-claim unsupported entry and
+         * a later provider serves its codepoints. An oversized or unreadable file returns empty
+         * rather than throwing, so a broken TTF never fails the whole font.
+         *
+         * @param fontFileRef the ttf provider {@code file} value, extension included (e.g.
+         *                    {@code minecraft:pinch/hud.ttf})
+         * @return the font bytes, or empty when the file is absent or unreadable
+         * @throws PackResolveException when the reference itself is malformed
+         */
+        default Optional<byte[]> ttfFontData(String fontFileRef) {
+            return Optional.empty();
+        }
     }
 
-    private sealed interface Provider permits BitmapEntry, SpaceEntry, UnsupportedEntry {
+    private sealed interface Provider permits BitmapEntry, SpaceEntry, OtfEntry, UnsupportedEntry {
     }
 
     private record BitmapEntry(BitmapFontProvider provider) implements Provider {
+    }
+
+    private record OtfEntry(OtfFontProvider provider) implements Provider {
     }
 
     private record SpaceEntry(Map<Integer, SpaceGlyph> glyphs) implements Provider {
@@ -121,6 +170,16 @@ public final class PackFont {
             switch (definition) {
                 case FontProviderDefinition.Bitmap bitmap -> {
                     if (!textures.exists(bitmap.file())) {
+                        Optional<BufferedImage> fallback = textures.vanillaFallbackSheet(bitmap.file());
+                        if (fallback.isPresent()) {
+                            // The pack references a vanilla client sheet it does not ship; render it
+                            // from the bundled vanilla copy with the PACK's own metrics (so a
+                            // re-declared ascent still shifts). See the class javadoc.
+                            BufferedImage sheet = fallback.get();
+                            providers.add(new BitmapEntry(
+                                sharedProviders.bitmapProvider(bitmap, () -> sheet, fontId)));
+                            continue;
+                        }
                         // Deviation from vanilla (see class javadoc): real packs reference
                         // vanilla client sheets that are not bundled here; skip the provider
                         // instead of failing the whole font.
@@ -135,7 +194,18 @@ public final class PackFont {
                     space.advances().forEach((codePoint, advance) -> glyphs.put(codePoint, new SpaceGlyph(advance)));
                     providers.add(new SpaceEntry(glyphs));
                 }
-                case FontProviderDefinition.Ttf ttf -> providers.add(new UnsupportedEntry("ttf", ttf.skip()));
+                case FontProviderDefinition.Ttf ttf -> {
+                    // A ttf whose font file resolves and loads renders real vector glyphs and
+                    // claims its codepoints; a missing or broken one degrades to the never-claim
+                    // unsupported entry so a later provider still serves them (see the class
+                    // javadoc).
+                    Optional<OtfFontProvider> otf = OtfFontProvider.tryCreate(ttf, textures, fontId);
+                    if (otf.isPresent()) {
+                        providers.add(new OtfEntry(otf.get()));
+                    } else {
+                        providers.add(new UnsupportedEntry("ttf", ttf.skip()));
+                    }
+                }
                 case FontProviderDefinition.Unsupported unsupported ->
                     providers.add(new UnsupportedEntry(unsupported.type(), Set.of()));
                 case FontProviderDefinition.Reference reference -> throw new PackResolveException(
@@ -203,6 +273,12 @@ public final class PackFont {
                 switch (provider) {
                     case BitmapEntry bitmap -> union.addAll(bitmap.provider().codePoints());
                     case SpaceEntry space -> union.addAll(space.glyphs().keySet());
+                    case OtfEntry ignored -> {
+                        // TTF providers claim codepoints but are not enumerated here: a real font
+                        // covers thousands of codepoints and this pool drives obfuscation
+                        // substitution only, so TTF glyphs obfuscate to themselves (a Tier-1
+                        // limitation) rather than pay a full-font scan.
+                    }
                     case UnsupportedEntry ignored -> {
                         // Unsupported providers never claim a codepoint (see class javadoc).
                     }
@@ -240,15 +316,22 @@ public final class PackFont {
     }
 
     /**
-     * Estimated bytes retained by this font's decoded bitmap glyph cells, for weighing font
-     * caches. A provider referenced from multiple positions of this font counts once per
-     * position, making this an upper bound when providers are shared.
+     * Estimated bytes retained by this font's glyph cells, for weighing font caches. Bitmap
+     * providers report their exact live cell bytes (cut eagerly at build). TTF providers rasterize
+     * lazily, so they report their bounded worst-case reservation
+     * ({@link OtfFontProvider#maxRetainedCellBytes()}) rather than their zero-at-insertion live
+     * bytes - the font cache weighs a font once, at insertion, so a TTF font must be accounted at
+     * the memory it can hold or it evades the budget entirely. A provider referenced from multiple
+     * positions of this font counts once per position, making this an upper bound when providers
+     * are shared.
      */
     public long retainedCellBytes() {
         long total = 0;
         for (Provider provider : providers) {
             if (provider instanceof BitmapEntry bitmap) {
                 total += bitmap.provider().retainedCellBytes();
+            } else if (provider instanceof OtfEntry otf) {
+                total += otf.provider().maxRetainedCellBytes();
             }
         }
         return total;
@@ -258,6 +341,7 @@ public final class PackFont {
         return switch (provider) {
             case BitmapEntry bitmap -> bitmap.provider().glyph(codePoint);
             case SpaceEntry space -> space.glyphs().get(codePoint);
+            case OtfEntry otf -> otf.provider().glyph(codePoint);
             case UnsupportedEntry ignored -> null;
         };
     }

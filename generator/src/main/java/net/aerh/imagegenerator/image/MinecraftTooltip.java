@@ -477,13 +477,42 @@ public class MinecraftTooltip {
         if (packGlyph.isItalic()) {
             double firstRowShear = 1 - 0.25 * topGuiPx;
             double lastRowShear = 1 - 0.25 * (topGuiPx + packGlyph.heightGuiPx() - 1);
-            // The advance bounds the visible art width (ink width + 1, bold included), so the
-            // cursor position plus advance plus rightmost shear covers every sheared row.
+            // For bitmap glyphs the advance bounds the visible art width (ink width + 1, bold
+            // included), so the cursor position plus advance plus rightmost shear covers every
+            // sheared row.
             double artWidth = Math.max(0, packGlyph.advanceGuiPx()) * (double) pixelSize;
             double leftShear = Math.min(firstRowShear, lastRowShear) * pixelSize;
             double rightShear = Math.max(firstRowShear, lastRowShear) * pixelSize;
             this.lineMinExtent = Math.min(this.lineMinExtent, this.locationX + leftShear);
             this.lineMaxExtent = Math.max(this.lineMaxExtent, this.locationX + artWidth + rightShear);
+        }
+
+        // A TTF glyph can draw ink OUTSIDE [origin, origin + advance]: a negative side bearing or
+        // shiftX pulls ink left of the origin, and a glyph wider than its advance (or a positive
+        // shiftX) pushes it past the advance. Fold the actual drawn cell box so tight canvases
+        // (measureLineExtents consumers) never clip it. Bitmap and space glyphs report a
+        // degenerate [0, 0] box the advance already covers, so this is a no-op for them - keeping
+        // no-pack and bitmap-pack output byte-identical. The advance-based italic block above
+        // still handles bitmap italic shear.
+        double inkLeftGuiPx = packGlyph.inkLeftGuiPx();
+        double inkRightGuiPx = packGlyph.inkRightGuiPx();
+        if (inkRightGuiPx > inkLeftGuiPx) {
+            double lowShear = 0;
+            double highShear = 0;
+            if (packGlyph.isItalic()) {
+                double firstRowShear = 1 - 0.25 * topGuiPx;
+                double lastRowShear = 1 - 0.25 * (topGuiPx + packGlyph.heightGuiPx() - 1);
+                lowShear = Math.min(firstRowShear, lastRowShear);
+                highShear = Math.max(firstRowShear, lastRowShear);
+            }
+            // The bold copy draws one GUI px further right; the shadow copies stay within it and
+            // are folded vertically like bitmap glyphs (horizontal shadow is not folded here, matching
+            // the bitmap advance model).
+            double boldReach = packGlyph.isBold() ? 1.0 : 0.0;
+            this.lineMinExtent = Math.min(this.lineMinExtent,
+                this.locationX + (inkLeftGuiPx + lowShear) * pixelSize);
+            this.lineMaxExtent = Math.max(this.lineMaxExtent,
+                this.locationX + (inkRightGuiPx + boldReach + highShear) * pixelSize);
         }
     }
 
