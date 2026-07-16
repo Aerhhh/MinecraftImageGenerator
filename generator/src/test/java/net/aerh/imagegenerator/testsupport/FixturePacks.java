@@ -60,6 +60,76 @@ public final class FixturePacks {
             overlay.setRGB(0, 0, 0xFF00FF00);
             texture(root, "overlay", overlay);
 
+            // ONE model with two generated layers (the vanilla dyed-ball shape): red base
+            // layer0, green overlay pixel layer1, both baked bottom-to-top like the client's
+            // ItemModelGenerator.
+            delegatingItem(root, "two_layer", "testpack:item/two_layer");
+            write(root, "assets/testpack/models/item/two_layer.json", """
+                {"parent":"item/generated","textures":{
+                  "layer0":"testpack:item/simple","layer1":"testpack:item/overlay"}}""");
+
+            // Per-index layer tinting: white textures so the tint colors show unmixed; tint 0
+            // dyes layer0 red, tint 1 dyes the layer1 overlay pixel blue.
+            texture(root, "white", solid(16, 16, 0xFFFFFFFF));
+            BufferedImage whiteDot = transparent(16, 16);
+            whiteDot.setRGB(0, 0, 0xFFFFFFFF);
+            texture(root, "white_dot", whiteDot);
+            write(root, "assets/testpack/models/item/two_layer_white.json", """
+                {"parent":"item/generated","textures":{
+                  "layer0":"testpack:item/white","layer1":"testpack:item/white_dot"}}""");
+            item(root, "two_layer_tinted", """
+                {"model":{"type":"minecraft:model","model":"testpack:item/two_layer_white",
+                  "tints":[{"type":"minecraft:constant","value":16711680},
+                           {"type":"minecraft:constant","value":255}]}}""");
+
+            // Layer contiguity: a gap at layer1 stops the stack at layer0 like vanilla, so the
+            // layer2 overlay must not render.
+            delegatingItem(root, "gapped_layer", "testpack:item/gapped_layer");
+            write(root, "assets/testpack/models/item/gapped_layer.json", """
+                {"parent":"item/generated","textures":{
+                  "layer0":"testpack:item/simple","layer2":"testpack:item/overlay"}}""");
+
+            // Six contiguous generated layers: vanilla's ItemModelGenerator bakes layer0 up to
+            // layer4 and ignores everything past layer4, so the green layer4 pixel paints and
+            // the blue layer5 pixel (same position) must not.
+            BufferedImage overlayBlue = transparent(16, 16);
+            overlayBlue.setRGB(0, 0, 0xFF0000FF);
+            texture(root, "overlay_blue", overlayBlue);
+            delegatingItem(root, "six_layer", "testpack:item/six_layer");
+            write(root, "assets/testpack/models/item/six_layer.json", """
+                {"parent":"item/generated","textures":{
+                  "layer0":"testpack:item/simple","layer1":"testpack:item/simple",
+                  "layer2":"testpack:item/simple","layer3":"testpack:item/simple",
+                  "layer4":"testpack:item/overlay","layer5":"testpack:item/overlay_blue"}}""");
+
+            // Generated layers may be #key indirections into the texture map (vanilla resolves
+            // references for generated layers exactly like element faces)...
+            delegatingItem(root, "indirect_layer", "testpack:item/indirect_layer");
+            write(root, "assets/testpack/models/item/indirect_layer.json", """
+                {"parent":"item/generated","textures":{
+                  "layer0":"#icon","icon":"testpack:item/simple"}}""");
+
+            // ...and an indirection to a key the map never defines fails loudly at resolve time.
+            delegatingItem(root, "broken_indirect_layer", "testpack:item/broken_indirect_layer");
+            write(root, "assets/testpack/models/item/broken_indirect_layer.json", """
+                {"parent":"item/generated","textures":{"layer0":"#void"}}""");
+
+            // layer0 present but the IN-pack parent above it missing: the merged-chain walk
+            // fails loudly on both public APIs (a broken parent must never silently drop
+            // whatever it was meant to supply).
+            delegatingItem(root, "layered_orphan", "testpack:item/layered_orphan");
+            write(root, "assets/testpack/models/item/layered_orphan.json", """
+                {"parent":"testpack:item/nowhere","textures":{"layer0":"testpack:item/simple"}}""");
+
+            // Layer inheritance: the child declares layer0, its in-pack parent supplies layer1;
+            // the merged chain texture map composes both.
+            delegatingItem(root, "inherited_layer", "testpack:item/inherited_layer_child");
+            write(root, "assets/testpack/models/item/inherited_layer_child.json", """
+                {"parent":"testpack:item/inherited_layer_parent","textures":{
+                  "layer0":"testpack:item/simple"}}""");
+            write(root, "assets/testpack/models/item/inherited_layer_parent.json", """
+                {"parent":"item/generated","textures":{"layer1":"testpack:item/overlay"}}""");
+
             // Unsupported node type
             item(root, "special", """
                 {"model":{"type":"minecraft:special","base":"minecraft:item/template_shulker_box"}}""");
@@ -557,9 +627,10 @@ public final class FixturePacks {
      * <li>{@code mirrored}: child of the flat model adding display.gui rotation (0,180,0).</li>
      * <li>{@code tilted}: child adding rotation (0,2,0) - MCC's decorative tilt, identity.</li>
      * <li>{@code badspin}: child adding rotation (30,225,0) - resolve throws by default;
-     *     approximate-rotation renders pick the mirrored view (cos 30 * cos 225 &lt; 0).</li>
-     * <li>{@code frontspin}: child adding rotation (30,45,10) - throws by default; approximate
-     *     renders pick the front view (cos 30 * cos 45 &gt; 0).</li>
+     *     full-gui-rotation renders show the north face as a rotated parallelogram (the
+     *     rotated south normal faces away from the viewer).</li>
+     * <li>{@code frontspin}: child adding rotation (30,45,10) - throws by default; full
+     *     renders keep the south face toward the viewer, spun and foreshortened.</li>
      * <li>{@code retextured}: child overriding #front to the green texture (child texture map
      *     entry wins over the parent's).</li>
      * <li>{@code gauge}: range_dispatch on custom_model_data (index 0, scale 1): threshold 1 ->
@@ -575,7 +646,9 @@ public final class FixturePacks {
      * <li>{@code oversized}: flat model with display.gui scale 2 and oversized_in_gui true
      *     (32x32 GUI px centered on the slot). {@code clipped}: same model without the
      *     flag.</li>
-     * <li>{@code rotated}: element rotation angle 45 - resolve throws.</li>
+     * <li>{@code rotated}: element rotation angle 45 about z - renders as a diamond through
+     *     the orthographic pipeline (no gui_light declared, so the vanilla side default
+     *     shades its south face at 0.8).</li>
      * <li>{@code mixed}: composite of the flat elements model and the plain layer0 sprite
      *     model - resolve throws.</li>
      * <li>{@code plain_sprite}: classic layer0 item (16x16 solid 0xFFAA5500) proving the sprite
@@ -669,6 +742,19 @@ public final class FixturePacks {
             solidQuadModel(root, "elem_blue", "testpack:item/blue");
             solidQuadModel(root, "elem_gray", "testpack:item/gray");
             solidQuadModel(root, "elem_red", "testpack:item/red");
+
+            // Animated element face texture: a 16x48 flipbook whose mcmeta frames list starts
+            // at the blue frame; element faces must sample the cropped first frame exactly like
+            // flat layer sprites do.
+            BufferedImage elemFlipbook = transparent(16, 48);
+            fill(elemFlipbook, 0, 0xFFFF0000);
+            fill(elemFlipbook, 1, 0xFF00FF00);
+            fill(elemFlipbook, 2, 0xFF0000FF);
+            texture(root, "elem_flipbook", elemFlipbook);
+            write(root, "assets/testpack/textures/item/elem_flipbook.png.mcmeta", """
+                {"animation":{"frametime":3,"frames":[2,0,1]}}""");
+            solidQuadModel(root, "elem_animated", "testpack:item/elem_flipbook");
+            delegatingItem(root, "animated_quad", "testpack:item/elem_animated");
 
             item(root, "gauge", """
                 {"model":{"type":"range_dispatch","property":"minecraft:custom_model_data","index":0,"scale":1.0,

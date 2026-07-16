@@ -101,8 +101,17 @@ class MinecraftContainerGeneratorElementsTest {
 
     @Test
     void brokenElementsItemsFailLoudly() {
-        MinecraftContainerGenerator generator = builder().withSlot(14, "testpack:item/rotated").build();
+        MinecraftContainerGenerator generator = builder().withSlot(14, "testpack:item/unknown_tint").build();
         assertThrows(PackResolveException.class, generator::generate);
+    }
+
+    @Test
+    void elementRotationsRenderInASlotWithoutAnyFlag() {
+        // The rotated fixture's 45-degree element rotation renders through the orthographic
+        // pipeline in strict mode: the white diamond (side-shaded 0.8, no gui_light declared)
+        // covers the slot center while the original quad corners rotate away.
+        BufferedImage canvas = builder().withSlot(14, "testpack:item/rotated").build().generate().getImage();
+        assertEquals(0xFFCCCCCC, canvas.getRGB(176, 88), "the diamond covers the slot center");
     }
 
     @Test
@@ -167,14 +176,18 @@ class MinecraftContainerGeneratorElementsTest {
     }
 
     @Test
-    void approximateGuiRotationsRenderTheRotatedSlotItem() {
-        // badspin's [30,225,0] picks the mirrored back view under the flag: identical pixels to
-        // the explicitly mirrored model in the same slot.
-        BufferedImage approximated = builder().withSlot(14, "testpack:item/badspin")
-            .withApproximateGuiRotations(true).build().generate().getImage();
-        BufferedImage mirrored = builder().withSlot(14, "testpack:item/mirrored")
-            .build().generate().getImage();
-        ImageAssertions.assertPixelsEqual(mirrored, approximated, "approximated slot item");
+    void fullGuiRotationsRenderTheRotatedSlotItem() {
+        // badspin's [30,225,0] shows the north face (backpaint) as a true rotated
+        // parallelogram: at pixelSize 2 the slot pixel at slot-local gui (12.25, 8.25)
+        // inverse-maps to face fractions (0.38, 0.26) and samples backpaint's yellow left
+        // half, while slot-local gui (4.25, 8.25) falls outside the face and shows the
+        // container background through.
+        BufferedImage rotated = builder().withSlot(14, "testpack:item/badspin")
+            .withFullGuiRotations(true).build().generate().getImage();
+        BufferedImage empty = builder().build().generate().getImage();
+        assertEquals(0xFFFFFF00, rotated.getRGB(184, 88), "backpaint lands right of the pivot");
+        assertEquals(empty.getRGB(168, 88), rotated.getRGB(168, 88),
+            "the vacated slot area shows the untouched container background");
     }
 
     @Test
@@ -184,12 +197,12 @@ class MinecraftContainerGeneratorElementsTest {
     }
 
     @Test
-    void cacheKeysDifferAcrossApproximateGuiRotations() {
+    void cacheKeysDifferAcrossFullGuiRotations() {
         MinecraftContainerGenerator strict = builder().withSlot(14, "testpack:item/badspin").build();
-        MinecraftContainerGenerator approximate = builder().withSlot(14, "testpack:item/badspin")
-            .withApproximateGuiRotations(true).build();
-        assertNotEquals(GeneratorCacheKey.fromGenerator(strict), GeneratorCacheKey.fromGenerator(approximate),
-            "the approximation flag changes rendered pixels, so it must enter the render cache key");
+        MinecraftContainerGenerator full = builder().withSlot(14, "testpack:item/badspin")
+            .withFullGuiRotations(true).build();
+        assertNotEquals(GeneratorCacheKey.fromGenerator(strict), GeneratorCacheKey.fromGenerator(full),
+            "the full-rotation flag changes rendered pixels, so it must enter the render cache key");
     }
 
     @Test

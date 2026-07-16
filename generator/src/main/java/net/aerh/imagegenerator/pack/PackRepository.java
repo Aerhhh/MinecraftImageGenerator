@@ -139,15 +139,15 @@ public final class PackRepository {
      * {@code custom_model_data} dispatch nodes and tint sources against {@code data}. Flat
      * layer0 models return a {@link PackItemVisual.Sprite} at native texture resolution
      * (identical to {@link #resolve(PackId, String)}); elements models rasterize through the
-     * flat front projection directly at {@code pixelsPerGuiPx} canvas px per GUI px and return
-     * a {@link PackItemVisual.ElementsRaster}, clipped to the 16-GUI-px slot box unless the
+     * GUI projection directly at {@code pixelsPerGuiPx} canvas px per GUI px and return a
+     * {@link PackItemVisual.ElementsRaster}, clipped to the 16-GUI-px slot box unless the
      * item declares {@code oversized_in_gui}.
      *
      * @return empty when the pack does not contain the item (callers fall back to vanilla)
      * @throws PackResolveException when the pack is not registered, or the item exists but
      *                              cannot be rendered (broken references, unsupported node
-     *                              types or tint sources, non-zero element rotations,
-     *                              unsupported gui rotations)
+     *                              types or tint sources, gui rotations beyond identity and
+     *                              the mirror without the full-rotation opt-in)
      */
     public Optional<PackItemVisual> resolveItemVisual(PackId packId, String itemRef,
                                                       CustomModelData data, int pixelsPerGuiPx) {
@@ -163,10 +163,10 @@ public final class PackRepository {
      *     {@code property: minecraft:damage} ({@code normalize: true}, the vanilla default,
      *     evaluates the 0..1 damage fraction; {@code normalize: false} the raw damage). Null
      *     evaluates the property at 0.</li>
-     * <li>{@code approximateGuiRotations}: when true, arbitrary {@code display.gui} rotations
-     *     render their nearest flat projection (front or mirrored view) instead of failing.
-     *     Decorative tilts look right; genuinely 3D presentations flatten. Default behavior
-     *     (false) keeps the loud failure.</li>
+     * <li>{@code fullGuiRotations}: when true, {@code display.gui} rotations beyond identity
+     *     and the (0, 180, 0) mirror render through the true orthographic projection of the
+     *     rotated model (vanilla GUI semantics: no perspective) instead of failing. Default
+     *     behavior (false) keeps the loud failure.</li>
      * </ul>
      *
      * @return empty when the pack does not contain the item (callers fall back to vanilla)
@@ -175,10 +175,10 @@ public final class PackRepository {
      */
     public Optional<PackItemVisual> resolveItemVisual(PackId packId, String itemRef,
                                                       CustomModelData data, @Nullable ItemDamage damage,
-                                                      int pixelsPerGuiPx, boolean approximateGuiRotations) {
+                                                      int pixelsPerGuiPx, boolean fullGuiRotations) {
         Objects.requireNonNull(data, "data");
         return requireRegistered(packId)
-            .resolveItemVisual(itemRef, data, damage, pixelsPerGuiPx, approximateGuiRotations);
+            .resolveItemVisual(itemRef, data, damage, pixelsPerGuiPx, fullGuiRotations);
     }
 
     /**

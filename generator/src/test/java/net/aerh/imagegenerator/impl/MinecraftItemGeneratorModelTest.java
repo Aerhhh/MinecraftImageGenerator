@@ -122,11 +122,19 @@ class MinecraftItemGeneratorModelTest {
     @Test
     void resolveFailuresPropagateLoudly() {
         assertThrows(PackResolveException.class,
-            () -> packBuilder().withItem("testpack:item/rotated").build().generate());
-        assertThrows(PackResolveException.class,
             () -> packBuilder().withItem("testpack:item/badspin").build().generate());
         assertThrows(PackResolveException.class,
             () -> packBuilder().withItem("testpack:item/mixed").build().generate());
+    }
+
+    @Test
+    void elementRotationsRenderWithoutAnyFlag() {
+        // The rotated fixture (45-degree element rotation, no gui_light so the vanilla side
+        // default applies) renders through the orthographic pipeline in strict mode: the
+        // white diamond covers the slot center at the south-face shade 0.8.
+        BufferedImage image = packBuilder().withItem("testpack:item/rotated").build().generate().getImage();
+        assertEquals(0xFFCCCCCC, image.getRGB(128, 128));
+        assertEquals(0, image.getRGB(8, 8), "the original quad corner rotates away");
     }
 
     /**
@@ -251,33 +259,34 @@ class MinecraftItemGeneratorModelTest {
     }
 
     @Test
-    void approximateGuiRotationsRenderTheUnsupportedRotation() {
-        // [30,225,0] picks the mirrored back view (cos 30 * cos 225 < 0): identical pixels to
-        // the explicit (0,180,0) mirror of the same model.
-        BufferedImage approximated = packBuilder().withItem("testpack:item/badspin")
-            .withApproximateGuiRotations(true).build().generate().getImage();
-        BufferedImage mirrored = packBuilder().withItem("testpack:item/mirrored").build()
-            .generate().getImage();
-        ImageAssertions.assertPixelsEqual(mirrored, approximated, "approximated [30,225,0]");
+    void fullGuiRotationsRenderTheOrthographicProjection() {
+        // badspin's [30,225,0] shows the north face (backpaint) as a true rotated
+        // parallelogram: at the 16-px-per-GUI-px item canvas, the pixel at gui (12.03, 8.03)
+        // inverse-maps to face fractions (0.36, 0.24) and samples backpaint's yellow left
+        // half, while gui (4.03, 8.03) falls outside the projected face.
+        BufferedImage rotated = packBuilder().withItem("testpack:item/badspin")
+            .withFullGuiRotations(true).build().generate().getImage();
+        assertEquals(0xFFFFFF00, rotated.getRGB(192, 128), "backpaint lands right of the pivot");
+        assertEquals(0, rotated.getRGB(64, 128), "the rotated quad vacates the slot's left side");
 
         BufferedImage repeat = packBuilder().withItem("testpack:item/badspin")
-            .withApproximateGuiRotations(true).build().generate().getImage();
-        ImageAssertions.assertPixelsEqual(approximated, repeat, "approximation is deterministic");
+            .withFullGuiRotations(true).build().generate().getImage();
+        ImageAssertions.assertPixelsEqual(rotated, repeat, "the orthographic projection is deterministic");
     }
 
     @Test
     void unsupportedRotationStillThrowsWithoutTheFlag() {
         assertThrows(PackResolveException.class,
             () -> packBuilder().withItem("testpack:item/badspin")
-                .withApproximateGuiRotations(false).build().generate());
+                .withFullGuiRotations(false).build().generate());
     }
 
     @Test
-    void cacheKeysDifferAcrossApproximateGuiRotations() {
+    void cacheKeysDifferAcrossFullGuiRotations() {
         MinecraftItemGenerator strict = packBuilder().withItem("testpack:item/badspin").build();
-        MinecraftItemGenerator approximate = packBuilder().withItem("testpack:item/badspin")
-            .withApproximateGuiRotations(true).build();
-        assertNotEquals(GeneratorCacheKey.fromGenerator(strict), GeneratorCacheKey.fromGenerator(approximate),
-            "the approximation flag changes rendered pixels, so it must enter the cache key");
+        MinecraftItemGenerator full = packBuilder().withItem("testpack:item/badspin")
+            .withFullGuiRotations(true).build();
+        assertNotEquals(GeneratorCacheKey.fromGenerator(strict), GeneratorCacheKey.fromGenerator(full),
+            "the full-rotation flag changes rendered pixels, so it must enter the cache key");
     }
 }

@@ -62,6 +62,12 @@ final class LoadedPack {
     private static final String SHEET_CAPPED_KEY_PREFIX = "sheet:";
     private static final int MAX_PARENT_DEPTH = 8;
     /**
+     * How many {@code layerN} textures a generated flat model may stack: vanilla's
+     * {@code ItemModelGenerator} bakes {@code layer0} through {@code layer4} and stops at the
+     * first missing index.
+     */
+    private static final int MAX_GENERATED_LAYERS = 5;
+    /**
      * The vanilla flat-item template parents that real packs legitimately leave dangling: a
      * model chain ending at one of these OUTSIDE the pack terminates with builtin flat-layer
      * semantics (the {@code item/generated}/{@code item/handheld} templates carry no elements,
@@ -471,10 +477,12 @@ final class LoadedPack {
     /**
      * Resolves an item reference (full namespaced items/ path, e.g.
      * {@code hypixel_skyblock:item/jacob/cactus_knife}) to a flat GUI sprite - the classic
-     * layer0 path only, evaluated with no custom model data. Items whose models are
+     * generated-layer path only ({@code layer0} up to {@code layer4}, stacked like vanilla's
+     * {@code ItemModelGenerator}), evaluated with no custom model data. Items whose models are
      * elements-based resolve through {@link #resolveItemVisual(String, CustomModelData, int)}
-     * instead. Supported tint sources (constant, custom_model_data defaults) color the sprite
-     * like the vanilla client; unsupported sources warn and stay untinted.
+     * instead. Supported tint sources (constant, dye and custom_model_data defaults) color
+     * layer {@code i} with tint {@code i} like the vanilla client; unsupported sources warn and
+     * stay untinted.
      *
      * @return empty when the ref is bare, in a foreign namespace, or unknown - callers fall back
      *     to vanilla; a present sprite otherwise
@@ -496,10 +504,11 @@ final class LoadedPack {
      * <ul>
      * <li>Models whose resolved chains carry no elements compose exactly like
      *     {@link #resolveSprite(String)} and return a {@link PackItemVisual.Sprite} at native
-     *     texture resolution (callers scale as before). Supported tint sources multiply the
-     *     layer like vanilla's {@code item/generated} tintindex 0 quad; unsupported sources
-     *     warn and stay untinted so vanilla-style dye/potion items keep rendering.</li>
-     * <li>Models with elements rasterize through the flat front projection directly at
+     *     texture resolution (callers scale as before). Supported tint sources multiply layer
+     *     {@code i} like vanilla's {@code item/generated} tintindex {@code i} quads;
+     *     unsupported sources warn and stay untinted so vanilla-style dye/potion items keep
+     *     rendering.</li>
+     * <li>Models with elements rasterize through the GUI projection directly at
      *     {@code pixelsPerGuiPx} (no 16 px intermediate, so sub-GUI-px geometry survives) and
      *     return a {@link PackItemVisual.ElementsRaster}; the item's {@code oversized_in_gui}
      *     flag selects slot-box clipping versus full-extent output. Mixing elements models and
@@ -518,8 +527,9 @@ final class LoadedPack {
      * @return empty when the ref is bare, in a foreign namespace, or unknown - callers fall back
      *     to vanilla
      * @throws PackResolveException when the item exists but cannot be rendered (broken
-     *                              references, unsupported node types or tint sources, non-zero
-     *                              element rotations, unsupported gui rotations)
+     *                              references, unsupported node types or tint sources, gui
+     *                              rotations beyond identity and the mirror without the
+     *                              full-rotation opt-in)
      */
     public Optional<PackItemVisual> resolveItemVisual(String itemRef, CustomModelData data, int pixelsPerGuiPx) {
         return resolveItemVisual(itemRef, data, null, pixelsPerGuiPx, false);
@@ -529,13 +539,13 @@ final class LoadedPack {
      * Like {@link #resolveItemVisual(String, CustomModelData, int)} with two extra evaluation
      * inputs: {@code damage} feeds {@code range_dispatch} nodes with
      * {@code property: minecraft:damage} (null evaluates the property at 0), and
-     * {@code approximateGuiRotations} renders unsupported {@code display.gui} rotations as
-     * their nearest flat projection instead of failing (see {@link ElementModelRenderer} for
-     * the fidelity limits).
+     * {@code fullGuiRotations} renders {@code display.gui} rotations beyond identity and the
+     * mirror through the true orthographic projection instead of failing (see
+     * {@link ElementModelRenderer} for the projection semantics).
      */
     public Optional<PackItemVisual> resolveItemVisual(String itemRef, CustomModelData data,
                                                       @Nullable ItemDamage damage, int pixelsPerGuiPx,
-                                                      boolean approximateGuiRotations) {
+                                                      boolean fullGuiRotations) {
         ItemEntry entry = lookupItem(itemRef);
         if (entry == null) {
             return Optional.empty();
@@ -567,10 +577,11 @@ final class LoadedPack {
             instances.add(new ElementModelRenderer.ModelInstance(
                 chain.elements(), chain.textures(),
                 chain.guiTransform() != null ? chain.guiTransform() : GuiTransform.IDENTITY,
-                evaluateElementTints(itemRef, models.get(i).tints(), data)));
+                evaluateElementTints(itemRef, models.get(i).tints(), data),
+                chain.guiLight()));
         }
         ElementModelRenderer.Raster raster = ElementModelRenderer.render(
-            instances, pixelsPerGuiPx, entry.oversizedInGui(), approximateGuiRotations,
+            instances, pixelsPerGuiPx, entry.oversizedInGui(), fullGuiRotations,
             this::loadElementTexture, "item `" + itemRef + "` in pack `" + id + "`");
         return Optional.of(new PackItemVisual.ElementsRaster(
             raster.image(), raster.offsetX(), raster.offsetY(), entry.oversizedInGui()));
@@ -640,24 +651,29 @@ final class LoadedPack {
     }
 
     /**
-     * The classic layer0 composition plus vanilla {@code item/generated} tinting: the client
-     * bakes layer {@code i} with tintindex {@code i}, and only layer0 is supported here, so each
-     * leaf's tint 0 multiplies its layer. Unsupported tint sources warn and stay untinted
-     * (vanilla-style dye/potion items rendered fine before tints were parsed; see
-     * {@link GuiModelResolver#evaluateTintsLenient}). Byte-identical to the pre-elements sprite
-     * path when no tints are declared.
+     * The classic generated-layer composition plus vanilla {@code item/generated} tinting: the
+     * client bakes layer {@code i} with tintindex {@code i}, so each model's {@code layer0}
+     * through {@code layer4} textures stack bottom-to-top with tint {@code i} multiplying layer
+     * {@code i} (tints past the declared list are white, a no-op - real packs commonly tint
+     * layer0 and leave an overlay layer1 untinted, the vanilla dyed-ball shape). Unsupported
+     * tint sources warn and stay untinted (vanilla-style dye/potion items rendered fine before
+     * tints were parsed; see {@link GuiModelResolver#evaluateTintsLenient}). Byte-identical to
+     * the pre-elements sprite path for single-layer untinted models.
      */
     private BufferedImage composeSpriteLayers(String itemRef, List<GuiModelResolver.GuiModel> models,
                                               CustomModelData data) {
         BufferedImage sprite = null;
         for (GuiModelResolver.GuiModel model : models) {
-            BufferedImage layer = textureCache.get(resolveLayer0(model.modelRef()));
             List<Integer> tints = GuiModelResolver.evaluateTintsLenient(model.tints(), data);
-            int tint = tints.isEmpty() ? GuiModelResolver.WHITE : tints.get(0);
-            if (tint != GuiModelResolver.WHITE) {
-                layer = tintedCopy(layer, tint);
+            List<String> layerPaths = resolveGeneratedLayerPaths(model.modelRef());
+            for (int index = 0; index < layerPaths.size(); index++) {
+                BufferedImage layer = textureCache.get(layerPaths.get(index));
+                int tint = index < tints.size() ? tints.get(index) : GuiModelResolver.WHITE;
+                if (tint != GuiModelResolver.WHITE) {
+                    layer = tintedCopy(layer, tint);
+                }
+                sprite = sprite == null ? copy(layer) : stack(sprite, layer);
             }
-            sprite = sprite == null ? copy(layer) : stack(sprite, layer);
         }
         if (models.isEmpty() || sprite == null) {
             // An empty composite (or any resolution path that yields no layers) must fail loudly
@@ -667,6 +683,42 @@ final class LoadedPack {
                 itemRef, id.toString());
         }
         return sprite;
+    }
+
+    /**
+     * The texture paths of a model chain's generated flat layers: {@code layer0} up to
+     * {@code layer4} (the {@link #MAX_GENERATED_LAYERS vanilla ItemModelGenerator cap}) from the
+     * merged chain texture map (child entries win per key, exactly like
+     * {@link #resolveModelChain}), stopping at the first missing index like vanilla. A
+     * {@code layerN} value of the form {@code #key} follows the merged map exactly like element
+     * face references (vanilla resolves references for generated layers too); an indirection to
+     * an undefined key fails loudly. A chain with no layer0 at all raises the same per-shape
+     * errors as {@link #resolveLayer0} - a builtin-template end, an outside-pack end, a
+     * parentless model and a broken parent ref each keep their dedicated message.
+     */
+    private List<String> resolveGeneratedLayerPaths(String modelRefValue) {
+        Map<String, String> textures = resolveModelChain(modelRefValue).textures();
+        List<String> paths = new ArrayList<>(1);
+        String context = "model `" + modelRefValue + "` in pack `" + id + "`";
+        for (int index = 0; index < MAX_GENERATED_LAYERS; index++) {
+            String layerRef = textures.get("layer" + index);
+            if (layerRef == null) {
+                break;
+            }
+            // The renderer's #-chain resolver, shared so the generated-layer and element-face
+            // texture paths can never disagree on reference semantics.
+            String resolved = ElementModelRenderer.resolveTextureRef(layerRef, textures, context);
+            paths.add(parseRefOrResolveError(resolved, "minecraft").texturePath());
+        }
+        if (paths.isEmpty()) {
+            // resolveLayer0 walks the same chain and throws the precise no-layer0 error for
+            // every termination shape; the merged map lacking layer0 guarantees it cannot
+            // return a path (both read the models' own texture maps, child-most first).
+            resolveLayer0(modelRefValue);
+            throw new PackResolveException("Model `%s` in pack `%s` has no layer0 texture",
+                modelRefValue, id.toString());
+        }
+        return paths;
     }
 
     /**
@@ -686,15 +738,27 @@ final class LoadedPack {
 
     /**
      * Everything an elements render needs from one model's parent chain, merged with child-most
-     * precedence: the first elements list, the first {@code display.gui} entry, and the texture
-     * map with child entries winning per key. The parsed root {@code gui_light} is deliberately
-     * not threaded: the flat GUI projection never shades (see {@link ElementModelRenderer}).
+     * precedence: the first elements list, the first {@code display.gui} entry, the first
+     * {@code gui_light} (resolved to its effective mode at the chain end) and the texture map
+     * with child entries winning per key.
      *
      * <p>{@code elements} is null when no model in the reachable chain declares any - the item
      * then composes through the classic layer0 path.
      */
     private record ChainData(@Nullable List<ModelElement> elements, Map<String, String> textures,
-                             @Nullable GuiTransform guiTransform) {
+                             @Nullable GuiTransform guiTransform, ElementModelRenderer.GuiLight guiLight) {
+    }
+
+    /**
+     * The effective {@code gui_light} of a resolved chain: the first declared value wins;
+     * absent values default to {@code side} like vanilla, except chains ending at the builtin
+     * flat templates, which declare {@code front} in the vanilla assets.
+     */
+    private static ElementModelRenderer.GuiLight guiLightOf(@Nullable String declared, boolean builtinFlatEnd) {
+        if (declared != null) {
+            return "front".equals(declared) ? ElementModelRenderer.GuiLight.FRONT : ElementModelRenderer.GuiLight.SIDE;
+        }
+        return builtinFlatEnd ? ElementModelRenderer.GuiLight.FRONT : ElementModelRenderer.GuiLight.SIDE;
     }
 
     /**
@@ -711,18 +775,22 @@ final class LoadedPack {
         ResourceRef modelRef = parseRefOrResolveError(modelRefValue, "minecraft");
         List<ModelElement> elements = null;
         GuiTransform guiTransform = null;
+        String guiLight = null;
         Map<String, String> textures = new HashMap<>();
         for (int depth = 0; depth < MAX_PARENT_DEPTH; depth++) {
             if (!namespaces.contains(modelRef.namespace())) {
                 // Vanilla model assets are unavailable; stop and use what the pack declares.
-                return new ChainData(elements, Map.copyOf(textures), guiTransform);
+                return new ChainData(elements, Map.copyOf(textures), guiTransform,
+                    guiLightOf(guiLight, false));
             }
             ModelInfo model = models.get(modelRef.toString());
             if (model == null) {
                 if (BUILTIN_FLAT_PARENTS.contains(modelRef.toString())) {
                     // The builtin flat templates carry nothing this walk collects; ending here
-                    // is the ordinary flat-item shape, not a broken pack.
-                    return new ChainData(elements, Map.copyOf(textures), guiTransform);
+                    // is the ordinary flat-item shape, not a broken pack. The vanilla templates
+                    // declare gui_light front, so an undeclared chain inherits it here.
+                    return new ChainData(elements, Map.copyOf(textures), guiTransform,
+                        guiLightOf(guiLight, true));
                 }
                 throw new PackResolveException("Model `%s` not found in pack `%s`",
                     modelRef.toString(), id.toString());
@@ -734,8 +802,12 @@ final class LoadedPack {
             if (guiTransform == null && model.guiTransform() != null) {
                 guiTransform = model.guiTransform();
             }
+            if (guiLight == null && model.guiLight() != null) {
+                guiLight = model.guiLight();
+            }
             if (model.parentRef() == null) {
-                return new ChainData(elements, Map.copyOf(textures), guiTransform);
+                return new ChainData(elements, Map.copyOf(textures), guiTransform,
+                    guiLightOf(guiLight, false));
             }
             modelRef = parseRefOrResolveError(model.parentRef(), "minecraft");
         }

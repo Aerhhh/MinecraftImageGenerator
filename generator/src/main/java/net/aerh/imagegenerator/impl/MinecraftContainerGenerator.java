@@ -78,8 +78,9 @@ import java.util.regex.Pattern;
  * with {@link MinecraftInventoryGenerator} is drawn instead, slot outlines included.
  *
  * <p><b>Elements models:</b> slot item specs that resolve to elements-based pack models render
- * through the flat front projection directly at this generator's pixel size (no intermediate
- * downscale), and {@code oversized_in_gui} art anchors on the slot center exactly like the
+ * through the GUI projection directly at this generator's pixel size (no intermediate
+ * downscale; see {@link Builder#withFullGuiRotations} for gui rotations beyond identity and
+ * the mirror), and {@code oversized_in_gui} art anchors on the slot center exactly like the
  * vanilla client - the model-space [0, 16] box maps onto the slot and overflow spans the
  * neighboring slots. The canvas does NOT expand for oversized item art (it clips at the canvas
  * edge); only title-extent expansion grows the canvas. Item modifiers (enchant, hover,
@@ -145,7 +146,7 @@ public class MinecraftContainerGenerator implements Generator {
     private final int scaleFactor;
     // Final non-transient so it enters the render cache key: the flag changes rendered pixels
     // for slots whose models carry unsupported gui rotations.
-    private final boolean approximateGuiRotations;
+    private final boolean fullGuiRotations;
     // packId is final non-transient so it enters the render cache key; the repository reference
     // is transient so instances never split it.
     @Nullable
@@ -453,9 +454,9 @@ public class MinecraftContainerGenerator implements Generator {
         }
         Optional<PackItemVisual.ElementsRaster> raster = elementsRasterCache.computeIfAbsent(
             new ElementsRasterKey(item.getItemName(), data),
-            // The approximation flag is per generator instance, so it needs no key field.
+            // The full-rotation flag is per generator instance, so it needs no key field.
             key -> elementsRasterOf(repository().resolveItemVisual(packId, key.itemName(), key.data(), null,
-                pixelSize, approximateGuiRotations)));
+                pixelSize, fullGuiRotations)));
         if (raster.isPresent()) {
             warnIgnoredElementsModifiers(item);
         }
@@ -862,7 +863,7 @@ public class MinecraftContainerGenerator implements Generator {
         private final SortedMap<Integer, String> slots = new TreeMap<>();
         private final SortedMap<Integer, CustomModelData> slotCustomModelData = new TreeMap<>();
         private int scaleFactor = 1;
-        private boolean approximateGuiRotations;
+        private boolean fullGuiRotations;
         private PackId packId;
         private PackRepository packRepository;
 
@@ -967,14 +968,16 @@ public class MinecraftContainerGenerator implements Generator {
         }
 
         /**
-         * Opts slot items with elements-based pack models into approximating arbitrary
-         * {@code display.gui} rotations with their nearest flat projection (front or mirrored
-         * view) instead of failing loudly - decoratively rotated menu art renders sensibly
-         * while genuinely 3D presentations flatten to their nearest face (the rotation itself
-         * is dropped). Default false: unsupported rotations keep throwing PackResolveException.
+         * Opts slot items with elements-based pack models into the true orthographic
+         * projection of arbitrary {@code display.gui} rotations - the vanilla GUI presentation
+         * of 3D models (no perspective), so [30, 225, 0]-style block angles show three shaded
+         * faces instead of failing loudly. Identity and (0, 180, 0)-mirror rotations (within
+         * the 5-degree decorative-tilt tolerance) keep their exact flat renders with or
+         * without the flag. Default false: rotations beyond those keep throwing
+         * PackResolveException.
          */
-        public Builder withApproximateGuiRotations(boolean approximateGuiRotations) {
-            this.approximateGuiRotations = approximateGuiRotations;
+        public Builder withFullGuiRotations(boolean fullGuiRotations) {
+            this.fullGuiRotations = fullGuiRotations;
             return this;
         }
 
@@ -997,7 +1000,7 @@ public class MinecraftContainerGenerator implements Generator {
                 }
             }
             return new MinecraftContainerGenerator(rows, title, new TreeMap<>(slots),
-                new TreeMap<>(slotCustomModelData), scaleFactor, approximateGuiRotations, packId, packRepository);
+                new TreeMap<>(slotCustomModelData), scaleFactor, fullGuiRotations, packId, packRepository);
         }
     }
 }

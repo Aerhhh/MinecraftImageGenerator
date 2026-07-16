@@ -227,14 +227,15 @@ class PackJsonParser {
                 throw new PackLoadException("Model element coordinates must be within -16..32");
             }
         }
-        float rotationAngle = 0;
+        ModelElement.Rotation rotation = null;
         if (element.has("rotation")) {
             JsonElement rotationElement = element.get("rotation");
             if (!rotationElement.isJsonObject()) {
                 throw new PackLoadException("Model element 'rotation' must be an object");
             }
-            rotationAngle = (float) requireNumber(rotationElement.getAsJsonObject(), "angle", "Element rotation");
+            rotation = parseElementRotation(rotationElement.getAsJsonObject());
         }
+        boolean shade = optionalBoolean(element, "shade", true);
         Map<ModelElement.Direction, ModelElement.Face> faces = new EnumMap<>(ModelElement.Direction.class);
         if (element.has("faces")) {
             JsonElement facesElement = element.get("faces");
@@ -252,7 +253,33 @@ class PackJsonParser {
             }
         }
         return new ModelElement(from[0], from[1], from[2], to[0], to[1], to[2],
-            rotationAngle, Map.copyOf(faces));
+            rotation, shade, Map.copyOf(faces));
+    }
+
+    /**
+     * Parses an element rotation entry with vanilla validation: {@code angle} any finite angle
+     * in degrees (modern vanilla lifted the legacy 22.5-degree-step whitelist in 1.21.6, the
+     * client family whose packs this library targets), {@code axis} one of
+     * {@code x}/{@code y}/{@code z} (lowercase, like vanilla's axis-by-name lookup),
+     * {@code origin} a required 3-vector in model units and {@code rescale} an optional boolean
+     * defaulting to false.
+     */
+    private static ModelElement.Rotation parseElementRotation(JsonObject rotation) {
+        float angle = (float) requireNumber(rotation, "angle", "Element rotation");
+        if (!Float.isFinite(angle)) {
+            throw new PackLoadException(
+                "Element rotation angle must be a finite number, got %s", String.valueOf(angle));
+        }
+        String axisName = requireString(rotation, "axis", "Element rotation");
+        ModelElement.Axis axis = switch (axisName) {
+            case "x" -> ModelElement.Axis.X;
+            case "y" -> ModelElement.Axis.Y;
+            case "z" -> ModelElement.Axis.Z;
+            default -> throw new PackLoadException("Element rotation axis must be 'x', 'y' or 'z', got '%s'", axisName);
+        };
+        float[] origin = requireVector3(rotation, "origin", "Element rotation");
+        return new ModelElement.Rotation(angle, axis, origin[0], origin[1], origin[2],
+            optionalBoolean(rotation, "rescale"));
     }
 
     private static ModelElement.Face parseFace(JsonObject face) {

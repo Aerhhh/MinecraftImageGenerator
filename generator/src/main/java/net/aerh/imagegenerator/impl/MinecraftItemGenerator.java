@@ -53,7 +53,7 @@ public class MinecraftItemGenerator implements Generator {
     // reflective render cache key, exactly like customModelData.
     @Nullable
     private final ItemDamage itemDamage;
-    private final boolean approximateGuiRotations;
+    private final boolean fullGuiRotations;
     private final String data;
     private final String color;
     private final boolean enchanted;
@@ -152,7 +152,7 @@ public class MinecraftItemGenerator implements Generator {
         String packRef = itemModel != null ? namespacedItemModel() : itemId;
         if (usingPack) {
             var visual = packRepository.resolveItemVisual(packId, packRef, customModelData, itemDamage,
-                ELEMENTS_PX_PER_GUI_PX, approximateGuiRotations);
+                ELEMENTS_PX_PER_GUI_PX, fullGuiRotations);
             if (visual.isPresent()) {
                 return switch (visual.get()) {
                     case PackItemVisual.Sprite sprite -> PackSprites.scaleToCanvas(sprite.sprite(), 256);
@@ -194,7 +194,7 @@ public class MinecraftItemGenerator implements Generator {
         private String itemModel;
         private CustomModelData customModelData;
         private ItemDamage itemDamage;
-        private boolean approximateGuiRotations;
+        private boolean fullGuiRotations;
         private String data;
         private String color;
         private boolean enchanted;
@@ -258,15 +258,15 @@ public class MinecraftItemGenerator implements Generator {
         }
 
         /**
-         * Opts elements-model renders into approximating arbitrary {@code display.gui}
-         * rotations with their nearest flat projection (front or mirrored view) instead of
-         * failing loudly. Fidelity limits: the rotation itself is dropped - no foreshortening
-         * and no in-plane spin - so decoratively rotated flat art renders sensibly while
-         * genuinely 3D presentations flatten to their nearest face. Default false: unsupported
-         * rotations keep throwing PackResolveException.
+         * Opts elements-model renders into the true orthographic projection of arbitrary
+         * {@code display.gui} rotations - the vanilla GUI presentation of 3D models (no
+         * perspective), so [30, 225, 0]-style block angles show three shaded faces instead of
+         * failing loudly. Identity and (0, 180, 0)-mirror rotations (within the 5-degree
+         * decorative-tilt tolerance) keep their exact flat renders with or without the flag.
+         * Default false: rotations beyond those keep throwing PackResolveException.
          */
-        public MinecraftItemGenerator.Builder withApproximateGuiRotations(boolean approximateGuiRotations) {
-            this.approximateGuiRotations = approximateGuiRotations;
+        public MinecraftItemGenerator.Builder withFullGuiRotations(boolean fullGuiRotations) {
+            this.fullGuiRotations = fullGuiRotations;
             return this;
         }
 
@@ -390,7 +390,7 @@ public class MinecraftItemGenerator implements Generator {
             }
 
             return new MinecraftItemGenerator(
-                itemId, itemModel, customModelData, itemDamage, approximateGuiRotations, data, color,
+                itemId, itemModel, customModelData, itemDamage, fullGuiRotations, data, color,
                 enchanted, hoverEffect, bigImage, durabilityPercent, overlayLoader, effectPipeline,
                 packId, packRepository
             );

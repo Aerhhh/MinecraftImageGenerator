@@ -72,6 +72,16 @@ class LoadedPackElementsTest {
     }
 
     @Test
+    void elementFaceTextureCropsToAnimationFirstFrame() {
+        // The element texture path shares the flat sprite path's mcmeta handling: a flipbook
+        // strip contributes the frames list's FIRST frame, not the whole strip.
+        BufferedImage image = raster("testpack:item/animated_quad", CustomModelData.EMPTY).image();
+        assertEquals(64, image.getWidth(), "canvas is the slot box, not the strip");
+        assertEquals(0xFF0000FF, image.getRGB(32, 8), "frames list starts at index 2 (blue)");
+        assertEquals(0xFF0000FF, image.getRGB(32, 56), "the whole quad samples the one frame");
+    }
+
+    @Test
     void unsupportedGuiRotationThrows() {
         PackResolveException exception = assertThrows(PackResolveException.class,
             () -> pack.resolveItemVisual("testpack:item/badspin", CustomModelData.EMPTY, SCALE));
@@ -79,33 +89,43 @@ class LoadedPackElementsTest {
     }
 
     @Test
-    void approximateRotationsRenderTheNearestFlatProjection() {
-        // [30,225,0]: cos 30 * cos 225 < 0, so the mirrored back view is nearest - deterministic
-        // pixels identical to the explicit (0,180,0) mirror of the same model.
+    void fullGuiRotationsRenderTheOrthographicProjection() {
+        // badspin's [30,225,0] turns the south face away; the north face (backpaint) projects
+        // as a parallelogram from gui (8, 6.73) with edge vectors (11.31, -5.66) and (0, 13.86).
+        // The slot pixel at gui (12.125, 8.125) inverse-maps to face fractions (0.36, 0.25),
+        // sampling backpaint's yellow left half; gui (4.125, 8.125) falls outside the face.
         PackItemVisual visual = pack.resolveItemVisual("testpack:item/badspin",
             CustomModelData.EMPTY, null, SCALE, true).orElseThrow();
         BufferedImage image = assertInstanceOf(PackItemVisual.ElementsRaster.class, visual).image();
-        assertEquals(0xFFFFFF00, image.getRGB(8, 32), "backpaint's left half is yellow");
-        assertEquals(0xFFFF00FF, image.getRGB(56, 32), "backpaint's right half is magenta");
-        ImageAssertions.assertPixelsEqual(
+        assertEquals(0xFFFFFF00, image.getRGB(48, 32), "backpaint's left half lands right of the pivot");
+        assertEquals(0, image.getRGB(16, 32), "the rotated quad vacates the slot's left side");
+        ImageAssertions.assertPixelsDiffer(
             raster("testpack:item/mirrored", CustomModelData.EMPTY).image(), image,
-            "approximated [30,225,0] against the explicit mirror");
+            "the true projection is not the flat mirror approximation");
+
+        BufferedImage repeat = assertInstanceOf(PackItemVisual.ElementsRaster.class,
+            pack.resolveItemVisual("testpack:item/badspin", CustomModelData.EMPTY, null, SCALE, true)
+                .orElseThrow()).image();
+        ImageAssertions.assertPixelsEqual(image, repeat, "the orthographic projection is deterministic");
     }
 
     @Test
-    void approximateRotationsPickTheFrontViewWhenNearest() {
-        // [30,45,10]: cos 30 * cos 45 > 0, so the front view is nearest - identical to the
-        // untransformed flat model.
+    void fullGuiRotationsRenderFrontFacingSpinsWithForeshortening() {
+        // frontspin's [30,45,10] keeps the south face toward the viewer: the pixel at gui
+        // (5.875, 3.625) inverse-maps to face fractions (0.75, 0.51), sampling paint's blue
+        // right half - in-plane spin and foreshortening included, unlike the old flat
+        // approximation which rendered the untransformed quad.
         PackItemVisual visual = pack.resolveItemVisual("testpack:item/frontspin",
             CustomModelData.EMPTY, null, SCALE, true).orElseThrow();
-        ImageAssertions.assertPixelsEqual(
-            raster("testpack:item/flat", CustomModelData.EMPTY).image(),
-            assertInstanceOf(PackItemVisual.ElementsRaster.class, visual).image(),
-            "approximated [30,45,10] against the front view");
+        BufferedImage image = assertInstanceOf(PackItemVisual.ElementsRaster.class, visual).image();
+        assertEquals(0xFF0000FF, image.getRGB(23, 14));
+        ImageAssertions.assertPixelsDiffer(
+            raster("testpack:item/flat", CustomModelData.EMPTY).image(), image,
+            "the rotation visibly transforms the quad");
     }
 
     @Test
-    void approximateRotationsLeaveSupportedRotationsExact() {
+    void fullGuiRotationsLeaveClassifiedRotationsExact() {
         // The flag only affects rotations that would otherwise throw; identity, decorative
         // tilts and the exact mirror keep their strict classification.
         ImageAssertions.assertPixelsEqual(
@@ -278,10 +298,14 @@ class LoadedPackElementsTest {
     }
 
     @Test
-    void nonZeroElementRotationThrows() {
-        PackResolveException exception = assertThrows(PackResolveException.class,
-            () -> pack.resolveItemVisual("testpack:item/rotated", CustomModelData.EMPTY, SCALE));
-        assertTrue(exception.getMessage().contains("rotation"));
+    void elementRotationRendersWithoutAnyFlag() {
+        // The rotated fixture's 45-degree z rotation renders through the orthographic pipeline
+        // even in strict mode - element rotations are vanilla geometry, not a gui-rotation
+        // approximation. The model declares no gui_light, so the vanilla side default shades
+        // the south face at 0.8: white * 0.8 = 0xCC per channel.
+        BufferedImage image = raster("testpack:item/rotated", CustomModelData.EMPTY).image();
+        assertEquals(0xFFCCCCCC, image.getRGB(32, 32), "the diamond covers the center, side-shaded");
+        assertEquals(0, image.getRGB(2, 2), "the original quad corner rotates away");
     }
 
     @Test

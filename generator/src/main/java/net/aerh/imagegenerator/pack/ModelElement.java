@@ -8,18 +8,44 @@ import java.util.Map;
  * One cuboid of an item model's {@code elements} list, in model units (a slot interior is 16
  * units; coordinates outside 0..16 are legal within the vanilla -16..32 bounds).
  *
- * <p>{@code rotationAngle} carries the element's declared rotation angle: 0 (including an
- * explicit no-op rotation entry) renders normally; any non-zero angle is unsupported this wave
- * and fails loudly at render time.
- *
- * @param rotationAngle the element rotation angle in degrees, 0 when absent or a declared no-op
- * @param faces         faces by direction; only NORTH and SOUTH ever rasterize (front projection)
+ * @param rotation the element's rotation entry, or null when absent (an explicit entry with
+ *                 angle 0 parses to a {@link Rotation} that renders as a no-op)
+ * @param shade    vanilla {@code shade} flag, default true; false exempts the element from
+ *                 {@code gui_light: side} face shading
+ * @param faces    faces by direction; every declared face rasterizes through the orthographic
+ *                 GUI projection when it survives back-face culling
  */
 record ModelElement(float fromX, float fromY, float fromZ, float toX, float toY, float toZ,
-                    float rotationAngle, Map<Direction, Face> faces) {
+                    @Nullable Rotation rotation, boolean shade, Map<Direction, Face> faces) {
 
     enum Direction {
         NORTH, SOUTH, EAST, WEST, UP, DOWN
+    }
+
+    /** The rotation axis of an element rotation entry. */
+    enum Axis {
+        X, Y, Z
+    }
+
+    /**
+     * A vanilla element rotation: a right-handed rotation of {@code angle} degrees about
+     * {@code axis} through {@code origin} (model units). Modern vanilla (1.21.6+) accepts any
+     * angle; older clients restricted it to 22.5-degree steps between -45 and 45.
+     * {@code rescale} scales the two axes perpendicular to the rotation axis by
+     * {@code 1 / cos(angle)} so a rotated full-size element keeps covering its block face
+     * (vanilla {@code FaceBakery.applyElementRotation} semantics).
+     */
+    record Rotation(float angle, Axis axis, float originX, float originY, float originZ, boolean rescale) {
+
+        /** True when the entry actually moves geometry (a declared angle-0 entry is a no-op). */
+        boolean isActive() {
+            return angle != 0;
+        }
+    }
+
+    /** True when the element declares a rotation that actually moves geometry. */
+    boolean hasActiveRotation() {
+        return rotation != null && rotation.isActive();
     }
 
     /**

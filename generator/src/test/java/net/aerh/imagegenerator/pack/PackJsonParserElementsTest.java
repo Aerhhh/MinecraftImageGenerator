@@ -40,7 +40,8 @@ class PackJsonParserElementsTest {
         assertEquals(0, element.fromX());
         assertEquals(16, element.toY());
         assertEquals(1, element.toZ());
-        assertEquals(0, element.rotationAngle());
+        assertNull(element.rotation());
+        assertTrue(element.shade(), "shade defaults true");
         assertEquals(6, element.faces().size());
         ModelElement.Face south = element.faces().get(ModelElement.Direction.SOUTH);
         assertEquals(new ModelElement.FaceUv(0, 0, 16, 16), south.uv());
@@ -70,19 +71,95 @@ class PackJsonParserElementsTest {
     }
 
     @Test
-    void elementRotationParsesWithAngle() {
+    void elementRotationParsesAngleAxisOriginAndRescale() {
         ModelInfo zeroAngle = parseModel("""
             {"elements":[{"from":[0,0,0],"to":[16,16,1],
               "rotation":{"angle":0,"axis":"y","origin":[8,8,8]},
               "faces":{"south":{"texture":"#a"}}}]}""");
-        assertEquals(0, zeroAngle.elements().get(0).rotationAngle());
+        assertEquals(new ModelElement.Rotation(0, ModelElement.Axis.Y, 8, 8, 8, false),
+            zeroAngle.elements().get(0).rotation(), "a declared angle-0 entry parses as a no-op rotation");
+        assertFalse(zeroAngle.elements().get(0).hasActiveRotation());
 
         ModelInfo tilted = parseModel("""
             {"elements":[{"from":[0,0,0],"to":[16,16,1],
               "rotation":{"angle":45,"axis":"z","origin":[8,8,8]},
               "faces":{"south":{"texture":"#a"}}}]}""");
-        assertEquals(45, tilted.elements().get(0).rotationAngle(),
-            "non-zero angles parse; they fail loudly at resolve, not at register");
+        assertEquals(new ModelElement.Rotation(45, ModelElement.Axis.Z, 8, 8, 8, false),
+            tilted.elements().get(0).rotation());
+        assertTrue(tilted.elements().get(0).hasActiveRotation());
+
+        ModelInfo rescaled = parseModel("""
+            {"elements":[{"from":[0,0,0],"to":[16,16,1],
+              "rotation":{"angle":-22.5,"axis":"x","origin":[4,0,12],"rescale":true},
+              "faces":{"south":{"texture":"#a"}}}]}""");
+        assertEquals(new ModelElement.Rotation(-22.5f, ModelElement.Axis.X, 4, 0, 12, true),
+            rescaled.elements().get(0).rotation());
+    }
+
+    @Test
+    void elementRotationAcceptsFreeAngles() {
+        // Modern vanilla (1.21.6+) lifted the legacy 22.5-degree-step whitelist; packs authored
+        // for the current client family ship arbitrary angles and must keep loading.
+        ModelInfo ten = parseModel("""
+            {"elements":[{"from":[0,0,0],"to":[16,16,1],
+              "rotation":{"angle":10,"axis":"y","origin":[8,8,8]},
+              "faces":{"south":{"texture":"#a"}}}]}""");
+        assertEquals(new ModelElement.Rotation(10, ModelElement.Axis.Y, 8, 8, 8, false),
+            ten.elements().get(0).rotation());
+        assertTrue(ten.elements().get(0).hasActiveRotation());
+
+        ModelInfo ninety = parseModel("""
+            {"elements":[{"from":[0,0,0],"to":[16,16,1],
+              "rotation":{"angle":90,"axis":"y","origin":[8,8,8]},
+              "faces":{"south":{"texture":"#a"}}}]}""");
+        assertEquals(90f, ninety.elements().get(0).rotation().angle());
+    }
+
+    @Test
+    void nonFiniteElementRotationAngleIsRejected() {
+        // 1e40 overflows float to Infinity; a non-finite angle would poison the rotation
+        // matrix with NaN geometry, so it fails at parse with a message naming the real defect.
+        assertThrows(PackLoadException.class, () -> parseModel("""
+            {"elements":[{"from":[0,0,0],"to":[16,16,1],
+              "rotation":{"angle":1e40,"axis":"y","origin":[8,8,8]},
+              "faces":{"south":{"texture":"#a"}}}]}"""));
+    }
+
+    @Test
+    void elementRotationRequiresAxisAndOrigin() {
+        assertThrows(PackLoadException.class, () -> parseModel("""
+            {"elements":[{"from":[0,0,0],"to":[16,16,1],
+              "rotation":{"angle":45,"origin":[8,8,8]},
+              "faces":{"south":{"texture":"#a"}}}]}"""), "missing axis");
+        assertThrows(PackLoadException.class, () -> parseModel("""
+            {"elements":[{"from":[0,0,0],"to":[16,16,1],
+              "rotation":{"angle":45,"axis":"z"},
+              "faces":{"south":{"texture":"#a"}}}]}"""), "missing origin");
+        assertThrows(PackLoadException.class, () -> parseModel("""
+            {"elements":[{"from":[0,0,0],"to":[16,16,1],
+              "rotation":{"angle":45,"axis":"w","origin":[8,8,8]},
+              "faces":{"south":{"texture":"#a"}}}]}"""), "unknown axis");
+        assertThrows(PackLoadException.class, () -> parseModel("""
+            {"elements":[{"from":[0,0,0],"to":[16,16,1],
+              "rotation":{"angle":45,"axis":"Z","origin":[8,8,8]},
+              "faces":{"south":{"texture":"#a"}}}]}"""), "vanilla axis names are lowercase");
+    }
+
+    @Test
+    void elementShadeParsesAndValidates() {
+        ModelInfo unshaded = parseModel("""
+            {"elements":[{"from":[0,0,0],"to":[16,16,1],"shade":false,
+              "faces":{"south":{"texture":"#a"}}}]}""");
+        assertFalse(unshaded.elements().get(0).shade());
+
+        ModelInfo shaded = parseModel("""
+            {"elements":[{"from":[0,0,0],"to":[16,16,1],"shade":true,
+              "faces":{"south":{"texture":"#a"}}}]}""");
+        assertTrue(shaded.elements().get(0).shade());
+
+        assertThrows(PackLoadException.class, () -> parseModel("""
+            {"elements":[{"from":[0,0,0],"to":[16,16,1],"shade":"no",
+              "faces":{"south":{"texture":"#a"}}}]}"""));
     }
 
     @Test
