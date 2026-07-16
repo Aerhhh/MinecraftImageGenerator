@@ -395,6 +395,53 @@ class ElementModelRendererTest {
             new GuiTransform(0, 7, 0, 0, 0, 0, 1, 1, 1), 2, false, fullQuad(face(), null)));
     }
 
+    /** The render helper with approximate rotations enabled. */
+    private static ElementModelRenderer.Raster renderApproximate(BufferedImage texture, GuiTransform transform,
+                                                                 ModelElement... elements) {
+        return ElementModelRenderer.render(List.of(instance(transform, elements)), 4, false, true,
+            lookup(texture), CONTEXT);
+    }
+
+    @Test
+    void approximateRotationsPickTheMirrorWhenTheBackFacesTheViewer() {
+        // [30,225,0]: cos 30 * cos 225 < 0, so the rotated south normal points away and the
+        // mirrored back view is nearest - identical pixels to the exact (0,180,0) mirror.
+        ElementModelRenderer.Raster approximated = renderApproximate(quadrants(),
+            new GuiTransform(30, 225, 0, 0, 0, 0, 1, 1, 1), fullQuad(null, face()));
+        ElementModelRenderer.Raster mirrored = render(quadrants(),
+            new GuiTransform(0, 180, 0, 0, 0, 0, 1, 1, 1), 4, false, fullQuad(null, face()));
+        ImageAssertions.assertPixelsEqual(mirrored.image(), approximated.image(), "approximated [30,225,0]");
+    }
+
+    @Test
+    void approximateRotationsPickTheFrontWhenItStaysNearest() {
+        // [30,45,10]: cos 30 * cos 45 > 0 - the front view stays nearest; the z component
+        // contributes no in-plane spin in the approximation (documented fidelity limit).
+        ElementModelRenderer.Raster approximated = renderApproximate(quadrants(),
+            new GuiTransform(30, 45, 10, 0, 0, 0, 1, 1, 1), fullQuad(face(), null));
+        ElementModelRenderer.Raster front = render(quadrants(), GuiTransform.IDENTITY, 4, false,
+            fullQuad(face(), null));
+        ImageAssertions.assertPixelsEqual(front.image(), approximated.image(), "approximated [30,45,10]");
+    }
+
+    @Test
+    void approximateRotationsTreatEdgeOnViewsAsFront() {
+        // cos 0 * cos 90 = 0: the tie breaks toward the front view (documented).
+        ElementModelRenderer.Raster edgeOn = renderApproximate(quadrants(),
+            new GuiTransform(0, 90, 0, 0, 0, 0, 1, 1, 1), fullQuad(face(), null));
+        assertEquals(RED, edgeOn.image().getRGB(0, 0), "edge-on approximates as the front view");
+    }
+
+    @Test
+    void approximateRotationsKeepSupportedRotationsExact() {
+        ElementModelRenderer.Raster strict = render(quadrants(),
+            new GuiTransform(0, 180, 0, 0, 0, 0, 1, 1, 1), 4, false, fullQuad(null, face()));
+        ElementModelRenderer.Raster approximate = renderApproximate(quadrants(),
+            new GuiTransform(0, 180, 0, 0, 0, 0, 1, 1, 1), fullQuad(null, face()));
+        ImageAssertions.assertPixelsEqual(strict.image(), approximate.image(),
+            "the flag must not perturb exactly-classified rotations");
+    }
+
     @Test
     void smallTiltsSnapToIdentityAndNearMirrorToMirror() {
         ElementModelRenderer.Raster tilted = render(quadrants(),
@@ -584,6 +631,60 @@ class ElementModelRendererTest {
         assertEquals(-24, raster.offsetX());
         assertEquals(64, raster.image().getWidth());
         assertEquals(GREEN, raster.image().getRGB(0, 0), "the negative x scale still mirrors");
+    }
+
+    @Test
+    void modelAtTheElementCapRenders() {
+        ElementModelRenderer.ModelInstance model = instance(GuiTransform.IDENTITY,
+            manyFullQuads(ElementModelRenderer.MAX_ELEMENTS_PER_MODEL));
+        ElementModelRenderer.Raster raster = ElementModelRenderer.render(List.of(model), 1, false,
+            lookup(quadrants()), CONTEXT);
+        assertEquals(RED, raster.image().getRGB(0, 0));
+    }
+
+    @Test
+    void modelOverTheElementCapFailsLoudly() {
+        ElementModelRenderer.ModelInstance model = instance(GuiTransform.IDENTITY,
+            manyFullQuads(ElementModelRenderer.MAX_ELEMENTS_PER_MODEL + 1));
+        PackResolveException exception = assertThrows(PackResolveException.class,
+            () -> ElementModelRenderer.render(List.of(model), 1, false, lookup(quadrants()), CONTEXT));
+        assertTrue(exception.getMessage().contains("element"), exception.getMessage());
+        assertTrue(exception.getMessage().contains(CONTEXT), exception.getMessage());
+    }
+
+    @Test
+    void canvasAreaOverThePaintedPixelCapFailsBeforeAllocation() {
+        // At 2048 px per GUI px the 16-GUI-px slot canvas alone is 2^30 px, past the 64M cap.
+        PackResolveException exception = assertThrows(PackResolveException.class,
+            () -> render(quadrants(), GuiTransform.IDENTITY, 2048, false, fullQuad(face(), null)));
+        assertTrue(exception.getMessage().contains("canvas px"), exception.getMessage());
+    }
+
+    @Test
+    void hugeElementCoordinatesFailBeforeCanvasAllocation() {
+        // An oversized render of a crafted element spanning +-1e9 model units would demand a
+        // multi-gigapixel canvas; the area cap must reject it before any allocation.
+        ModelElement huge = new ModelElement(-1_000_000_000f, -1_000_000_000f, 0,
+            1_000_000_000f, 1_000_000_000f, 1, 0,
+            Map.of(ModelElement.Direction.SOUTH, face()));
+        assertThrows(PackResolveException.class,
+            () -> render(quadrants(), GuiTransform.IDENTITY, 1, true, huge));
+    }
+
+    @Test
+    void accumulatedFaceAreaOverThePaintedPixelCapFailsLoudly() {
+        // At 512 px per GUI px the canvas is exactly the 64M cap; the first full-canvas face
+        // pushes the accumulated total over it.
+        assertThrows(PackResolveException.class,
+            () -> render(quadrants(), GuiTransform.IDENTITY, 512, false, fullQuad(face(), null)));
+    }
+
+    private static ModelElement[] manyFullQuads(int count) {
+        ModelElement[] elements = new ModelElement[count];
+        for (int i = 0; i < count; i++) {
+            elements[i] = fullQuad(face(), null);
+        }
+        return elements;
     }
 
     private static int firstOpaqueColumn(BufferedImage image) {

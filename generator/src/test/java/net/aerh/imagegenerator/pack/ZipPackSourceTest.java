@@ -101,4 +101,18 @@ class ZipPackSourceTest {
             assertThrows(PackLoadException.class, () -> source.read("absent.json"));
         }
     }
+
+    @Test
+    void readAfterCloseThrowsPackLoadExceptionNotIllegalState() throws IOException {
+        // The state a resolve races into when unregister() closes the pack it still holds:
+        // ZipFile's raw IllegalStateException ("zip file closed") must never escape, or the
+        // PackRepository concurrency contract (racing resolves throw PackResolveException)
+        // breaks for zip-backed packs.
+        Path zip = writeZip(Map.of("present.json", "{}".getBytes()));
+        PackSource source = PackSource.zip(zip, LIMITS);
+        source.close();
+        PackLoadException exception = assertThrows(PackLoadException.class, () -> source.read("present.json"));
+        assertTrue(exception.getMessage().contains("closed"),
+            "the failure must name the closed source, not a generic read error");
+    }
 }

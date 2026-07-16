@@ -178,10 +178,10 @@ if (result.isAnimated()) {
 
 By default everything renders with vanilla textures. You can also load a resource pack and render any generator with its item textures, tooltip styles, custom glyphs, and color palette. This is what drives Hypixel SkyBlock item rendering, for example.
 
-Register a pack once, from a directory or a zip, then pass its id to any generator:
+Register a pack, from a directory or a zip, then pass its id to any generator:
 
 ```java
-// Load a pack from disk (directory or .zip). Registered once, reused for the process.
+// Load a pack from disk (directory or .zip). Stays registered until unregistered.
 PackId skyblock = PackRepository.global().register(
     "hypixel:skyblock",
     PackSource.directory(Path.of("packs/hypixel-skyblock"), PackLimits.fromSystemProperties()));
@@ -234,6 +234,7 @@ The items below are invented, rendered with this pack's real textures and rarity
 - Item refs use the pack's asset namespace and item path (e.g. `hypixel_skyblock:item/uncategorized/aurora_staff`).
 - `withTooltipStyle(...)` selects the pack's `minecraft:tooltip_style` (e.g. `hypixel_skyblock:mythic`).
 - The item and inventory generators accept `withPack(...)` too, so a whole inventory can render in a pack's style.
+- `PackRepository.global().unregister("hypixel:skyblock")` releases a pack and frees its id. There is no atomic replace: to swap a pack's content under the same id, unregister it and register again - a render racing the swap fails with the ordinary pack-not-registered error until the new registration lands.
 
 ## Server pack support
 
@@ -289,6 +290,7 @@ MinecraftTooltip tooltip = MinecraftTooltip.builder()
 
 - Codepoints the pack font does not supply fall back to the built-in fonts; a missing font id falls back entirely.
 - The full provider model is honored: `bitmap` sheets at any declared height and ascent, `space` providers with negative or fractional advances (how packs kern glyph art together), `reference` expansion, and `filter` objects.
+- One deliberate deviation from vanilla: a `bitmap` provider whose sheet texture is absent from the pack is skipped with a warning instead of failing the whole font. Real packs override `minecraft:default` with providers referencing vanilla client sheets (e.g. `minecraft:font/ascii.png`) that this library does not bundle; skipping just those providers keeps every glyph the pack actually ships renderable. Present-but-broken sheets still fail loudly, and a font whose providers all skip resolves as an empty font.
 - Obfuscated (`&k`) text substitutes glyphs of equal advance from the same pack font, deterministically per frame.
 - `PackRepository.global().fontIds(packId)` lists every font a pack defines.
 
@@ -374,11 +376,20 @@ new MinecraftItemGenerator.Builder()
         List.of(0xFF7A1F)))   // colors:  custom_model_data tint sources
     .withPack("emberveil:main")
     .build();
+
+// Damage-driven dispatch (range_dispatch on property minecraft:damage)
+new MinecraftItemGenerator.Builder()
+    .withItemModel("emberveil:item/ember_blade")
+    .withItemDamage(1_200, 1_561)   // damage, max damage
+    .withPack("emberveil:main")
+    .build();
 ```
 
 - Flat `layer0` models render as sprites exactly like retextured vanilla items; elements-based models rasterize through a flat front projection directly at the target resolution, so sub-pixel geometry survives at any scale.
 - `oversized_in_gui` items skip slot clipping: in container renders their art anchors on the slot center and spans neighboring slots, exactly like the in-game client.
-- `condition`, `select`, `range_dispatch` and `composite` nodes are supported, along with constant and `custom_model_data` tint sources.
+- `condition`, `select`, `range_dispatch` and `composite` nodes are supported, along with `constant`, `custom_model_data` and `dye` (rendered at its required `default` color) tint sources.
+- `withItemDamage(damage, maxDamage)` feeds `range_dispatch` nodes with `property: minecraft:damage`: `normalize: true` (the vanilla default) evaluates the 0..1 damage fraction, `normalize: false` the raw damage value. When no damage is set, the property evaluates at 0.
+- Model parent chains may end at the vanilla flat templates `minecraft:item/generated` or `minecraft:item/handheld` without the pack shipping them - the ordinary flat-item shape real packs rely on. Any other parent missing from a pack-claimed namespace still fails loudly.
 
 ### HUD lines
 
@@ -402,8 +413,8 @@ new MinecraftHudLineGenerator.Builder()
 
 Documented edges of the pack renderer, all deliberate:
 
-- **Fonts:** `ttf`, `unihex` and `legacy_unicode` providers parse but do not render; codepoints they would serve fall back to the built-in fonts (a warning is logged once per font).
-- **Model rotations:** model elements with non-zero rotations fail loudly rather than render wrong. `display.gui` rotations snap to the identity or the horizontal mirror when within 5 degrees of them about y (absorbing decorative tilts); anything else fails loudly.
+- **Fonts:** `ttf`, `unihex` and `legacy_unicode` providers parse but do not render; codepoints they would serve fall back to the built-in fonts (a warning is logged once per font). `bitmap` providers whose sheet texture is absent from the pack are skipped with a warning instead of failing the whole font - a deliberate deviation from vanilla for packs referencing unbundled vanilla client sheets (a font whose providers all skip resolves as an empty font).
+- **Model rotations:** model elements with non-zero rotations fail loudly rather than render wrong. `display.gui` rotations snap to the identity or the horizontal mirror when within 5 degrees of them about y (absorbing decorative tilts); anything else fails loudly by default. `withApproximateGuiRotations(true)` (item and container builders) opts into rendering the nearest flat projection instead: decorative tilts look right, genuinely 3D presentations flatten to their nearest face.
 - **True 3D:** elements models render as layered, viewer-facing quads with no perspective - correct for UI-flat pack art, wrong-but-defined for deep 3D models; east/west/up/down faces never render.
 - **Tall glyphs in tooltips:** the standard tooltip canvas stays line-height based, so glyph art much taller than the line clips there. The container generator expands its canvas from measured art extents on every side; the HUD generator grows its canvas bottom for deep art, but its top edge stays the screen top, so art crossing the top or side edges clips exactly as in game.
 - **Effects on elements renders in slots:** container slot modifiers (`enchant`, `hover`, durability) are ignored for elements-model slot items, with a warning. The standalone item generator is not limited this way - it applies its effect pipeline to elements renders like any other render.

@@ -289,7 +289,13 @@ public final class FixturePacks {
      *     (1024) but not the font cap (8192); 'A' has ink 1, advance 2.</li>
      * <li>{@code ttf_only}: single TTF provider with {@code skip: "xyz"} - loads, renders
      *     nothing.</li>
-     * <li>{@code notexture}: bitmap font whose sheet PNG does not exist.</li>
+     * <li>{@code notexture}: bitmap font whose sheet PNG does not exist - the provider skips
+     *     and the font resolves empty.</li>
+     * <li>{@code mixed_sheets}: an absent-sheet bitmap provider (chars {@code "AC"}) listed
+     *     BEFORE the present {@code pixel.png} provider (chars {@code "AB"}) and a trailing
+     *     space provider - the real-pack shape where fonts reference unbundled vanilla client
+     *     sheets alongside their own. After the skip, 'A' and 'B' come from the present sheet,
+     *     'C' is unmapped, and the space advance survives.</li>
      * <li>{@code sub/deco}: nested-path space-only font, mirroring real ids like
      *     {@code minecraft:tooltip/emblem/frame}.</li>
      * <li>{@code Fancy.json}: an INVALID resource location (uppercase); must be skipped at index
@@ -337,6 +343,12 @@ public final class FixturePacks {
             fontJson(root, NAMESPACE, "notexture", """
                 {"providers":[{"type":"bitmap","file":"testpack:font/missing.png",
                   "ascent":7,"chars":["A"]}]}""");
+
+            fontJson(root, NAMESPACE, "mixed_sheets", """
+                {"providers":[
+                  {"type":"bitmap","file":"testpack:font/missing.png","ascent":7,"chars":["AC"]},
+                  {"type":"bitmap","file":"testpack:font/pixel.png","height":8,"ascent":7,"chars":["AB"]},
+                  {"type":"space","advances":{" ":2.0}}]}""");
 
             fontJson(root, NAMESPACE, "sub/deco", """
                 {"providers":[{"type":"space","advances":{" ":3.0}}]}""");
@@ -544,7 +556,10 @@ public final class FixturePacks {
      *     face #back (backpaint). Also the parent of the inheritance fixtures.</li>
      * <li>{@code mirrored}: child of the flat model adding display.gui rotation (0,180,0).</li>
      * <li>{@code tilted}: child adding rotation (0,2,0) - MCC's decorative tilt, identity.</li>
-     * <li>{@code badspin}: child adding rotation (30,225,0) - resolve throws.</li>
+     * <li>{@code badspin}: child adding rotation (30,225,0) - resolve throws by default;
+     *     approximate-rotation renders pick the mirrored view (cos 30 * cos 225 &lt; 0).</li>
+     * <li>{@code frontspin}: child adding rotation (30,45,10) - throws by default; approximate
+     *     renders pick the front view (cos 30 * cos 45 &gt; 0).</li>
      * <li>{@code retextured}: child overriding #front to the green texture (child texture map
      *     entry wins over the parent's).</li>
      * <li>{@code gauge}: range_dispatch on custom_model_data (index 0, scale 1): threshold 1 ->
@@ -554,7 +569,9 @@ public final class FixturePacks {
      * <li>{@code colored}: white quad with tintindex 0 and a custom_model_data tint (index 0,
      *     default white).</li>
      * <li>{@code constant_tint}: white quad with a constant tint 0xFF8000.</li>
-     * <li>{@code unknown_tint}: white quad with a minecraft:dye tint - resolve throws.</li>
+     * <li>{@code dyed}: white quad with a minecraft:dye tint (default 0x3366FF) - the default
+     *     color applies, since no per-item dye data exists in this library.</li>
+     * <li>{@code unknown_tint}: white quad with a minecraft:team tint - resolve throws.</li>
      * <li>{@code oversized}: flat model with display.gui scale 2 and oversized_in_gui true
      *     (32x32 GUI px centered on the slot). {@code clipped}: same model without the
      *     flag.</li>
@@ -569,10 +586,31 @@ public final class FixturePacks {
      *     throws. {@code deep}: 9-model parent chain past the 8-hop limit - resolve throws.</li>
      * <li>{@code player_head_frame}: ordinary elements item whose path merely contains
      *     "player_head".</li>
-     * <li>{@code sprite_constant_tint} / {@code sprite_cmd_tint} / {@code sprite_dye_tint}:
-     *     layer0 sprite over the white texture with a constant 0xFF8000 tint, a
-     *     custom_model_data tint (index 0, white default) and an unsupported dye tint (renders
-     *     untinted with a warning).</li>
+     * <li>{@code sprite_constant_tint} / {@code sprite_cmd_tint} / {@code sprite_dyed} /
+     *     {@code sprite_team_tint}: layer0 sprite over the white texture with a constant
+     *     0xFF8000 tint, a custom_model_data tint (index 0, white default), a minecraft:dye
+     *     tint (default 0x3366FF, applied) and an unsupported team tint (renders untinted with
+     *     a warning).</li>
+     * <li>{@code sprite_named}: select on custom_model_data over LAYER0 SPRITE models: "ruby"
+     *     -> red layer0 sprite, fallback -> blue layer0 sprite. The flat-sprite counterpart of
+     *     {@code named}, for pinning data-driven sprite dispatch in composites.</li>
+     * <li>{@code bare_sprite} / {@code bare_quad}: a layer0 sprite model and an elements model
+     *     whose texture references are BARE ({@code item/bare}, no namespace). The texture at
+     *     {@code assets/minecraft/textures/item/bare.png} is teal 0xFF00AA77; a decoy at
+     *     {@code assets/testpack/textures/item/bare.png} is brown 0xFF773311 - so a resolver
+     *     binding bare references to anything but the {@code minecraft} namespace is caught by
+     *     color.</li>
+     * <li>{@code worn} / {@code worn_raw}: range_dispatch on {@code minecraft:damage}. The
+     *     normalized variant (vanilla default) dispatches thresholds 0.25 -> green and 0.75 ->
+     *     blue with a gray fallback; the raw variant ({@code normalize: false}) dispatches
+     *     threshold 3 -> red with a gray fallback.</li>
+     * <li>Vanilla chain exits: the pack CLAIMS the {@code minecraft} namespace (a filler model)
+     *     without shipping the builtin templates, the real-pack shape. {@code vanilla_exit} and
+     *     {@code handheld_exit} end their chains at {@code minecraft:item/generated} /
+     *     {@code item/handheld} with a layer0 present (render as flat sprites);
+     *     {@code vanilla_dead_end} ends at another missing minecraft-namespace model (resolve
+     *     throws); {@code generated_no_layer0} ends at {@code item/generated} without any
+     *     layer0 (resolve throws).</li>
      * </ul>
      */
     public static Path writeElementsPack(Path root) {
@@ -617,6 +655,11 @@ public final class FixturePacks {
                  "display":{"gui":{"rotation":[30,225,0]}}}""");
             delegatingItem(root, "badspin", "testpack:item/elem_badspin");
 
+            write(root, "assets/testpack/models/item/elem_frontspin.json", """
+                {"parent":"testpack:item/elem_flat",
+                 "display":{"gui":{"rotation":[30,45,10]}}}""");
+            delegatingItem(root, "frontspin", "testpack:item/elem_frontspin");
+
             write(root, "assets/testpack/models/item/elem_retextured.json", """
                 {"parent":"testpack:item/elem_flat",
                  "textures":{"front":"testpack:item/green"}}""");
@@ -653,9 +696,13 @@ public final class FixturePacks {
             item(root, "constant_tint", """
                 {"model":{"type":"model","model":"testpack:item/elem_tintable",
                   "tints":[{"type":"minecraft:constant","value":16744448}]}}""");
+            // 3368703 = 0x3366FF; the dye default must be visibly non-white to prove it applies.
+            item(root, "dyed", """
+                {"model":{"type":"model","model":"testpack:item/elem_tintable",
+                  "tints":[{"type":"minecraft:dye","default":3368703}]}}""");
             item(root, "unknown_tint", """
                 {"model":{"type":"model","model":"testpack:item/elem_tintable",
-                  "tints":[{"type":"minecraft:dye","default":0}]}}""");
+                  "tints":[{"type":"minecraft:team","default":0}]}}""");
 
             write(root, "assets/testpack/models/item/elem_wide.json", """
                 {"parent":"testpack:item/elem_flat",
@@ -723,9 +770,62 @@ public final class FixturePacks {
             item(root, "sprite_cmd_tint", """
                 {"model":{"type":"model","model":"testpack:item/white_layer0",
                   "tints":[{"type":"minecraft:custom_model_data","index":0,"default":16777215}]}}""");
-            item(root, "sprite_dye_tint", """
+            item(root, "sprite_dyed", """
                 {"model":{"type":"model","model":"testpack:item/white_layer0",
-                  "tints":[{"type":"minecraft:dye","default":0}]}}""");
+                  "tints":[{"type":"minecraft:dye","default":3368703}]}}""");
+            item(root, "sprite_team_tint", """
+                {"model":{"type":"model","model":"testpack:item/white_layer0",
+                  "tints":[{"type":"minecraft:team","default":0}]}}""");
+
+            // Flat-sprite custom_model_data dispatch: the same select shape as "named", but over
+            // layer0 sprite models instead of elements models.
+            model(root, "red_layer0", "item/generated", "testpack:item/red");
+            model(root, "blue_layer0", "item/generated", "testpack:item/blue");
+            item(root, "sprite_named", """
+                {"model":{"type":"select","property":"minecraft:custom_model_data","index":0,
+                  "cases":[{"when":"ruby","model":{"type":"model","model":"testpack:item/red_layer0"}}],
+                  "fallback":{"type":"model","model":"testpack:item/blue_layer0"}}}""");
+
+            // Bare (namespace free) texture references: vanilla resolves them in the minecraft
+            // namespace. The decoy under testpack/ catches any resolver that binds bare
+            // references to the model's own namespace instead.
+            textureAt(root, "minecraft", "bare", solid(2, 2, 0xFF00AA77));
+            textureAt(root, NAMESPACE, "bare", solid(2, 2, 0xFF773311));
+            model(root, "bare_layer0_model", "item/generated", "item/bare");
+            delegatingItem(root, "bare_sprite", "testpack:item/bare_layer0_model");
+            solidQuadModel(root, "elem_bare", "item/bare");
+            delegatingItem(root, "bare_quad", "testpack:item/elem_bare");
+
+            // Damage-driven dispatch: normalized (the vanilla default) and raw variants.
+            item(root, "worn", """
+                {"model":{"type":"range_dispatch","property":"minecraft:damage",
+                  "entries":[{"threshold":0.25,"model":{"type":"model","model":"testpack:item/elem_green"}},
+                             {"threshold":0.75,"model":{"type":"model","model":"testpack:item/elem_blue"}}],
+                  "fallback":{"type":"model","model":"testpack:item/elem_gray"}}}""");
+            item(root, "worn_raw", """
+                {"model":{"type":"range_dispatch","property":"minecraft:damage","normalize":false,
+                  "entries":[{"threshold":3.0,"model":{"type":"model","model":"testpack:item/elem_red"}}],
+                  "fallback":{"type":"model","model":"testpack:item/elem_gray"}}}""");
+
+            // Vanilla chain exits: claim the minecraft namespace WITHOUT shipping the builtin
+            // flat templates (the real-pack shape - server packs override minecraft-namespace
+            // assets while their models still end chains at item/generated or item/handheld).
+            write(root, "assets/minecraft/models/item/filler.json", "{}");
+            write(root, "assets/testpack/models/item/gen_child.json", """
+                {"parent":"minecraft:item/generated",
+                 "textures":{"layer0":"testpack:item/white"}}""");
+            delegatingItem(root, "vanilla_exit", "testpack:item/gen_child");
+            write(root, "assets/testpack/models/item/handheld_child.json", """
+                {"parent":"minecraft:item/handheld",
+                 "textures":{"layer0":"testpack:item/green"}}""");
+            delegatingItem(root, "handheld_exit", "testpack:item/handheld_child");
+            write(root, "assets/testpack/models/item/other_vanilla_child.json", """
+                {"parent":"minecraft:item/other_template",
+                 "textures":{"layer0":"testpack:item/white"}}""");
+            delegatingItem(root, "vanilla_dead_end", "testpack:item/other_vanilla_child");
+            write(root, "assets/testpack/models/item/gen_bare_child.json", """
+                {"parent":"minecraft:item/generated"}""");
+            delegatingItem(root, "generated_no_layer0", "testpack:item/gen_bare_child");
 
             return root;
         } catch (IOException e) {
@@ -790,7 +890,12 @@ public final class FixturePacks {
     }
 
     private static void texture(Path root, String name, BufferedImage image) throws IOException {
-        Path path = root.resolve("assets/testpack/textures/item/" + name + ".png");
+        textureAt(root, "testpack", name, image);
+    }
+
+    /** Like {@link #texture} but under an explicit namespace. */
+    private static void textureAt(Path root, String namespace, String name, BufferedImage image) throws IOException {
+        Path path = root.resolve("assets/" + namespace + "/textures/item/" + name + ".png");
         Files.createDirectories(path.getParent());
         ImageIO.write(image, "png", path.toFile());
     }

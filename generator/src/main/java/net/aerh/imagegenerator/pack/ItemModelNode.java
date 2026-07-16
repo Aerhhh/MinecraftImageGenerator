@@ -18,10 +18,11 @@ sealed interface ItemModelNode
 
     /**
      * A tint source attached to a model leaf; list entry {@code i} tints element faces declaring
-     * {@code tintindex i}. Only the constant and custom_model_data sources are supported; any
-     * other type parses to {@link Unsupported} and fails loudly at resolve time.
+     * {@code tintindex i}. Only the constant, custom_model_data and dye sources are supported;
+     * any other type parses to {@link Unsupported} and fails loudly at resolve time.
      */
-    sealed interface TintSpec permits TintSpec.Constant, TintSpec.CustomModelDataTint, TintSpec.Unsupported {
+    sealed interface TintSpec permits TintSpec.Constant, TintSpec.CustomModelDataTint, TintSpec.Dye,
+        TintSpec.Unsupported {
 
         record Constant(int rgb) implements TintSpec {
         }
@@ -31,6 +32,14 @@ sealed interface ItemModelNode
          * uses {@code defaultRgb} (white when the JSON declares no {@code default}).
          */
         record CustomModelDataTint(int index, int defaultRgb) implements TintSpec {
+        }
+
+        /**
+         * The {@code minecraft:dye} source: vanilla reads the item's {@code dyed_color}
+         * component and falls back to the REQUIRED {@code default} color. This library carries
+         * no per-item dye data, so the default always applies.
+         */
+        record Dye(int defaultRgb) implements TintSpec {
         }
 
         record Unsupported(String type) implements TintSpec {
@@ -61,7 +70,17 @@ sealed interface ItemModelNode
         }
     }
 
-    record RangeDispatchNode(String property, int index, double scale, List<Entry> entries, ItemModelNode fallback) implements ItemModelNode {
+    /**
+     * @param normalize the {@code minecraft:damage} normalization flag (vanilla default true:
+     *                  the property reads the 0..1 damage fraction; false reads raw damage).
+     *                  Parsed for every range_dispatch but only consulted by the damage property.
+     */
+    record RangeDispatchNode(String property, int index, double scale, boolean normalize, List<Entry> entries,
+                             ItemModelNode fallback) implements ItemModelNode {
+
+        public RangeDispatchNode(String property, int index, double scale, List<Entry> entries, ItemModelNode fallback) {
+            this(property, index, scale, true, entries, fallback);
+        }
 
         public RangeDispatchNode(String property, double scale, List<Entry> entries, ItemModelNode fallback) {
             this(property, 0, scale, entries, fallback);

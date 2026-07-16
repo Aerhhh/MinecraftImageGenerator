@@ -17,6 +17,7 @@ import net.aerh.imagegenerator.effect.impl.OverlayApplicationEffect;
 import net.aerh.imagegenerator.exception.GeneratorException;
 import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.pack.CustomModelData;
+import net.aerh.imagegenerator.pack.ItemDamage;
 import net.aerh.imagegenerator.pack.PackId;
 import net.aerh.imagegenerator.pack.PackItemVisual;
 import net.aerh.imagegenerator.pack.PackRepository;
@@ -48,6 +49,11 @@ public class MinecraftItemGenerator implements Generator {
     @Nullable
     private final String itemModel;
     private final CustomModelData customModelData;
+    // Nullable and non-transient: absent damage must key differently from damage 0/max in the
+    // reflective render cache key, exactly like customModelData.
+    @Nullable
+    private final ItemDamage itemDamage;
+    private final boolean approximateGuiRotations;
     private final String data;
     private final String color;
     private final boolean enchanted;
@@ -145,7 +151,8 @@ public class MinecraftItemGenerator implements Generator {
         boolean usingPack = PackId.isActive(packId);
         String packRef = itemModel != null ? namespacedItemModel() : itemId;
         if (usingPack) {
-            var visual = packRepository.resolveItemVisual(packId, packRef, customModelData, ELEMENTS_PX_PER_GUI_PX);
+            var visual = packRepository.resolveItemVisual(packId, packRef, customModelData, itemDamage,
+                ELEMENTS_PX_PER_GUI_PX, approximateGuiRotations);
             if (visual.isPresent()) {
                 return switch (visual.get()) {
                     case PackItemVisual.Sprite sprite -> PackSprites.scaleToCanvas(sprite.sprite(), 256);
@@ -186,6 +193,8 @@ public class MinecraftItemGenerator implements Generator {
         private String itemId;
         private String itemModel;
         private CustomModelData customModelData;
+        private ItemDamage itemDamage;
+        private boolean approximateGuiRotations;
         private String data;
         private String color;
         private boolean enchanted;
@@ -227,6 +236,37 @@ public class MinecraftItemGenerator implements Generator {
          */
         public MinecraftItemGenerator.Builder withCustomModelData(CustomModelData customModelData) {
             this.customModelData = Objects.requireNonNull(customModelData, "customModelData");
+            return this;
+        }
+
+        /**
+         * Supplies the item's damage state ({@code minecraft:damage} / {@code max_damage}
+         * component values), read by {@code range_dispatch} nodes with
+         * {@code property: minecraft:damage} - normalized to the 0..1 damage fraction by
+         * default, raw when the node declares {@code normalize: false}. Unset evaluates the
+         * property at 0. Purely a model-selection input: the durability BAR stays controlled
+         * by {@link #withDurability(int)}.
+         *
+         * @param damage    current damage, 0 (pristine) to {@code maxDamage}
+         * @param maxDamage the item's maximum damage
+         * @throws IllegalArgumentException when either value is negative or damage exceeds
+         *                                  maxDamage
+         */
+        public MinecraftItemGenerator.Builder withItemDamage(int damage, int maxDamage) {
+            this.itemDamage = new ItemDamage(damage, maxDamage);
+            return this;
+        }
+
+        /**
+         * Opts elements-model renders into approximating arbitrary {@code display.gui}
+         * rotations with their nearest flat projection (front or mirrored view) instead of
+         * failing loudly. Fidelity limits: the rotation itself is dropped - no foreshortening
+         * and no in-plane spin - so decoratively rotated flat art renders sensibly while
+         * genuinely 3D presentations flatten to their nearest face. Default false: unsupported
+         * rotations keep throwing PackResolveException.
+         */
+        public MinecraftItemGenerator.Builder withApproximateGuiRotations(boolean approximateGuiRotations) {
+            this.approximateGuiRotations = approximateGuiRotations;
             return this;
         }
 
@@ -350,8 +390,9 @@ public class MinecraftItemGenerator implements Generator {
             }
 
             return new MinecraftItemGenerator(
-                itemId, itemModel, customModelData, data, color, enchanted, hoverEffect, bigImage,
-                durabilityPercent, overlayLoader, effectPipeline, packId, packRepository
+                itemId, itemModel, customModelData, itemDamage, approximateGuiRotations, data, color,
+                enchanted, hoverEffect, bigImage, durabilityPercent, overlayLoader, effectPipeline,
+                packId, packRepository
             );
         }
 

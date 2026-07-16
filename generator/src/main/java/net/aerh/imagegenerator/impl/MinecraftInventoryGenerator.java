@@ -10,7 +10,9 @@ import net.aerh.imagegenerator.builder.ClassBuilder;
 import net.aerh.imagegenerator.image.ImageCoordinates;
 import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.item.InventoryItem;
+import net.aerh.imagegenerator.pack.CustomModelData;
 import net.aerh.imagegenerator.pack.PackId;
+import net.aerh.imagegenerator.pack.PackItemVisual;
 import net.aerh.imagegenerator.pack.PackRepository;
 import net.aerh.imagegenerator.parser.inventory.InventoryStringParser;
 import net.aerh.imagegenerator.spritesheet.Spritesheet;
@@ -396,17 +398,60 @@ public class MinecraftInventoryGenerator implements Generator {
         SlotVisualKey cacheKey = new SlotVisualKey(item.getItemName(), item.getExtraContent(), item.getDurabilityPercent());
         SlotVisual visual = slotVisualCache.get(cacheKey);
         if (visual == null) {
-            GeneratedObject generated = generateSlotObject(item, generationContext);
-            visual = new SlotVisual(
-                downscaleToCompositeResolution(generated.getImage()),
-                downscaleFramesToCompositeResolution(generated.getAnimationFrames()),
-                generated.getFrameDelayMs() > 0 ? generated.getFrameDelayMs() : null);
+            BufferedImage elementsImage = resolveElementsImage(item);
+            if (elementsImage != null) {
+                visual = new SlotVisual(elementsImage, null, null);
+            } else {
+                GeneratedObject generated = generateSlotObject(item, generationContext);
+                visual = new SlotVisual(
+                    downscaleToCompositeResolution(generated.getImage()),
+                    downscaleFramesToCompositeResolution(generated.getAnimationFrames()),
+                    generated.getFrameDelayMs() > 0 ? generated.getFrameDelayMs() : null);
+            }
             slotVisualCache.put(cacheKey, visual);
         }
 
         item.setItemImage(visual.itemImage());
         item.setAnimationFrames(visual.animationFrames());
         item.setFrameDelayMs(visual.frameDelayMs());
+    }
+
+    /**
+     * Resolves a slot item spec against the active pack's elements-model path directly at this
+     * composite's slot resolution, mirroring {@link MinecraftContainerGenerator}'s elements
+     * handling. Null when the spec is not an elements model - flat pack sprites and vanilla
+     * items keep the exact pre-elements pipeline, effects included.
+     *
+     * <p><b>Oversized art clips at the slot box in inventories</b>, a documented difference
+     * from the container compositor: the container anchors {@code oversized_in_gui} art on the
+     * slot center and lets it span neighboring slots, while this composite draws every slot
+     * visual inside its fixed item box, so overflow is cropped at the 16-GUI-px slot interior.
+     * Item modifiers (enchant, hover, durability) do not apply to elements renders, matching
+     * the container; a spec declaring any logs a warning (the shared
+     * {@link MinecraftContainerGenerator#warnIgnoredElementsModifiers} condition and wording).
+     */
+    @Nullable
+    private BufferedImage resolveElementsImage(InventoryItem item) {
+        if (!PackId.isActive(packId) || MinecraftContainerGenerator.isVanillaPlayerHead(item.getItemName())) {
+            return null;
+        }
+        PackItemVisual.ElementsRaster raster = MinecraftContainerGenerator.elementsRasterOf(
+                packRepository.resolveItemVisual(packId, item.getItemName(), CustomModelData.EMPTY, scaleFactor))
+            .orElse(null);
+        if (raster == null) {
+            return null;
+        }
+        MinecraftContainerGenerator.warnIgnoredElementsModifiers(item);
+        BufferedImage clipped = new BufferedImage(itemSize, itemSize, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = clipped.createGraphics();
+        try {
+            // The raster offsets anchor the art on the slot box origin; drawing into the fixed
+            // item box crops any oversized overflow at the box edge.
+            graphics.drawImage(raster.image(), raster.offsetX(), raster.offsetY(), null);
+        } finally {
+            graphics.dispose();
+        }
+        return clipped;
     }
 
     private GeneratedObject generateSlotObject(InventoryItem item, @Nullable GenerationContext generationContext) {
@@ -418,10 +463,25 @@ public class MinecraftInventoryGenerator implements Generator {
      * to {@link MinecraftPlayerHeadGenerator}, everything else to {@link MinecraftItemGenerator}
      * with the item's enchant/hover/durability modifiers (and the selected pack, when one is
      * active). Shared by this generator and {@link MinecraftContainerGenerator} so slot items
-     * render identically in both composites.
+     * render identically in both composites. Evaluates dispatch nodes with
+     * {@link CustomModelData#EMPTY}; slots carrying data use the extended overload.
      */
     static GeneratedObject generateSlotObject(InventoryItem item, @Nullable GenerationContext generationContext,
                                               @Nullable PackId packId, @Nullable PackRepository packRepository) {
+        return generateSlotObject(item, generationContext, packId, packRepository, CustomModelData.EMPTY);
+    }
+
+    /**
+     * Like {@link #generateSlotObject(InventoryItem, GenerationContext, PackId, PackRepository)}
+     * but evaluating {@code custom_model_data} dispatch nodes and tint sources against
+     * {@code customModelData}, so a per-slot component value drives flat-sprite dispatch through
+     * the standard item pipeline (elements-model dispatch is handled by the callers' dedicated
+     * raster path before this pipeline runs). The dedicated player head pipeline carries no
+     * custom model data; head specs ignore it.
+     */
+    static GeneratedObject generateSlotObject(InventoryItem item, @Nullable GenerationContext generationContext,
+                                              @Nullable PackId packId, @Nullable PackRepository packRepository,
+                                              CustomModelData customModelData) {
         if (item.getItemName().contains("player_head")) {
             String skinValue = item.getExtraContent();
             if (skinValue != null && skinValue.contains(",")) {
@@ -447,6 +507,7 @@ public class MinecraftInventoryGenerator implements Generator {
         String contentLower = item.getExtraContent() != null ? item.getExtraContent().toLowerCase() : null;
         MinecraftItemGenerator.Builder itemBuilder = new MinecraftItemGenerator.Builder()
             .withItem(item.getItemName())
+            .withCustomModelData(customModelData)
             .isEnchanted(contentLower != null && contentLower.contains("enchant"))
             .withHoverEffect(contentLower != null && contentLower.contains("hover"))
             .withData(item.getExtraContent());

@@ -1,6 +1,8 @@
 package net.aerh.imagegenerator.impl;
 
+import net.aerh.imagegenerator.cache.GeneratorCacheKey;
 import net.aerh.imagegenerator.exception.PackResolveException;
+import net.aerh.imagegenerator.item.InventoryItem;
 import net.aerh.imagegenerator.pack.PackId;
 import net.aerh.imagegenerator.pack.PackLimits;
 import net.aerh.imagegenerator.pack.PackRepository;
@@ -16,6 +18,8 @@ import java.awt.image.BufferedImage;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
@@ -124,6 +128,19 @@ class MinecraftContainerGeneratorElementsTest {
     }
 
     @Test
+    void slotCustomModelDataDrivesFlatSpriteDispatch() {
+        // sprite_named selects between LAYER0 SPRITE models on custom_model_data string 0: the
+        // data-evaluated Sprite result must render, not be discarded for a data-less re-resolve
+        // through the legacy path (which would paint the blue fallback in both slots).
+        BufferedImage canvas = builder()
+            .withSlot(13, "testpack:item/sprite_named")
+            .withSlot(14, "testpack:item/sprite_named", CustomModelDatas.strings("ruby"))
+            .build().generate().getImage();
+        assertEquals(0xFF0000FF, canvas.getRGB(140, 88), "slot 13 renders the fallback blue sprite");
+        assertEquals(0xFFFF0000, canvas.getRGB(176, 88), "slot 14 renders the ruby-selected red sprite");
+    }
+
+    @Test
     void reSettingASlotResetsItsCustomModelData() {
         BufferedImage canvas = builder()
             .withSlot(14, "testpack:item/gauge", CustomModelDatas.floats(2.0f))
@@ -147,5 +164,49 @@ class MinecraftContainerGeneratorElementsTest {
         BufferedImage first = builder().withSlot(14, "testpack:item/oversized").build().generate().getImage();
         BufferedImage second = builder().withSlot(14, "testpack:item/oversized").build().generate().getImage();
         ImageAssertions.assertPixelsEqual(first, second, "repeat container render");
+    }
+
+    @Test
+    void approximateGuiRotationsRenderTheRotatedSlotItem() {
+        // badspin's [30,225,0] picks the mirrored back view under the flag: identical pixels to
+        // the explicitly mirrored model in the same slot.
+        BufferedImage approximated = builder().withSlot(14, "testpack:item/badspin")
+            .withApproximateGuiRotations(true).build().generate().getImage();
+        BufferedImage mirrored = builder().withSlot(14, "testpack:item/mirrored")
+            .build().generate().getImage();
+        ImageAssertions.assertPixelsEqual(mirrored, approximated, "approximated slot item");
+    }
+
+    @Test
+    void unsupportedRotationInASlotStillThrowsWithoutTheFlag() {
+        MinecraftContainerGenerator generator = builder().withSlot(14, "testpack:item/badspin").build();
+        assertThrows(PackResolveException.class, generator::generate);
+    }
+
+    @Test
+    void cacheKeysDifferAcrossApproximateGuiRotations() {
+        MinecraftContainerGenerator strict = builder().withSlot(14, "testpack:item/badspin").build();
+        MinecraftContainerGenerator approximate = builder().withSlot(14, "testpack:item/badspin")
+            .withApproximateGuiRotations(true).build();
+        assertNotEquals(GeneratorCacheKey.fromGenerator(strict), GeneratorCacheKey.fromGenerator(approximate),
+            "the approximation flag changes rendered pixels, so it must enter the render cache key");
+    }
+
+    @Test
+    void ignoredModifiersWarningCoversDurabilityAndExtraContent() {
+        // The shared warn helper both composites route through: it must fire for EVERY ignored
+        // modifier the classic pipeline would apply - the extra content flags AND a
+        // durability-only spec whose bar is silently dropped for elements renders.
+        assertNull(MinecraftContainerGenerator.warnIgnoredElementsModifiers(
+            new InventoryItem(1, 1, "testpack:item/flat", null, null)));
+        assertNull(MinecraftContainerGenerator.warnIgnoredElementsModifiers(
+            new InventoryItem(1, 1, "testpack:item/flat", " ", null)), "blank content is no modifier");
+        assertEquals("enchant", MinecraftContainerGenerator.warnIgnoredElementsModifiers(
+            new InventoryItem(1, 1, "testpack:item/flat", "enchant", null)));
+        assertEquals("durability 50%", MinecraftContainerGenerator.warnIgnoredElementsModifiers(
+            new InventoryItem(1, 1, "testpack:item/flat", null, 50)),
+            "a durability-only spec warns too: its bar is dropped for elements renders");
+        assertEquals("enchant, durability 50%", MinecraftContainerGenerator.warnIgnoredElementsModifiers(
+            new InventoryItem(1, 1, "testpack:item/flat", "enchant", 50)));
     }
 }

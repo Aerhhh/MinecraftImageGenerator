@@ -3,17 +3,31 @@ package net.aerh.imagegenerator.pack.font;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Set;
 
 /**
  * A bitmap-provider glyph: an owned copy of its full sheet cell plus the vanilla-exact metrics.
- * The scaled (untinted) cell is cached per {@code pixelSize}; tint is applied per draw call so
+ * The scaled (untinted) cell is cached per {@code pixelSize}, bounded to the
+ * {@value #MAX_CACHED_PIXEL_SIZES} most recently used sizes; tint is applied per draw call so
  * one glyph instance serves every text color.
  */
 final class BitmapGlyph implements PackGlyph {
 
     private static final int WHITE_OPAQUE = 0xFFFFFFFF;
+
+    /**
+     * How many distinct {@code pixelSize} scaled rasters one glyph retains, least recently used
+     * evicted first. Renders use a single pixel size per generator and real workloads mix at
+     * most a couple of scales concurrently (e.g. a scale-1 tooltip beside a scale-2 container
+     * sharing one cached font), so two entries keep the hot path allocation-free while an
+     * unbounded map - one raster PER DISTINCT pixel size, each up to
+     * {@code height * cellWidth * pixelSize^2} pixels - could grow without limit on fonts held
+     * in the pack font cache. Evicted sizes simply rescale from the owned cell on next use.
+     */
+    private static final int MAX_CACHED_PIXEL_SIZES = 2;
 
     private final BufferedImage cell;
     private final int inkWidth;
@@ -21,7 +35,17 @@ final class BitmapGlyph implements PackGlyph {
     private final int height;
     private final int ascent;
     private final float scale;
-    private final Map<Integer, BufferedImage> scaledCellCache = new ConcurrentHashMap<>();
+    /**
+     * Access-ordered LRU bounded to {@link #MAX_CACHED_PIXEL_SIZES}; the synchronized wrapper
+     * is the mutex for every access, matching the previous concurrent-map thread safety.
+     */
+    private final Map<Integer, BufferedImage> scaledCellCache =
+        Collections.synchronizedMap(new LinkedHashMap<>(4, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<Integer, BufferedImage> eldest) {
+                return size() > MAX_CACHED_PIXEL_SIZES;
+            }
+        });
 
     /**
      * @param cell     the glyph's full cell, copied out of the sheet (never a shared subimage);
@@ -46,6 +70,14 @@ final class BitmapGlyph implements PackGlyph {
     /** Bytes retained by the owned cell raster (ARGB, 4 bytes per pixel); 0 for an empty cell. */
     long retainedBytes() {
         return cell == null ? 0 : 4L * cell.getWidth() * cell.getHeight();
+    }
+
+    /** The pixel sizes currently holding a cached scaled raster; for tests pinning the LRU cap. */
+    Set<Integer> cachedScaledPixelSizes() {
+        synchronized (scaledCellCache) {
+            // Iterating a synchronized map requires holding its mutex; copy inside the lock.
+            return Set.copyOf(scaledCellCache.keySet());
+        }
     }
 
     @Override

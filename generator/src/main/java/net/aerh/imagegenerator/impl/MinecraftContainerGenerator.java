@@ -143,6 +143,9 @@ public class MinecraftContainerGenerator implements Generator {
      */
     private final SortedMap<Integer, CustomModelData> slotCustomModelData;
     private final int scaleFactor;
+    // Final non-transient so it enters the render cache key: the flag changes rendered pixels
+    // for slots whose models carry unsupported gui rotations.
+    private final boolean approximateGuiRotations;
     // packId is final non-transient so it enters the render cache key; the repository reference
     // is transient so instances never split it.
     @Nullable
@@ -172,10 +175,13 @@ public class MinecraftContainerGenerator implements Generator {
     }
 
     /**
-     * Everything that determines a slot item's rendered appearance; the amount is deliberately
-     * absent - it only affects the count badge drawn per slot, never the item visual.
+     * Everything that determines a slot item's rendered appearance, the slot's custom model
+     * data included (it drives flat-sprite dispatch through the item pipeline); the amount is
+     * deliberately absent - it only affects the count badge drawn per slot, never the item
+     * visual.
      */
-    private record ItemVisualKey(String itemName, @Nullable String extraContent, @Nullable Integer durabilityPercent) {
+    private record ItemVisualKey(String itemName, @Nullable String extraContent, @Nullable Integer durabilityPercent,
+                                 CustomModelData customModelData) {
     }
 
     /**
@@ -409,7 +415,7 @@ public class MinecraftContainerGenerator implements Generator {
                 // loop; both resolution paths dedupe internally, so repeated specs stay cheap.
                 CustomModelData data = slotCustomModelData.getOrDefault(itemSlots[index], CustomModelData.EMPTY);
                 PackItemVisual.ElementsRaster raster = resolveElementsRaster(item, data, pixelSize);
-                BufferedImage itemImage = raster == null ? resolveItemImage(item, generationContext) : null;
+                BufferedImage itemImage = raster == null ? resolveItemImage(item, data, generationContext) : null;
                 if (raster == null && itemImage == null) {
                     continue;
                 }
@@ -436,8 +442,8 @@ public class MinecraftContainerGenerator implements Generator {
      * Resolves a slot item spec against the active pack's elements-model path at this
      * generator's pixel size, deduped per distinct item name and custom model data. Null when
      * the spec is not an elements model (flat pack sprites and vanilla items keep the exact
-     * pre-elements pipeline, effects included). Elements renders ignore item modifiers, with a
-     * warning when a spec declares any.
+     * pre-elements pipeline, effects included). Elements renders ignore item modifiers (extra
+     * content flags and durability alike), with a warning when a spec declares any.
      */
     @Nullable
     private PackItemVisual.ElementsRaster resolveElementsRaster(InventoryItem item, CustomModelData data,
@@ -447,23 +453,66 @@ public class MinecraftContainerGenerator implements Generator {
         }
         Optional<PackItemVisual.ElementsRaster> raster = elementsRasterCache.computeIfAbsent(
             new ElementsRasterKey(item.getItemName(), data),
-            key -> repository().resolveItemVisual(packId, key.itemName(), key.data(), pixelSize)
-                .filter(PackItemVisual.ElementsRaster.class::isInstance)
-                .map(PackItemVisual.ElementsRaster.class::cast));
-        if (raster.isPresent() && item.getExtraContent() != null && !item.getExtraContent().isBlank()) {
-            log.warn("Item modifiers `{}` are ignored for elements-model slot item `{}`",
-                item.getExtraContent(), item.getItemName());
+            // The approximation flag is per generator instance, so it needs no key field.
+            key -> elementsRasterOf(repository().resolveItemVisual(packId, key.itemName(), key.data(), null,
+                pixelSize, approximateGuiRotations)));
+        if (raster.isPresent()) {
+            warnIgnoredElementsModifiers(item);
         }
         return raster.orElse(null);
+    }
+
+    /**
+     * Narrows a resolved pack visual to its elements raster: present when the visual is
+     * elements-based, empty when the item is absent or resolves to a flat sprite (the classic
+     * slot pipeline renders those). Shared by this generator and
+     * {@link MinecraftInventoryGenerator} so the elements probe can never drift between the
+     * two composites.
+     */
+    static Optional<PackItemVisual.ElementsRaster> elementsRasterOf(Optional<PackItemVisual> visual) {
+        return visual.filter(PackItemVisual.ElementsRaster.class::isInstance)
+            .map(PackItemVisual.ElementsRaster.class::cast);
+    }
+
+    /**
+     * Elements renders ignore every slot item modifier the classic pipeline applies - the extra
+     * content flags (enchant, hover, skin/overlay data) AND the durability bar. Warns with
+     * everything the spec declared and returns the logged description, or null (nothing logged)
+     * for an unmodified spec. Shared by this generator and {@link MinecraftInventoryGenerator}
+     * so the condition and wording can never drift between the two composites; the returned
+     * description lets tests pin both without a log capture.
+     */
+    @Nullable
+    static String warnIgnoredElementsModifiers(InventoryItem item) {
+        boolean hasContent = item.getExtraContent() != null && !item.getExtraContent().isBlank();
+        boolean hasDurability = item.getDurabilityPercent() != null;
+        if (!hasContent && !hasDurability) {
+            return null;
+        }
+        StringBuilder declared = new StringBuilder();
+        if (hasContent) {
+            declared.append(item.getExtraContent());
+        }
+        if (hasDurability) {
+            if (hasContent) {
+                declared.append(", ");
+            }
+            declared.append("durability ").append(item.getDurabilityPercent()).append('%');
+        }
+        String description = declared.toString();
+        log.warn("Item modifiers `{}` are ignored for elements-model slot item `{}`",
+            description, item.getItemName());
+        return description;
     }
 
     /**
      * The dedicated head pipeline owns the vanilla {@code player_head} item (skin data lives in
      * the spec modifiers); only that exact id skips the elements probe - a pack item whose path
      * merely CONTAINS the substring (e.g. {@code x:item/player_head_frame}) is an ordinary pack
-     * model.
+     * model. Shared with {@link MinecraftInventoryGenerator}'s elements probe so the two
+     * composites gate the head pipeline identically.
      */
-    private static boolean isVanillaPlayerHead(String itemName) {
+    static boolean isVanillaPlayerHead(String itemName) {
         String normalized = itemName.toLowerCase(Locale.ROOT);
         if (normalized.startsWith("minecraft:")) {
             normalized = normalized.substring("minecraft:".length());
@@ -473,19 +522,23 @@ public class MinecraftContainerGenerator implements Generator {
 
     /**
      * Resolves one slot item's static image through the shared inventory item pipeline, deduped
-     * per distinct (material, modifiers, durability) spec within this generator instance so
-     * render time scales with distinct specs rather than slot count. Package-private for tests
-     * pinning the dedupe.
+     * per distinct (material, modifiers, durability, custom model data) spec within this
+     * generator instance so render time scales with distinct specs rather than slot count. The
+     * slot's custom model data reaches the pipeline so dispatch nodes that resolve to FLAT
+     * SPRITES render the data-selected sprite (elements results never arrive here - the
+     * elements raster path resolves them first). Package-private for tests pinning the dedupe.
      *
      * @return the generated item image, or null when the pipeline yields none (the slot is
      *     skipped, matching the inventory generator)
      */
     @Nullable
-    BufferedImage resolveItemImage(InventoryItem item, @Nullable GenerationContext generationContext) {
+    BufferedImage resolveItemImage(InventoryItem item, CustomModelData data,
+                                   @Nullable GenerationContext generationContext) {
         return itemVisualCache.computeIfAbsent(
-            new ItemVisualKey(item.getItemName(), item.getExtraContent(), item.getDurabilityPercent()),
+            new ItemVisualKey(item.getItemName(), item.getExtraContent(), item.getDurabilityPercent(), data),
             key -> MinecraftInventoryGenerator
-                .generateSlotObject(item, generationContext, PackId.isActive(packId) ? packId : null, packRepository)
+                .generateSlotObject(item, generationContext, PackId.isActive(packId) ? packId : null,
+                    packRepository, key.customModelData())
                 .getImage());
     }
 
@@ -809,6 +862,7 @@ public class MinecraftContainerGenerator implements Generator {
         private final SortedMap<Integer, String> slots = new TreeMap<>();
         private final SortedMap<Integer, CustomModelData> slotCustomModelData = new TreeMap<>();
         private int scaleFactor = 1;
+        private boolean approximateGuiRotations;
         private PackId packId;
         private PackRepository packRepository;
 
@@ -864,10 +918,10 @@ public class MinecraftContainerGenerator implements Generator {
          * Places an item in a slot together with the {@code minecraft:custom_model_data}
          * component value its item model definition evaluates against ({@code range_dispatch}
          * floats, {@code condition} flags, {@code select} strings and tint colors). The data
-         * only affects specs that resolve through the active pack's elements-model path; flat
-         * sprites and vanilla items ignore it. The recipe format
-         * ({@link #fromRecipe(String)}) carries no custom model data - use this overload to
-         * supply it programmatically.
+         * drives dispatch for every pack-resolved visual - elements-model rasters AND flat
+         * sprite results both render the data-selected model; vanilla items ignore it. The
+         * recipe format ({@link #fromRecipe(String)}) carries no custom model data - use this
+         * overload to supply it programmatically.
          *
          * @param slotIndex       1-based slot index
          * @param itemSpec        the item spec, exactly as for {@link #withSlot(int, String)}
@@ -913,6 +967,18 @@ public class MinecraftContainerGenerator implements Generator {
         }
 
         /**
+         * Opts slot items with elements-based pack models into approximating arbitrary
+         * {@code display.gui} rotations with their nearest flat projection (front or mirrored
+         * view) instead of failing loudly - decoratively rotated menu art renders sensibly
+         * while genuinely 3D presentations flatten to their nearest face (the rotation itself
+         * is dropped). Default false: unsupported rotations keep throwing PackResolveException.
+         */
+        public Builder withApproximateGuiRotations(boolean approximateGuiRotations) {
+            this.approximateGuiRotations = approximateGuiRotations;
+            return this;
+        }
+
+        /**
          * Validates the slot indices against the final row count and builds the generator.
          *
          * @throws IllegalArgumentException when {@code rows} was never set (or is out of range),
@@ -931,7 +997,7 @@ public class MinecraftContainerGenerator implements Generator {
                 }
             }
             return new MinecraftContainerGenerator(rows, title, new TreeMap<>(slots),
-                new TreeMap<>(slotCustomModelData), scaleFactor, packId, packRepository);
+                new TreeMap<>(slotCustomModelData), scaleFactor, approximateGuiRotations, packId, packRepository);
         }
     }
 }

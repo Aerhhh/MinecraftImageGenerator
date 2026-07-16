@@ -1,5 +1,6 @@
 package net.aerh.imagegenerator.pack.font;
 
+import lombok.extern.slf4j.Slf4j;
 import net.aerh.imagegenerator.exception.PackResolveException;
 
 import java.awt.image.BufferedImage;
@@ -26,7 +27,15 @@ import java.util.TreeSet;
  * empty for them and LATER providers may serve the codepoint instead (vanilla would serve the
  * TTF glyph and stop). {@link #hasUnsupportedProviderFor} reports whether such a provider might
  * have served a codepoint so callers can log the fidelity gap once.
+ *
+ * <p>Second deviation, also by design: a bitmap provider whose sheet texture is ABSENT (per
+ * {@link TextureLoader#exists}) is skipped with a warning instead of failing the whole font.
+ * Vanilla fails the font, but real server packs reference vanilla client sheets this library
+ * does not bundle (e.g. {@code minecraft:font/ascii.png}), and dropping just those providers
+ * keeps every glyph the pack actually ships renderable. A font whose providers all skip still
+ * resolves - as an empty font that claims no codepoint.
  */
+@Slf4j
 public final class PackFont {
 
     /** Loads a bitmap provider's sheet texture by its {@code file} reference. */
@@ -40,6 +49,19 @@ public final class PackFont {
          * @throws PackResolveException when the texture is missing or fails to decode
          */
         BufferedImage load(String textureFileRef);
+
+        /**
+         * Whether the sheet texture exists at all. {@link #create} skips bitmap providers whose
+         * sheet is absent (see the class javadoc) and only calls {@link #load} for present ones,
+         * so decode failures of PRESENT sheets stay loud. The default returns true: loaders that
+         * cannot probe existence keep the vanilla fail-loud behavior for absent sheets too.
+         *
+         * @param textureFileRef the bitmap provider {@code file} value, extension included
+         * @throws PackResolveException when the reference itself is malformed
+         */
+        default boolean exists(String textureFileRef) {
+            return true;
+        }
     }
 
     private sealed interface Provider permits BitmapEntry, SpaceEntry, UnsupportedEntry {
@@ -71,11 +93,12 @@ public final class PackFont {
      * Builds the runtime font from a RESOLVED provider list (references already expanded by
      * {@link FontResolver}; filters already applied). Bitmap sheets are loaded eagerly through
      * {@code textures} and each glyph copies its cell out, so the sheets themselves are not
-     * retained. Equivalent to the {@link BitmapProviderCache} overload with a fresh,
+     * retained; providers whose sheet is absent are skipped with a warning (see the class
+     * javadoc). Equivalent to the {@link BitmapProviderCache} overload with a fresh,
      * single-use cache.
      *
-     * @throws PackResolveException when the list still contains a reference provider, a sheet
-     *                              fails to load, or a sheet is too small for its grid
+     * @throws PackResolveException when the list still contains a reference provider, a present
+     *                              sheet fails to decode, or a sheet is too small for its grid
      */
     public static PackFont create(String fontId, List<FontProviderDefinition> definitions, TextureLoader textures) {
         return create(fontId, definitions, textures, new BitmapProviderCache());
@@ -88,16 +111,25 @@ public final class PackFont {
      * re-decoding the sheet and duplicating every glyph cell, mirroring vanilla's shared glyph
      * providers.
      *
-     * @throws PackResolveException when the list still contains a reference provider, a sheet
-     *                              fails to load, or a sheet is too small for its grid
+     * @throws PackResolveException when the list still contains a reference provider, a present
+     *                              sheet fails to decode, or a sheet is too small for its grid
      */
     public static PackFont create(String fontId, List<FontProviderDefinition> definitions, TextureLoader textures,
                                   BitmapProviderCache sharedProviders) {
         List<Provider> providers = new ArrayList<>();
         for (FontProviderDefinition definition : definitions) {
             switch (definition) {
-                case FontProviderDefinition.Bitmap bitmap -> providers.add(new BitmapEntry(
-                    sharedProviders.bitmapProvider(bitmap, textures, fontId)));
+                case FontProviderDefinition.Bitmap bitmap -> {
+                    if (!textures.exists(bitmap.file())) {
+                        // Deviation from vanilla (see class javadoc): real packs reference
+                        // vanilla client sheets that are not bundled here; skip the provider
+                        // instead of failing the whole font.
+                        log.warn("Font `{}`: skipping bitmap provider whose sheet `{}` is absent",
+                            fontId, bitmap.file());
+                        continue;
+                    }
+                    providers.add(new BitmapEntry(sharedProviders.bitmapProvider(bitmap, textures, fontId)));
+                }
                 case FontProviderDefinition.Space space -> {
                     Map<Integer, SpaceGlyph> glyphs = new HashMap<>();
                     space.advances().forEach((codePoint, advance) -> glyphs.put(codePoint, new SpaceGlyph(advance)));

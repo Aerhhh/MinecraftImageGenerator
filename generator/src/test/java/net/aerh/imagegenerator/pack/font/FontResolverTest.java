@@ -3,9 +3,12 @@ package net.aerh.imagegenerator.pack.font;
 import net.aerh.imagegenerator.exception.PackResolveException;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -170,5 +173,93 @@ class FontResolverTest {
         // reference to a missing font still fails the whole font id.
         assertThrows(PackResolveException.class, () -> FontResolver.resolveProviders("test:a", lookup(Map.of(
             "test:a", List.of(new FontProviderDefinition.Reference("test:nope", new FontFilter(true, null)))))));
+    }
+
+    /** A single-reference chain: {@code test:c0 -> test:c1 -> ... -> test:c<length>} -> leaf. */
+    private static Map<String, List<FontProviderDefinition>> chain(int length) {
+        Map<String, List<FontProviderDefinition>> fonts = new HashMap<>();
+        for (int i = 0; i < length; i++) {
+            fonts.put("test:c" + i, List.of(reference("test:c" + (i + 1))));
+        }
+        fonts.put("test:c" + length, List.of(space('z', 1.0f)));
+        return fonts;
+    }
+
+    @Test
+    void referenceChainAtTheDepthCapResolves() {
+        List<FontProviderDefinition> resolved = FontResolver.resolveProviders("test:c0",
+            lookup(chain(FontResolver.MAX_REFERENCE_DEPTH)));
+        assertEquals(1, resolved.size());
+    }
+
+    @Test
+    void referenceChainOverTheDepthCapFails() {
+        PackResolveException exception = assertThrows(PackResolveException.class,
+            () -> FontResolver.resolveProviders("test:c0",
+                lookup(chain(FontResolver.MAX_REFERENCE_DEPTH + 1))));
+        assertTrue(exception.getMessage().contains("deeper than"), exception.getMessage());
+    }
+
+    /** {@code fanOut} references to one target of {@code providersPerTarget} space providers. */
+    private static Map<String, List<FontProviderDefinition>> fanOut(int fanOut, int providersPerTarget) {
+        List<FontProviderDefinition> targets = new ArrayList<>();
+        for (int i = 0; i < providersPerTarget; i++) {
+            targets.add(space('a' + i, 1.0f));
+        }
+        List<FontProviderDefinition> references = new ArrayList<>();
+        for (int i = 0; i < fanOut; i++) {
+            references.add(reference("test:wide"));
+        }
+        return Map.of("test:root", List.copyOf(references), "test:wide", List.copyOf(targets));
+    }
+
+    @Test
+    void wideFanOutAtTheProviderCapResolves() {
+        // 64 references x 64 providers = exactly MAX_RESOLVED_PROVIDERS.
+        List<FontProviderDefinition> resolved = FontResolver.resolveProviders("test:root",
+            lookup(fanOut(64, 64)));
+        assertEquals(FontResolver.MAX_RESOLVED_PROVIDERS, resolved.size());
+    }
+
+    @Test
+    void wideFanOutOverTheProviderCapFails() {
+        PackResolveException exception = assertThrows(PackResolveException.class,
+            () -> FontResolver.resolveProviders("test:root", lookup(fanOut(64, 65))));
+        assertTrue(exception.getMessage().contains("more than"), exception.getMessage());
+    }
+
+    @Test
+    void doublingDiamondGraphResolvesWithOneLookupPerFont() {
+        // d1 references d2 twice, d2 references d3 twice, ... d11 holds the leaf: the output
+        // doubles per level (2^10 = 1024 leaves) but memoization must look every font up
+        // exactly once - without it, crafted packs get exponential lookup work.
+        Map<String, List<FontProviderDefinition>> fonts = new HashMap<>();
+        for (int i = 1; i < 11; i++) {
+            fonts.put("test:d" + i, List.of(reference("test:d" + (i + 1)), reference("test:d" + (i + 1))));
+        }
+        fonts.put("test:d11", List.of(space('z', 1.0f)));
+        AtomicInteger lookups = new AtomicInteger();
+        FontResolver.DefinitionLookup countingLookup = fontId -> {
+            lookups.incrementAndGet();
+            return Optional.ofNullable(fonts.get(fontId));
+        };
+        List<FontProviderDefinition> resolved = FontResolver.resolveProviders("test:d1", countingLookup);
+        assertEquals(1024, resolved.size());
+        assertEquals(11, lookups.get(), "each font resolves through exactly one lookup");
+    }
+
+    @Test
+    void memoizedExpansionKeepsFilterSensitivity() {
+        // The same target referenced under two DIFFERENT outer filters must expand per filter:
+        // a memo keyed on the id alone would leak the first filter into the second expansion.
+        FontProviderDefinition inner = space('a', 1.0f);
+        List<FontProviderDefinition> resolved = FontResolver.resolveProviders("test:a", lookup(Map.of(
+            "test:a", List.of(
+                new FontProviderDefinition.Reference("test:b", new FontFilter(true, null)),
+                new FontProviderDefinition.Reference("test:b", new FontFilter(false, null))),
+            "test:b", List.of(inner))));
+        // The uniform:true occurrence is dropped by the filter pass; the uniform:false one stays.
+        assertEquals(1, resolved.size());
+        assertEquals(new FontFilter(false, null), resolved.get(0).filter());
     }
 }

@@ -235,11 +235,27 @@ class PackJsonParserElementsTest {
     }
 
     @Test
+    void dyeTintParsesItsRequiredDefault() {
+        ItemDefinition definition = parseItem("""
+            {"model":{"type":"model","model":"t:x","tints":[{"type":"minecraft:dye","default":3368703}]}}""");
+        ItemModelNode.ModelLeaf leaf = assertInstanceOf(ItemModelNode.ModelLeaf.class, definition.model());
+        assertEquals(List.of(new ItemModelNode.TintSpec.Dye(0x3366FF)), leaf.tints());
+    }
+
+    @Test
+    void dyeTintWithoutDefaultIsRejected() {
+        // The default is REQUIRED per the vanilla format - and it is the only color this
+        // library can apply, so silently substituting white would hide the transcription error.
+        assertThrows(PackLoadException.class, () -> parseItem("""
+            {"model":{"type":"model","model":"t:x","tints":[{"type":"minecraft:dye"}]}}"""));
+    }
+
+    @Test
     void unknownTintTypeParsesAsUnsupported() {
         ItemDefinition definition = parseItem("""
-            {"model":{"type":"model","model":"t:x","tints":[{"type":"minecraft:dye","default":0}]}}""");
+            {"model":{"type":"model","model":"t:x","tints":[{"type":"minecraft:team","default":0}]}}""");
         ItemModelNode.ModelLeaf leaf = assertInstanceOf(ItemModelNode.ModelLeaf.class, definition.model());
-        assertEquals(List.of(new ItemModelNode.TintSpec.Unsupported("dye")), leaf.tints());
+        assertEquals(List.of(new ItemModelNode.TintSpec.Unsupported("team")), leaf.tints());
     }
 
     @Test
@@ -291,6 +307,27 @@ class PackJsonParserElementsTest {
     void fractionalDispatchIndexIsRejected() {
         assertThrows(PackLoadException.class, () -> parseItem("""
             {"model":{"type":"range_dispatch","property":"custom_model_data","index":1.5,
+              "entries":[{"threshold":1,"model":{"type":"model","model":"t:a"}}]}}"""));
+    }
+
+    @Test
+    void rangeDispatchNormalizeDefaultsTrueAndParsesFalse() {
+        // The vanilla minecraft:damage default is normalize:true (damage fraction).
+        ItemDefinition defaulted = parseItem("""
+            {"model":{"type":"range_dispatch","property":"minecraft:damage",
+              "entries":[{"threshold":0.5,"model":{"type":"model","model":"t:a"}}]}}""");
+        assertTrue(assertInstanceOf(ItemModelNode.RangeDispatchNode.class, defaulted.model()).normalize());
+
+        ItemDefinition raw = parseItem("""
+            {"model":{"type":"range_dispatch","property":"minecraft:damage","normalize":false,
+              "entries":[{"threshold":3,"model":{"type":"model","model":"t:a"}}]}}""");
+        assertFalse(assertInstanceOf(ItemModelNode.RangeDispatchNode.class, raw.model()).normalize());
+    }
+
+    @Test
+    void wrongTypedNormalizeIsRejected() {
+        assertThrows(PackLoadException.class, () -> parseItem("""
+            {"model":{"type":"range_dispatch","property":"minecraft:damage","normalize":"nope",
               "entries":[{"threshold":1,"model":{"type":"model","model":"t:a"}}]}}"""));
     }
 }

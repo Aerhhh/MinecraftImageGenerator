@@ -62,6 +62,16 @@ final class LoadedPack {
     private static final String SHEET_CAPPED_KEY_PREFIX = "sheet:";
     private static final int MAX_PARENT_DEPTH = 8;
     /**
+     * The vanilla flat-item template parents that real packs legitimately leave dangling: a
+     * model chain ending at one of these OUTSIDE the pack terminates with builtin flat-layer
+     * semantics (the {@code item/generated}/{@code item/handheld} templates carry no elements,
+     * textures or GUI-relevant transforms of their own) instead of failing. Any other parent
+     * missing from a pack-claimed namespace still fails loudly - it was meant to supply
+     * something.
+     */
+    private static final Set<String> BUILTIN_FLAT_PARENTS =
+        Set.of("minecraft:item/generated", "minecraft:item/handheld");
+    /**
      * Pack ids whose textures use alpha 252 as an "opaque full-bright" emissive marker (a
      * Hypixel SkyBlock shader convention). Only these packs get the alpha normalized to fully
      * opaque at decode time; other packs may ship legitimate alpha-252 pixels that must be
@@ -91,6 +101,23 @@ final class LoadedPack {
     private boolean hasContainerTextures;
     private final LoadingCache<String, BufferedImage> textureCache;
     private final LoadingCache<String, PackFont> fontCache;
+    /**
+     * Loads bitmap provider sheets and probes their existence so {@link PackFont#create} can
+     * skip providers whose sheet is absent from the pack (the documented
+     * {@link #resolveFont(String)} deviation) while present-but-broken sheets keep failing
+     * loudly through {@link #loadFontSheet}.
+     */
+    private final PackFont.TextureLoader fontSheetLoader = new PackFont.TextureLoader() {
+        @Override
+        public BufferedImage load(String textureFileRef) {
+            return loadFontSheet(textureFileRef);
+        }
+
+        @Override
+        public boolean exists(String textureFileRef) {
+            return source.exists(fontSheetPath(textureFileRef));
+        }
+    };
 
     LoadedPack(PackId id, PackSource source, PackLimits limits) {
         this.id = id;
@@ -120,6 +147,27 @@ final class LoadedPack {
 
     public PackId id() {
         return id;
+    }
+
+    /**
+     * Releases the pack's retained resources on unregister: invalidates the texture and font
+     * caches and closes the source. A resolve racing the release either completes against the
+     * still-valid in-memory index or fails loudly reading the closed source - sources wrap
+     * closed-state failures as {@link PackLoadException}, which the resolve paths surface as
+     * the ordinary {@link PackResolveException}, so no raw closed-source error ever escapes.
+     * The caches themselves stay structurally safe (Caffeine is thread-safe), so concurrent
+     * callers never see corruption.
+     */
+    void release() {
+        textureCache.invalidateAll();
+        fontCache.invalidateAll();
+        try {
+            source.close();
+        } catch (Exception e) {
+            // Same rationale as PackRepository's failed-registration cleanup: a source whose
+            // close() throws must not turn a successful unregister into a failure.
+            log.warn("Pack {}: failed to close source on release", id, e);
+        }
     }
 
     public Set<String> assetNamespaces() {
@@ -313,10 +361,20 @@ final class LoadedPack {
      * out, so they intentionally bypass the item texture cache (caching a sheet of up to
      * 8192x8192 pixels would blow the cache budget for no repeat-read benefit).
      *
+     * <p><b>Deviation from vanilla, by design:</b> a bitmap provider whose sheet texture is
+     * ABSENT from the pack is skipped with a warning instead of failing the font. Vanilla fails
+     * the whole font, but real server packs override {@code minecraft:default} with providers
+     * referencing vanilla client sheets (e.g. {@code minecraft:font/ascii.png}) that this
+     * library does not bundle; skipping just those providers keeps every glyph the pack
+     * actually ships renderable. A font whose providers ALL skip still resolves, as an empty
+     * font claiming no codepoint. Present-but-broken sheets (undecodable, oversized) keep
+     * failing loudly.
+     *
      * @return empty when the pack defines no such font - callers fall back to built-in fonts
      * @throws IllegalArgumentException when the font id itself is malformed (caller input)
      * @throws PackResolveException     when the font exists but is broken (malformed JSON,
-     *                                  missing or cyclic reference, missing or oversized sheet)
+     *                                  missing or cyclic reference, undecodable or oversized
+     *                                  sheet)
      */
     public Optional<PackFont> resolveFont(String fontId) {
         ResourceRef ref = ResourceRef.parse(fontId, "minecraft");
@@ -330,7 +388,7 @@ final class LoadedPack {
     /** Cache loader for {@link #resolveFont(String)}; {@code key} is the normalized font id. */
     private PackFont resolveFontUncached(String key) {
         List<FontProviderDefinition> resolved = FontResolver.resolveProviders(key, this::fontDefinitions);
-        return PackFont.create(key, resolved, this::loadFontSheet, fontProviderCache);
+        return PackFont.create(key, resolved, fontSheetLoader, fontProviderCache);
     }
 
     private static boolean isValidResourceLocation(String namespace, String path) {
@@ -370,14 +428,23 @@ final class LoadedPack {
      * sheet cap; see {@link #resolveFont(String)} for why this bypasses the item texture cache.
      */
     private BufferedImage loadFontSheet(String textureFileRef) {
-        ResourceRef ref = parseRefOrResolveError(textureFileRef, "minecraft");
-        String path = "assets/" + ref.namespace() + "/textures/" + ref.path();
+        String path = fontSheetPath(textureFileRef);
         try {
             return TextureDecoder.decode(source.read(path), limits.sheetTextureMaxDim(), normalizeEmissiveAlpha);
         } catch (PackLoadException e) {
             throw new PackResolveException(GeneratorException.formatMessage(
                 "Font texture `%s` in pack `%s` failed to load: %s", path, id.toString(), e.getMessage()), e);
         }
+    }
+
+    /**
+     * The pack path of a bitmap provider {@code file} reference (extension included), shared by
+     * the sheet loader and its existence probe so the two can never disagree. A malformed
+     * reference fails loudly here - malformed is not absent.
+     */
+    private String fontSheetPath(String textureFileRef) {
+        ResourceRef ref = parseRefOrResolveError(textureFileRef, "minecraft");
+        return "assets/" + ref.namespace() + "/textures/" + ref.path();
     }
 
     private GuiSprite loadGuiSprite(String texturePath) {
@@ -419,7 +486,7 @@ final class LoadedPack {
             return Optional.empty();
         }
         return Optional.of(composeSpriteLayers(itemRef,
-            resolveGuiModels(itemRef, entry, CustomModelData.EMPTY), CustomModelData.EMPTY));
+            resolveGuiModels(itemRef, entry, CustomModelData.EMPTY, null), CustomModelData.EMPTY));
     }
 
     /**
@@ -440,9 +507,13 @@ final class LoadedPack {
      * </ul>
      *
      * <p>Elements chains stop at parents outside the pack (vanilla model assets are
-     * unavailable); their textures and display transforms are treated as absent. A missing
-     * IN-pack parent, a cyclic chain, or a chain deeper than the layer0 path allows fails
-     * loudly instead of silently dropping inherited transforms.
+     * unavailable); their textures and display transforms are treated as absent. Chains ending
+     * at the builtin flat templates {@code minecraft:item/generated} or
+     * {@code minecraft:item/handheld} terminate the same way even when the pack claims the
+     * {@code minecraft} namespace without shipping those models - the vanilla flat-item shape
+     * real packs rely on. A missing IN-pack parent of any other name, a cyclic chain, or a
+     * chain deeper than the layer0 path allows fails loudly instead of silently dropping
+     * inherited transforms.
      *
      * @return empty when the ref is bare, in a foreign namespace, or unknown - callers fall back
      *     to vanilla
@@ -451,11 +522,25 @@ final class LoadedPack {
      *                              element rotations, unsupported gui rotations)
      */
     public Optional<PackItemVisual> resolveItemVisual(String itemRef, CustomModelData data, int pixelsPerGuiPx) {
+        return resolveItemVisual(itemRef, data, null, pixelsPerGuiPx, false);
+    }
+
+    /**
+     * Like {@link #resolveItemVisual(String, CustomModelData, int)} with two extra evaluation
+     * inputs: {@code damage} feeds {@code range_dispatch} nodes with
+     * {@code property: minecraft:damage} (null evaluates the property at 0), and
+     * {@code approximateGuiRotations} renders unsupported {@code display.gui} rotations as
+     * their nearest flat projection instead of failing (see {@link ElementModelRenderer} for
+     * the fidelity limits).
+     */
+    public Optional<PackItemVisual> resolveItemVisual(String itemRef, CustomModelData data,
+                                                      @Nullable ItemDamage damage, int pixelsPerGuiPx,
+                                                      boolean approximateGuiRotations) {
         ItemEntry entry = lookupItem(itemRef);
         if (entry == null) {
             return Optional.empty();
         }
-        List<GuiModelResolver.GuiModel> models = resolveGuiModels(itemRef, entry, data);
+        List<GuiModelResolver.GuiModel> models = resolveGuiModels(itemRef, entry, data, damage);
         List<ChainData> chains = new ArrayList<>(models.size());
         boolean anyElements = false;
         boolean allElements = !models.isEmpty();
@@ -485,8 +570,8 @@ final class LoadedPack {
                 evaluateElementTints(itemRef, models.get(i).tints(), data)));
         }
         ElementModelRenderer.Raster raster = ElementModelRenderer.render(
-            instances, pixelsPerGuiPx, entry.oversizedInGui(), this::loadElementTexture,
-            "item `" + itemRef + "` in pack `" + id + "`");
+            instances, pixelsPerGuiPx, entry.oversizedInGui(), approximateGuiRotations,
+            this::loadElementTexture, "item `" + itemRef + "` in pack `" + id + "`");
         return Optional.of(new PackItemVisual.ElementsRaster(
             raster.image(), raster.offsetX(), raster.offsetY(), entry.oversizedInGui()));
     }
@@ -521,14 +606,15 @@ final class LoadedPack {
     }
 
     /**
-     * Resolves the item's model node tree against the supplied data, prefixing dispatch errors
-     * (unsupported node types, select/range_dispatch dead ends) with the item and pack:
-     * {@link GuiModelResolver} is item-agnostic, and resolve-time failures must name their
-     * offender like every other resolve error this class raises.
+     * Resolves the item's model node tree against the supplied data and damage state, prefixing
+     * dispatch errors (unsupported node types, select/range_dispatch dead ends) with the item
+     * and pack: {@link GuiModelResolver} is item-agnostic, and resolve-time failures must name
+     * their offender like every other resolve error this class raises.
      */
-    private List<GuiModelResolver.GuiModel> resolveGuiModels(String itemRef, ItemEntry entry, CustomModelData data) {
+    private List<GuiModelResolver.GuiModel> resolveGuiModels(String itemRef, ItemEntry entry, CustomModelData data,
+                                                             @Nullable ItemDamage damage) {
         try {
-            return GuiModelResolver.resolveGui(entry.node(), data);
+            return GuiModelResolver.resolveGui(entry.node(), data, damage);
         } catch (PackResolveException e) {
             throw withItemContext(itemRef, e);
         }
@@ -614,10 +700,12 @@ final class LoadedPack {
     /**
      * Walks a model's parent chain. Chains stop silently at the first parent OUTSIDE the pack
      * (vanilla model assets are unavailable; its textures and transforms are treated as absent,
-     * documented behavior), but a missing IN-pack model or a chain exceeding
-     * {@link #MAX_PARENT_DEPTH} (cycles included) fails loudly with the same errors
-     * {@link #resolveLayer0} raises for the identical breakage - a broken parent ref must never
-     * silently drop the transforms or textures it was meant to supply.
+     * documented behavior) and at the {@link #BUILTIN_FLAT_PARENTS} even when the pack claims
+     * the {@code minecraft} namespace - real packs end chains at {@code item/generated} or
+     * {@code item/handheld} without shipping those templates. A missing IN-pack model of any
+     * other name or a chain exceeding {@link #MAX_PARENT_DEPTH} (cycles included) fails loudly
+     * with the same errors {@link #resolveLayer0} raises for the identical breakage - a broken
+     * parent ref must never silently drop the transforms or textures it was meant to supply.
      */
     private ChainData resolveModelChain(String modelRefValue) {
         ResourceRef modelRef = parseRefOrResolveError(modelRefValue, "minecraft");
@@ -631,6 +719,11 @@ final class LoadedPack {
             }
             ModelInfo model = models.get(modelRef.toString());
             if (model == null) {
+                if (BUILTIN_FLAT_PARENTS.contains(modelRef.toString())) {
+                    // The builtin flat templates carry nothing this walk collects; ending here
+                    // is the ordinary flat-item shape, not a broken pack.
+                    return new ChainData(elements, Map.copyOf(textures), guiTransform);
+                }
                 throw new PackResolveException("Model `%s` not found in pack `%s`",
                     modelRef.toString(), id.toString());
             }
@@ -653,25 +746,44 @@ final class LoadedPack {
     /**
      * Loads an element face texture (already resolved to a concrete reference) under the strict
      * item cap. The renderer only reads the returned image, so the cached instance is shared.
+     * A bare reference defaults to the {@code minecraft} namespace - the vanilla resource
+     * location rule, shared with {@link #resolveLayer0} so both texture paths agree.
      */
     private BufferedImage loadElementTexture(String textureRef) {
         return textureCache.get(parseRefOrResolveError(textureRef, "minecraft").texturePath());
     }
 
+    /**
+     * Walks a model's parent chain to the first {@code layer0} texture path. A bare (namespace
+     * free) {@code layer0} reference defaults to the {@code minecraft} namespace - the vanilla
+     * resource location rule - exactly like element face texture references resolved through
+     * {@link #loadElementTexture}, so the two texture paths can never disagree on where a bare
+     * reference points.
+     *
+     * <p>Reaching a {@link #BUILTIN_FLAT_PARENTS builtin flat parent} that is not in the pack
+     * ends the chain like {@link #resolveModelChain}: the builtin templates declare no layer0
+     * of their own, so arriving here without one found earlier means the chain has no texture
+     * at all - a loud failure with a dedicated message rather than a missing-model error.
+     */
     private String resolveLayer0(String modelRefValue) {
         ResourceRef modelRef = parseRefOrResolveError(modelRefValue, "minecraft");
         for (int depth = 0; depth < MAX_PARENT_DEPTH; depth++) {
-            if (!namespaces.contains(modelRef.namespace())) {
-                throw new PackResolveException(
-                    "Model `%s` in pack `%s` resolves outside the pack; cannot render without vanilla model assets",
-                    modelRef.toString(), id.toString());
-            }
-            ModelInfo model = models.get(modelRef.toString());
+            ModelInfo model = namespaces.contains(modelRef.namespace()) ? models.get(modelRef.toString()) : null;
             if (model == null) {
+                if (BUILTIN_FLAT_PARENTS.contains(modelRef.toString())) {
+                    throw new PackResolveException(
+                        "Model chain ends at builtin `%s` without any layer0 texture in pack `%s`",
+                        modelRef.toString(), id.toString());
+                }
+                if (!namespaces.contains(modelRef.namespace())) {
+                    throw new PackResolveException(
+                        "Model `%s` in pack `%s` resolves outside the pack; cannot render without vanilla model assets",
+                        modelRef.toString(), id.toString());
+                }
                 throw new PackResolveException("Model `%s` not found in pack `%s`", modelRef.toString(), id.toString());
             }
             if (model.layer0Ref() != null) {
-                return parseRefOrResolveError(model.layer0Ref(), modelRef.namespace()).texturePath();
+                return parseRefOrResolveError(model.layer0Ref(), "minecraft").texturePath();
             }
             if (model.parentRef() == null) {
                 throw new PackResolveException("Model `%s` in pack `%s` has neither layer0 nor parent",

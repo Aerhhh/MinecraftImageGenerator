@@ -66,19 +66,31 @@ final class ZipPackSource implements PackSource {
 
     @Override
     public byte[] read(String assetPath) {
-        ZipEntry entry = entryNames.contains(assetPath) ? zipFile.getEntry(assetPath) : null;
-        if (entry == null) {
+        if (!entryNames.contains(assetPath)) {
             throw new PackLoadException("Pack file not found: %s", assetPath);
         }
-        try (InputStream in = zipFile.getInputStream(entry)) {
-            byte[] data = in.readNBytes(limits.boundedReadLimit());
-            if (data.length > limits.maxEntryBytes()) {
-                throw new PackLoadException("Pack file %s exceeds max entry size (%s bytes)",
-                    assetPath, String.valueOf(limits.maxEntryBytes()));
+        try {
+            ZipEntry entry = zipFile.getEntry(assetPath);
+            if (entry == null) {
+                throw new PackLoadException("Pack file not found: %s", assetPath);
             }
-            return data;
+            try (InputStream in = zipFile.getInputStream(entry)) {
+                byte[] data = in.readNBytes(limits.boundedReadLimit());
+                if (data.length > limits.maxEntryBytes()) {
+                    throw new PackLoadException("Pack file %s exceeds max entry size (%s bytes)",
+                        assetPath, String.valueOf(limits.maxEntryBytes()));
+                }
+                return data;
+            }
         } catch (IOException e) {
             throw new PackLoadException("Failed to read pack ZIP entry: " + assetPath, e);
+        } catch (IllegalStateException e) {
+            // ZipFile raises a raw IllegalStateException ("zip file closed") for any access
+            // after close - the state a resolve races into when it still holds the pack while
+            // unregister() releases it. Wrapping it as the ordinary PackLoadException keeps the
+            // PackRepository concurrency contract: racing resolves surface a
+            // PackResolveException, never the bare closed-source error.
+            throw new PackLoadException("Pack ZIP is closed: " + assetPath, e);
         }
     }
 

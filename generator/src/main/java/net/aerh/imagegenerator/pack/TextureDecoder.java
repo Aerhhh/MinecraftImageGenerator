@@ -11,7 +11,9 @@ import javax.imageio.event.IIOReadUpdateListener;
 import javax.imageio.stream.ImageInputStream;
 import java.awt.AlphaComposite;
 import java.awt.Graphics2D;
+import java.awt.color.ColorSpace;
 import java.awt.image.BufferedImage;
+import java.awt.image.Raster;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -24,9 +26,11 @@ import java.util.zip.Inflater;
 /**
  * Decodes pack textures defensively: image dimensions are read from the header and checked
  * against the cap BEFORE full pixel decode (image-bomb guard). Tolerates the real-world pack
- * quirk of PNGs whose IDAT zlib stream is truncated (Minecraft itself renders them), optionally
- * applies the Hypixel SkyBlock emissive alpha encoding, and extracts static first frames from
- * animated flipbooks.
+ * quirks of PNGs whose IDAT zlib stream carries a deliberately wrong Adler32 checksum (server
+ * packs corrupt every texture's checksum as a soft obfuscation; the client's stb_image-based
+ * loader never verifies it) or is outright truncated (Minecraft itself renders those too),
+ * optionally applies the Hypixel SkyBlock emissive alpha encoding, and extracts static first
+ * frames from animated flipbooks.
  */
 @UtilityClass
 class TextureDecoder {
@@ -61,9 +65,16 @@ class TextureDecoder {
         try {
             return normalize(readStrict(imageBytes, maxTextureDim), normalizeEmissiveAlpha);
         } catch (IOException strictFailure) {
-            // Real-world packs ship PNGs whose IDAT zlib stream is truncated while Minecraft
-            // still renders them; salvage whatever rows are recoverable before failing.
-            BufferedImage recovered = readPartial(imageBytes, maxTextureDim);
+            // Decode tiers, strictest first: (1) the strict ImageIO read above; (2) a
+            // checksum-tolerant FULL manual decode for the real-world pack quirk of complete
+            // zlib streams with a deliberately wrong Adler32 trailer - pixel-identical to a
+            // strict decode of the same data; (3) the lenient partial ImageIO retry and the
+            // manual truncated-IDAT salvage, which keep whatever rows are recoverable; then
+            // (4) loud failure.
+            BufferedImage recovered = readChecksumTolerant(imageBytes, maxTextureDim);
+            if (recovered == null) {
+                recovered = readPartial(imageBytes, maxTextureDim);
+            }
             if (recovered == null) {
                 recovered = salvageTruncatedPng(imageBytes, maxTextureDim);
             }
@@ -195,15 +206,29 @@ class TextureDecoder {
     }
 
     /**
-     * Final PNG-only fallback: inflates whatever IDAT bytes are present, reconstructs the
-     * complete scanlines and leaves missing rows fully transparent. Handles the
-     * manually-recoverable subset: non-interlaced PNGs, palette images at any legal bit depth,
-     * and 8-bit gray / gray+alpha / RGB / RGBA images.
-     *
-     * @return the salvaged image, or null when the bytes are not a PNG, use an unsupported
-     *     format, or are corrupt rather than merely truncated
+     * The parsed structure of a PNG for the manual decode tiers: header fields, ancillary color
+     * data and the concatenated IDAT payload. {@code stride} is the filtered scanline length in
+     * bytes WITHOUT the leading filter-type byte.
      */
-    private static BufferedImage salvageTruncatedPng(byte[] bytes, int maxTextureDim) {
+    private record PngStructure(int width, int height, int bitDepth, int colorType,
+                                byte[] palette, byte[] transparency, byte[] idat, int stride) {
+
+        /** The raw buffer covering every filter-prefixed scanline of the image. */
+        byte[] newRawBuffer() {
+            return new byte[(stride + 1) * height];
+        }
+    }
+
+    /**
+     * Walks the PNG chunk stream and validates the header for the manual decode tiers
+     * ({@link #readChecksumTolerant} and {@link #salvageTruncatedPng}). Handles the
+     * manually-decodable subset: non-interlaced PNGs, palette images at any legal bit depth,
+     * grayscale at 1/2/4/8 bits, and 8-bit gray+alpha / RGB / RGBA images.
+     *
+     * @return the parsed structure, or null when the bytes are not a PNG, the header is
+     *     malformed or over the dimension cap, the format is unsupported, or no IDAT data exists
+     */
+    private static PngStructure parsePngStructure(byte[] bytes, int maxTextureDim) {
         if (!hasPngSignature(bytes)) {
             return null;
         }
@@ -264,13 +289,88 @@ class TextureDecoder {
         if (needed > Integer.MAX_VALUE - 8) {
             return null;
         }
-        byte[] raw = new byte[(int) needed];
-        int produced = inflateAvailable(idat.toByteArray(), raw);
+        return new PngStructure(width, height, bitDepth, colorType, palette, transparency,
+            idat.toByteArray(), (int) stride);
+    }
+
+    /**
+     * Checksum-tolerant FULL decode tier: real server packs deliberately corrupt the Adler32
+     * trailer of every texture's (otherwise complete) IDAT zlib stream, which the vanilla
+     * client's stb_image-based loader never verifies. The payload is inflated raw - the 2-byte
+     * zlib header skipped, the trailer (missing or wrong) ignored entirely - and the decode
+     * succeeds only when every scanline inflates and unfilters completely, making the result
+     * pixel-identical to a strict decode of the same pixel data.
+     *
+     * @return the fully decoded image, or null when the bytes are not a manually-decodable PNG,
+     *     the stream is truncated or corrupt, or any scanline is malformed - the partial-salvage
+     *     tiers own everything short of a complete decode
+     */
+    private static BufferedImage readChecksumTolerant(byte[] bytes, int maxTextureDim) {
+        PngStructure png = parsePngStructure(bytes, maxTextureDim);
+        if (png == null) {
+            return null;
+        }
+        byte[] raw = png.newRawBuffer();
+        if (!inflateRawFully(png.idat(), raw)) {
+            return null;
+        }
+        return reconstructRows(raw, raw.length, png, true);
+    }
+
+    /**
+     * Inflates a zlib stream raw: the 2-byte header is validated minimally and skipped, and the
+     * Adler32 trailer is never read, so a missing or wrong checksum cannot fail the decode.
+     *
+     * @return true when the deflate payload produced exactly {@code out.length} bytes; false on
+     *     a non-deflate header, a truncated stream (the partial tiers own that case), corrupt
+     *     deflate data, or a payload of the wrong size
+     */
+    private static boolean inflateRawFully(byte[] compressed, byte[] out) {
+        // Minimal zlib header validation: CM (low nibble of CMF) must be 8 (deflate) and FDICT
+        // must be clear - PNG forbids preset dictionaries. The FCHECK bits are deliberately not
+        // verified; they guard a header that packs are known to ship damaged.
+        if (compressed.length < 2 || (compressed[0] & 0x0F) != 8 || (compressed[1] & 0x20) != 0) {
+            return false;
+        }
+        Inflater inflater = new Inflater(true);
+        inflater.setInput(compressed, 2, compressed.length - 2);
+        int produced = 0;
+        try {
+            while (produced < out.length && !inflater.finished()) {
+                int n = inflater.inflate(out, produced, out.length - produced);
+                produced += n;
+                if (n == 0 && (inflater.needsInput() || inflater.needsDictionary())) {
+                    return false;
+                }
+            }
+            return produced == out.length;
+        } catch (DataFormatException e) {
+            // Corrupt DEFLATE data, not just a bad trailer: never a full decode.
+            return false;
+        } finally {
+            inflater.end();
+        }
+    }
+
+    /**
+     * Final PNG-only fallback: inflates whatever IDAT bytes are present, reconstructs the
+     * complete scanlines and leaves missing rows fully transparent. Supports the same formats as
+     * {@link #parsePngStructure}.
+     *
+     * @return the salvaged image, or null when the bytes are not a PNG, use an unsupported
+     *     format, or are corrupt rather than merely truncated
+     */
+    private static BufferedImage salvageTruncatedPng(byte[] bytes, int maxTextureDim) {
+        PngStructure png = parsePngStructure(bytes, maxTextureDim);
+        if (png == null) {
+            return null;
+        }
+        byte[] raw = png.newRawBuffer();
+        int produced = inflateAvailable(png.idat(), raw);
         if (produced < 0) {
             return null;
         }
-        return reconstructRows(raw, produced, width, height, (int) stride, bitDepth, colorType,
-            palette, transparency);
+        return reconstructRows(raw, produced, png, false);
     }
 
     /**
@@ -302,23 +402,35 @@ class TextureDecoder {
         return produced;
     }
 
-    /** Unfilters every complete scanline and converts it to ARGB; missing rows stay transparent. */
-    private static BufferedImage reconstructRows(byte[] raw, int produced, int width, int height,
-                                                 int stride, int bitDepth, int colorType,
-                                                 byte[] palette, byte[] transparency) {
-        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+    /**
+     * Unfilters scanlines and converts them to ARGB. With {@code requireAllRows} (the
+     * checksum-tolerant full-decode tier) every row must be present and valid or the result is
+     * null; without it (the salvage tier) decoding stops at the first bad row and missing rows
+     * stay transparent.
+     */
+    private static BufferedImage reconstructRows(byte[] raw, int produced, PngStructure png,
+                                                 boolean requireAllRows) {
+        int stride = png.stride();
+        BufferedImage image = new BufferedImage(png.width(), png.height(), BufferedImage.TYPE_INT_ARGB);
         int rowBytes = stride + 1;
-        int completeRows = Math.min(height, produced / rowBytes);
-        int bytesPerPixel = Math.max(1, bitsPerPixel(colorType, bitDepth) / 8);
+        int completeRows = Math.min(png.height(), produced / rowBytes);
+        if (requireAllRows && completeRows < png.height()) {
+            return null;
+        }
+        int bytesPerPixel = Math.max(1, bitsPerPixel(png.colorType(), png.bitDepth()) / 8);
         byte[] previous = new byte[stride];
         byte[] current = new byte[stride];
         for (int y = 0; y < completeRows; y++) {
             int filterType = raw[y * rowBytes] & 0xFF;
             System.arraycopy(raw, y * rowBytes + 1, current, 0, stride);
             if (!unfilterRow(filterType, current, previous, bytesPerPixel)) {
+                if (requireAllRows) {
+                    // An unknown filter type means wrong data, never a complete valid image.
+                    return null;
+                }
                 break;
             }
-            writeRow(image, y, width, bitDepth, colorType, current, palette, transparency);
+            writeRow(image, y, png, current);
             byte[] swap = previous;
             previous = current;
             current = swap;
@@ -378,15 +490,21 @@ class TextureDecoder {
         return pb <= pc ? up : upLeft;
     }
 
-    private static void writeRow(BufferedImage image, int y, int width, int bitDepth, int colorType,
-                                 byte[] row, byte[] palette, byte[] transparency) {
+    private static void writeRow(BufferedImage image, int y, PngStructure png, byte[] row) {
+        int width = png.width();
+        int bitDepth = png.bitDepth();
+        byte[] palette = png.palette();
+        byte[] transparency = png.transparency();
         for (int x = 0; x < width; x++) {
             int argb;
-            switch (colorType) {
+            switch (png.colorType()) {
                 case COLOR_TYPE_PALETTE -> argb = paletteColor(sampleAt(row, x, bitDepth), palette, transparency);
                 case COLOR_TYPE_GRAY -> {
-                    int v = row[x] & 0xFF;
-                    int alpha = matchesTransparentSample(transparency, 0, v) ? 0 : 0xFF;
+                    int sample = sampleAt(row, x, bitDepth);
+                    // The tRNS sample is compared in the ORIGINAL bit depth's value space,
+                    // before expansion to 8 bits.
+                    int alpha = matchesTransparentSample(transparency, 0, sample) ? 0 : 0xFF;
+                    int v = scaleTo8Bit(sample, bitDepth);
                     argb = (alpha << 24) | (v << 16) | (v << 8) | v;
                 }
                 case COLOR_TYPE_GRAY_ALPHA -> {
@@ -436,12 +554,13 @@ class TextureDecoder {
         return (packed >> shift) & ((1 << bitDepth) - 1);
     }
 
-    /** Bits per pixel for the supported salvage subset, or -1 for unsupported combinations. */
+    /** Bits per pixel for the manually-decodable subset, or -1 for unsupported combinations. */
     private static int bitsPerPixel(int colorType, int bitDepth) {
         return switch (colorType) {
-            case COLOR_TYPE_PALETTE ->
+            // Palette and grayscale share the sub-byte packing rules; Wynncraft ships 1-bit
+            // grayscale font sheets, so low-depth gray is part of the real-world subset.
+            case COLOR_TYPE_PALETTE, COLOR_TYPE_GRAY ->
                 bitDepth == 1 || bitDepth == 2 || bitDepth == 4 || bitDepth == 8 ? bitDepth : -1;
-            case COLOR_TYPE_GRAY -> bitDepth == 8 ? 8 : -1;
             case COLOR_TYPE_GRAY_ALPHA -> bitDepth == 8 ? 16 : -1;
             case COLOR_TYPE_RGB -> bitDepth == 8 ? 24 : -1;
             case COLOR_TYPE_RGBA -> bitDepth == 8 ? 32 : -1;
@@ -481,6 +600,9 @@ class TextureDecoder {
     }
 
     private static BufferedImage toArgb(BufferedImage source) {
+        if (source.getColorModel().getColorSpace().getType() == ColorSpace.TYPE_GRAY) {
+            return grayToArgb(source);
+        }
         BufferedImage argb = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = argb.createGraphics();
         try {
@@ -492,6 +614,39 @@ class TextureDecoder {
             graphics.dispose();
         }
         return argb;
+    }
+
+    /**
+     * Manual ARGB conversion for grayscale sources, replicating each raw sample into the color
+     * channels. {@code drawImage} would color-manage the JDK's LINEAR gray color space into
+     * sRGB for gray+alpha images (gray 40 comes back as 110) while the TYPE_BYTE_GRAY fast blit
+     * copies tonal values straight across - and the game's stb-based loader always replicates
+     * the raw sample. Copying samples here keeps every gray variant and every decode tier
+     * agreeing with the game and with each other. Samples wider than 8 bits (16-bit gray PNGs)
+     * scale down linearly.
+     */
+    private static BufferedImage grayToArgb(BufferedImage source) {
+        Raster raster = source.getRaster();
+        boolean hasAlpha = source.getColorModel().hasAlpha();
+        int grayBits = source.getColorModel().getComponentSize(0);
+        int alphaBits = hasAlpha ? source.getColorModel().getComponentSize(1) : 8;
+        BufferedImage argb = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_ARGB);
+        for (int y = 0; y < source.getHeight(); y++) {
+            for (int x = 0; x < source.getWidth(); x++) {
+                int v = scaleTo8Bit(raster.getSample(x, y, 0), grayBits);
+                int alpha = hasAlpha ? scaleTo8Bit(raster.getSample(x, y, 1), alphaBits) : 0xFF;
+                argb.setRGB(x, y, (alpha << 24) | (v << 16) | (v << 8) | v);
+            }
+        }
+        return argb;
+    }
+
+    /** Scales a sample of the given bit width to 8 bits ({@code sample * 255 / maxSample}). */
+    private static int scaleTo8Bit(int sample, int bits) {
+        if (bits == 8) {
+            return sample;
+        }
+        return (int) ((long) sample * 255 / ((1L << bits) - 1));
     }
 
     /**

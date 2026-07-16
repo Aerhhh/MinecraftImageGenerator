@@ -3,6 +3,7 @@ package net.aerh.imagegenerator.pack;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import net.aerh.imagegenerator.exception.PackResolveException;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,8 +20,10 @@ import java.util.List;
  * double would miss exact-equality matches at non-dyadic thresholds like 0.7). Later equal
  * thresholds win, matching vanilla draw-order tie-breaking. {@code select} matches
  * {@code strings[index]} against its cases, and {@code condition} reads {@code flags[index]}
- * (false when missing). Every other boolean property evaluates false and every other numeric
- * property evaluates 0, exactly as before.
+ * (false when missing). {@code range_dispatch} nodes with {@code property: minecraft:damage}
+ * evaluate the supplied {@link ItemDamage} (see {@link #resolveGui(ItemModelNode,
+ * CustomModelData, ItemDamage)}); every other boolean property evaluates false and every other
+ * numeric property evaluates 0, exactly as before.
  *
  * <p>Tint sources stay UNevaluated on the returned {@link GuiModel}s: the two consuming branches
  * evaluate them with different strictness ({@link #evaluateTints} for elements renders, which
@@ -33,6 +36,8 @@ import java.util.List;
 class GuiModelResolver {
 
     private static final String CUSTOM_MODEL_DATA = "custom_model_data";
+    /** The {@code range_dispatch} property fed by {@link ItemDamage} (type prefix stripped). */
+    private static final String DAMAGE = "damage";
     /** The tint applied when a face's tintindex has no tint source: white, a no-op multiply. */
     static final int WHITE = 0xFFFFFF;
 
@@ -51,22 +56,37 @@ class GuiModelResolver {
 
     /**
      * Resolves the node tree against the supplied custom model data into the ordered model
-     * layers to composite, tint sources unevaluated (see the class javadoc).
+     * layers to composite, tint sources unevaluated (see the class javadoc), with no damage
+     * state ({@code minecraft:damage} dispatches evaluate 0).
      */
     public static List<GuiModel> resolveGui(ItemModelNode root, CustomModelData data) {
+        return resolveGui(root, data, null);
+    }
+
+    /**
+     * Resolves the node tree against the supplied custom model data and damage state.
+     * {@code range_dispatch} nodes with {@code property: minecraft:damage} read the damage
+     * value - normalized to the 0..1 damage fraction by default, raw when the node declares
+     * {@code normalize: false} - and a null {@code damage} evaluates the property at 0, the
+     * pre-damage-support behavior.
+     */
+    public static List<GuiModel> resolveGui(ItemModelNode root, CustomModelData data, @Nullable ItemDamage damage) {
         List<GuiModel> models = new ArrayList<>();
-        collect(root, data, models);
+        collect(root, data, damage, models);
         return List.copyOf(models);
     }
 
-    private static void collect(ItemModelNode node, CustomModelData data, List<GuiModel> out) {
+    private static void collect(ItemModelNode node, CustomModelData data, @Nullable ItemDamage damage,
+                                List<GuiModel> out) {
         switch (node) {
             case ItemModelNode.ModelLeaf leaf -> out.add(new GuiModel(leaf.modelRef(), leaf.tints()));
-            case ItemModelNode.ConditionNode condition -> collect(resolveCondition(condition, data), data, out);
-            case ItemModelNode.SelectNode select -> collect(resolveSelect(select, data), data, out);
-            case ItemModelNode.RangeDispatchNode range -> collect(resolveRangeDispatch(range, data), data, out);
+            case ItemModelNode.ConditionNode condition ->
+                collect(resolveCondition(condition, data), data, damage, out);
+            case ItemModelNode.SelectNode select -> collect(resolveSelect(select, data), data, damage, out);
+            case ItemModelNode.RangeDispatchNode range ->
+                collect(resolveRangeDispatch(range, data, damage), data, damage, out);
             case ItemModelNode.CompositeNode composite -> composite.models()
-                .forEach(child -> collect(child, data, out));
+                .forEach(child -> collect(child, data, damage, out));
             case ItemModelNode.UnsupportedNode unsupported -> throw new PackResolveException(
                 "Item definition uses unsupported node type '%s'", unsupported.type());
         }
@@ -107,7 +127,8 @@ class GuiModelResolver {
             select.property());
     }
 
-    private static ItemModelNode resolveRangeDispatch(ItemModelNode.RangeDispatchNode range, CustomModelData data) {
+    private static ItemModelNode resolveRangeDispatch(ItemModelNode.RangeDispatchNode range, CustomModelData data,
+                                                      @Nullable ItemDamage damage) {
         // Float precision throughout, matching vanilla exactly: thresholds, scale and property
         // values are all floats in the client, and exact-equality matches (the "threshold 0.7
         // with value 0.7f" case) only work when neither side is widened to double. A missing
@@ -119,6 +140,8 @@ class GuiModelResolver {
             float raw = range.index() >= 0 && range.index() < data.floats().size()
                 ? data.floats().get(range.index()) : 0.0f;
             value = raw * (float) range.scale();
+        } else if (DAMAGE.equals(range.property())) {
+            value = damageValue(range, damage) * (float) range.scale();
         } else {
             // Every other numeric property evaluates 0 for a static GUI render.
             value = 0.0f;
@@ -141,6 +164,32 @@ class GuiModelResolver {
                 range.property());
         }
         return result;
+    }
+
+    /**
+     * The {@code minecraft:damage} property value before scaling, in float precision like
+     * vanilla's damage property:
+     *
+     * <ul>
+     * <li>{@code normalize: true} (the vanilla default) divides damage by max damage and clamps
+     *     to 0..1; a max damage of 0 evaluates 0 instead of the 0/0 NaN vanilla's division
+     *     would produce (NaN matches no threshold, so the practical outcome - the fallback for
+     *     any positive threshold - is unchanged, without the NaN leaking further).</li>
+     * <li>{@code normalize: false} evaluates the raw damage; vanilla clamps it to
+     *     0..maxDamage, which the {@link ItemDamage} invariants already guarantee.</li>
+     * <li>No damage supplied evaluates 0 - the pre-damage-support behavior for every
+     *     range_dispatch.</li>
+     * </ul>
+     */
+    private static float damageValue(ItemModelNode.RangeDispatchNode range, @Nullable ItemDamage damage) {
+        if (damage == null) {
+            return 0.0f;
+        }
+        if (range.normalize()) {
+            return damage.maxDamage() == 0 ? 0.0f
+                : Math.clamp((float) damage.damage() / damage.maxDamage(), 0.0f, 1.0f);
+        }
+        return damage.damage();
     }
 
     /**
@@ -176,6 +225,8 @@ class GuiModelResolver {
                 case ItemModelNode.TintSpec.CustomModelDataTint cmd ->
                     cmd.index() >= 0 && cmd.index() < data.colors().size()
                         ? data.colors().get(cmd.index()) & WHITE : cmd.defaultRgb();
+                // No per-item dye data exists in this library, so the required default applies.
+                case ItemModelNode.TintSpec.Dye dye -> dye.defaultRgb();
                 case ItemModelNode.TintSpec.Unsupported unsupported -> {
                     if (failOnUnsupported) {
                         throw new PackResolveException(

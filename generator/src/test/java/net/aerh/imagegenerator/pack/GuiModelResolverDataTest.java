@@ -28,6 +28,12 @@ class GuiModelResolverDataTest {
             .toList();
     }
 
+    private static List<String> refs(ItemModelNode node, CustomModelData data, ItemDamage damage) {
+        return GuiModelResolver.resolveGui(node, data, damage).stream()
+            .map(GuiModelResolver.GuiModel::modelRef)
+            .toList();
+    }
+
     @Test
     void rangeDispatchPicksGreatestThresholdAtOrBelowValue() {
         // Deliberately unsorted entries: vanilla sorts by threshold, so picking must be by
@@ -112,6 +118,62 @@ class GuiModelResolverDataTest {
     }
 
     @Test
+    void damageDispatchNormalizedReadsTheDamageFraction() {
+        // normalize:true (the RangeDispatchNode default): the property reads damage/maxDamage.
+        ItemModelNode node = new ItemModelNode.RangeDispatchNode("damage", 0, 1.0,
+            List.of(new ItemModelNode.RangeDispatchNode.Entry(0.25, LOW),
+                new ItemModelNode.RangeDispatchNode.Entry(0.75, HIGH)), FALLBACK);
+        assertEquals(List.of("t:low"),
+            refs(node, CustomModelData.EMPTY, new ItemDamage(50, 100)), "0.5 crosses 0.25 only");
+        assertEquals(List.of("t:high"),
+            refs(node, CustomModelData.EMPTY, new ItemDamage(75, 100)), "exactly 0.75 matches");
+        assertEquals(List.of("t:fallback"),
+            refs(node, CustomModelData.EMPTY, new ItemDamage(0, 100)));
+    }
+
+    @Test
+    void damageDispatchRawReadsTheUnnormalizedValue() {
+        ItemModelNode node = new ItemModelNode.RangeDispatchNode("damage", 0, 1.0, false,
+            List.of(new ItemModelNode.RangeDispatchNode.Entry(3.0, HIGH)), FALLBACK);
+        assertEquals(List.of("t:high"), refs(node, CustomModelData.EMPTY, new ItemDamage(3, 100)));
+        assertEquals(List.of("t:fallback"), refs(node, CustomModelData.EMPTY, new ItemDamage(2, 100)),
+            "raw damage 2 misses the raw threshold 3");
+    }
+
+    @Test
+    void damageDispatchAppliesScale() {
+        ItemModelNode node = new ItemModelNode.RangeDispatchNode("damage", 0, 2.0,
+            List.of(new ItemModelNode.RangeDispatchNode.Entry(1.0, HIGH)), FALLBACK);
+        assertEquals(List.of("t:high"), refs(node, CustomModelData.EMPTY, new ItemDamage(50, 100)),
+            "0.5 * scale 2 = 1.0 meets the threshold");
+    }
+
+    @Test
+    void damageDispatchWithoutDamageEvaluatesAtZero() {
+        ItemModelNode node = new ItemModelNode.RangeDispatchNode("damage", 0, 1.0,
+            List.of(new ItemModelNode.RangeDispatchNode.Entry(0.0, MID),
+                new ItemModelNode.RangeDispatchNode.Entry(0.5, HIGH)), FALLBACK);
+        assertEquals(List.of("t:mid"), refs(node, CustomModelData.EMPTY),
+            "the damage-less overload evaluates the property at 0, the pre-damage behavior");
+        assertEquals(List.of("t:mid"), refs(node, CustomModelData.EMPTY, null));
+    }
+
+    @Test
+    void damageDispatchZeroMaxDamageEvaluatesAtZeroNotNaN() {
+        ItemModelNode node = new ItemModelNode.RangeDispatchNode("damage", 0, 1.0,
+            List.of(new ItemModelNode.RangeDispatchNode.Entry(0.0, MID)), FALLBACK);
+        assertEquals(List.of("t:mid"), refs(node, CustomModelData.EMPTY, new ItemDamage(0, 0)),
+            "0/0 must read 0 (matching the 0.0 threshold), never NaN (which matches nothing)");
+    }
+
+    @Test
+    void itemDamageValidatesItsRange() {
+        assertThrows(IllegalArgumentException.class, () -> new ItemDamage(-1, 10));
+        assertThrows(IllegalArgumentException.class, () -> new ItemDamage(0, -1));
+        assertThrows(IllegalArgumentException.class, () -> new ItemDamage(11, 10));
+    }
+
+    @Test
     void selectMatchesTheIndexedString() {
         ItemModelNode node = new ItemModelNode.SelectNode("custom_model_data", 0,
             List.of(new ItemModelNode.SelectNode.Case(Set.of("ruby"), LOW),
@@ -182,19 +244,28 @@ class GuiModelResolverDataTest {
     }
 
     @Test
+    void dyeTintEvaluatesToItsDefault() {
+        // No per-item dye data exists in this library, so the required default always applies -
+        // on the strict AND the lenient path.
+        List<ItemModelNode.TintSpec> tints = List.of(new ItemModelNode.TintSpec.Dye(0x3366FF));
+        assertEquals(List.of(0x3366FF), GuiModelResolver.evaluateTints(tints, CustomModelData.EMPTY));
+        assertEquals(List.of(0x3366FF), GuiModelResolver.evaluateTintsLenient(tints, CustomModelData.EMPTY));
+    }
+
+    @Test
     void unsupportedTintSourceThrowsOnStrictEvaluation() {
-        List<ItemModelNode.TintSpec> tints = List.of(new ItemModelNode.TintSpec.Unsupported("dye"));
+        List<ItemModelNode.TintSpec> tints = List.of(new ItemModelNode.TintSpec.Unsupported("team"));
         PackResolveException exception = assertThrows(PackResolveException.class,
             () -> GuiModelResolver.evaluateTints(tints, CustomModelData.EMPTY));
-        assertTrue(exception.getMessage().contains("dye"));
+        assertTrue(exception.getMessage().contains("team"));
     }
 
     @Test
     void unsupportedTintSourceIsWhiteOnLenientEvaluation() {
-        // The flat sprite branch rendered dye/potion-tinted items fine (untinted) before tint
+        // The flat sprite branch rendered team/potion-tinted items fine (untinted) before tint
         // parsing existed; lenient evaluation preserves that instead of hard-failing.
         List<ItemModelNode.TintSpec> tints = List.of(
-            new ItemModelNode.TintSpec.Unsupported("dye"),
+            new ItemModelNode.TintSpec.Unsupported("team"),
             new ItemModelNode.TintSpec.Constant(0xFF8000));
         assertEquals(List.of(0xFFFFFF, 0xFF8000),
             GuiModelResolver.evaluateTintsLenient(tints, CustomModelData.EMPTY),
@@ -206,9 +277,9 @@ class GuiModelResolverDataTest {
         // Resolution must not evaluate tints: the sprite and elements branches apply different
         // strictness, so an unsupported source may not throw before the branch is known.
         ItemModelNode node = new ItemModelNode.ModelLeaf("t:x",
-            List.of(new ItemModelNode.TintSpec.Unsupported("dye")));
+            List.of(new ItemModelNode.TintSpec.Unsupported("team")));
         List<GuiModelResolver.GuiModel> models = GuiModelResolver.resolveGui(node, CustomModelData.EMPTY);
-        assertEquals(List.of(new ItemModelNode.TintSpec.Unsupported("dye")), models.get(0).tints());
+        assertEquals(List.of(new ItemModelNode.TintSpec.Unsupported("team")), models.get(0).tints());
     }
 
     @Test

@@ -78,6 +78,9 @@ class PackJsonParser {
                 case "custom_model_data" -> new ItemModelNode.TintSpec.CustomModelDataTint(
                     optionalIndex(tint),
                     tint.has("default") ? requireColor(tint, "default") : GuiModelResolver.WHITE);
+                // The dye default is REQUIRED per the vanilla format; requireColor fails loudly
+                // when it is absent.
+                case "dye" -> new ItemModelNode.TintSpec.Dye(requireColor(tint, "default"));
                 default -> new ItemModelNode.TintSpec.Unsupported(type);
             });
         }
@@ -146,8 +149,9 @@ class PackJsonParser {
                     parseNode(requireObject(entryObject, "model"))));
             }
         }
+        // normalize defaults TRUE, the vanilla minecraft:damage default (damage fraction).
         return new ItemModelNode.RangeDispatchNode(property, optionalIndex(node), scale,
-            List.copyOf(entries), parseFallback(node));
+            optionalBoolean(node, "normalize", true), List.copyOf(entries), parseFallback(node));
     }
 
     private static ItemModelNode parseComposite(JsonObject node) {
@@ -453,9 +457,13 @@ class PackJsonParser {
     }
 
     private static boolean optionalBoolean(JsonObject node, String member) {
+        return optionalBoolean(node, member, false);
+    }
+
+    private static boolean optionalBoolean(JsonObject node, String member, boolean defaultValue) {
         JsonElement element = node.get(member);
         if (element == null || element.isJsonNull()) {
-            return false;
+            return defaultValue;
         }
         if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isBoolean()) {
             throw new PackLoadException("Expected boolean for member '%s'", member);

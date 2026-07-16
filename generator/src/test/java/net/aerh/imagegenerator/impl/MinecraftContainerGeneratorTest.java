@@ -3,6 +3,7 @@ package net.aerh.imagegenerator.impl;
 import net.aerh.imagegenerator.cache.GeneratorCacheKey;
 import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.item.InventoryItem;
+import net.aerh.imagegenerator.pack.CustomModelData;
 import net.aerh.imagegenerator.pack.PackId;
 import net.aerh.imagegenerator.pack.PackLimits;
 import net.aerh.imagegenerator.pack.PackRepository;
@@ -636,14 +637,17 @@ class MinecraftContainerGeneratorTest {
         InventoryItem enchanted = new InventoryItem(3, 1, "stone", "enchant", null);
         InventoryItem damaged = new InventoryItem(4, 1, "stone", null, 50);
 
-        BufferedImage firstImage = generator.resolveItemImage(first, null);
+        BufferedImage firstImage = generator.resolveItemImage(first, CustomModelData.EMPTY, null);
         assertNotNull(firstImage, "the pipeline yields an image for stone");
-        assertSame(firstImage, generator.resolveItemImage(second, null),
+        assertSame(firstImage, generator.resolveItemImage(second, CustomModelData.EMPTY, null),
             "identical specs reuse one generated visual within a render");
-        assertNotSame(firstImage, generator.resolveItemImage(enchanted, null),
+        assertNotSame(firstImage, generator.resolveItemImage(enchanted, CustomModelData.EMPTY, null),
             "different modifiers must not share a cached visual");
-        assertNotSame(firstImage, generator.resolveItemImage(damaged, null),
+        assertNotSame(firstImage, generator.resolveItemImage(damaged, CustomModelData.EMPTY, null),
             "different durability must not share a cached visual");
+        // Custom model data also enters the key; that participation is pinned end to end by
+        // MinecraftContainerGeneratorElementsTest#slotCustomModelDataDrivesFlatSpriteDispatch,
+        // where one spec renders two different sprites in one render.
     }
 
     // ------------------------------------------------------------- cache keys

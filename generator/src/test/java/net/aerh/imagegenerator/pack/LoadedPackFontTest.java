@@ -115,10 +115,24 @@ class LoadedPackFontTest {
     }
 
     @Test
-    void missingFontTextureFailsLoudly() {
-        PackResolveException exception = assertThrows(PackResolveException.class,
-            () -> pack.resolveFont("testpack:notexture"));
-        assertTrue(exception.getMessage().contains("missing.png"));
+    void allAbsentSheetsStillResolveAsAnEmptyFont() {
+        // Deviation from vanilla, documented on resolveFont: absent sheets skip their provider
+        // rather than failing the font; a font whose providers ALL skip resolves empty.
+        PackFont font = pack.resolveFont("testpack:notexture").orElseThrow();
+        assertEquals(Optional.empty(), font.glyph('A'));
+        assertEquals(List.of(), font.mappedCodePoints());
+    }
+
+    @Test
+    void absentSheetProviderSkipsWhilePresentProvidersServe() {
+        // mixed_sheets lists the absent-sheet provider FIRST with chars "AC": after the skip,
+        // 'A' falls through to the present pixel.png provider, 'C' (absent-only) is unmapped,
+        // and the trailing space provider survives untouched.
+        PackFont font = pack.resolveFont("testpack:mixed_sheets").orElseThrow();
+        assertEquals(7.0f, font.advanceOf('A', false), "'A' is served by the present sheet after the skip");
+        assertEquals(1.0f, font.advanceOf('B', false), "empty cell of the present sheet");
+        assertEquals(Optional.empty(), font.glyph('C'), "codepoints only the absent provider mapped stay unmapped");
+        assertEquals(OptionalDouble.of(2.0), font.spaceAdvance(' '));
     }
 
     @Test

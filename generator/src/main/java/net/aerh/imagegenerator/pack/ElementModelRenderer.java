@@ -20,7 +20,17 @@ import java.util.Map;
  * (translation last), with translation clamped to +-80 model units and scale to +-4. One model
  * unit covers one GUI px at scale 1. Supported gui rotations: identity (|y| &lt;= 5 degrees with
  * x = z = 0, absorbing MCC's decorative 2-degree tilts) and the horizontal mirror (|y| within 5
- * degrees of 180 with x = z = 0). Anything else throws {@link PackResolveException}.
+ * degrees of 180 with x = z = 0). Anything else throws {@link PackResolveException} - unless
+ * the render opts into approximation (below).
+ *
+ * <p><b>Approximate rotations (opt-in):</b> with {@code approximateRotations} set, an
+ * unsupported gui rotation renders as the nearest flat projection instead of throwing: the
+ * axis-aligned view (front or mirror) whose facing normal stays closest to the rotated view
+ * direction is chosen - front when {@code cos(rx) * cos(ry) >= 0} (rotation about z never moves
+ * the z axis), mirror otherwise, with edge-on rotations (cos product exactly 0) approximating
+ * as front. Fidelity limits: the rotation itself is DROPPED - no foreshortening, no in-plane
+ * spin from the z component, no interplay with translation - so decoratively tilted flat art
+ * looks right while genuinely 3D presentations render as their nearest flat face.
  *
  * <p><b>Painting:</b> each element contributes the face pointing toward the viewer after the
  * transform (south normally; north under a mirror or a negative z scale; an element with
@@ -41,6 +51,24 @@ import java.util.Map;
 @Slf4j
 @UtilityClass
 class ElementModelRenderer {
+
+    /**
+     * Maximum elements one model may contribute to a GUI render. Real UI packs stack dozens of
+     * quads per model (Wynncraft-class item skins run to a few hundred); 4096 leaves generous
+     * headroom while bounding the per-face work a crafted many-element model can demand.
+     * Renders over the cap fail with a loud {@link PackResolveException}.
+     */
+    static final int MAX_ELEMENTS_PER_MODEL = 4_096;
+
+    /**
+     * Maximum total pixel area one render may touch, in canvas px: the canvas allocation plus
+     * every face's clipped paint rect. Legitimate renders stay far below this - a fully
+     * oversized 64-GUI-px canvas at 32 px per GUI px is about 4.2M px - while a crafted model
+     * (huge element coordinates exploding the oversized canvas, or thousands of full-canvas
+     * faces) fails with a loud {@link PackResolveException} instead of exhausting memory or
+     * CPU. Checked BEFORE the canvas is allocated.
+     */
+    static final long MAX_PAINTED_AREA_PX = 64L * 1024 * 1024;
 
     /** GUI px per slot box side; also model units per slot at display scale 1. */
     private static final int SLOT_UNITS = 16;
@@ -79,28 +107,58 @@ class ElementModelRenderer {
                              ModelElement element, ModelInstance model) {
     }
 
+    /** A face's clipped pixel coverage on the canvas, half-open, in canvas-space px. */
+    private record PaintRect(int startX, int startY, int endX, int endY) {
+
+        long area() {
+            return (long) (endX - startX) * (endY - startY);
+        }
+    }
+
     /**
-     * Renders the models into one canvas at {@code pixelsPerGuiPx}.
-     *
-     * @param models         resolved models; faces z-sort across the WHOLE composite (vanilla
-     *                       depth-tests all models of an item into one buffer), ties keeping
-     *                       composite-then-JSON order
-     * @param pixelsPerGuiPx target resolution, canvas px per GUI px (and per model unit)
-     * @param oversized      when false the canvas is the clipped 16-GUI-px slot box; when true
-     *                       it expands to the union of the slot box and the art's extent
-     * @param textures       texture loader (item-capped decode path)
-     * @param context        item ref and pack id for error messages
-     * @throws PackResolveException on a non-zero element rotation, an unsupported gui rotation,
-     *                              or an unresolvable face texture reference
+     * Renders the models into one canvas at {@code pixelsPerGuiPx} with strict rotation
+     * handling (unsupported gui rotations throw). See the four-argument overload for the
+     * approximate-rotation variant.
      */
     static Raster render(List<ModelInstance> models, int pixelsPerGuiPx, boolean oversized,
                          TextureLookup textures, String context) {
+        return render(models, pixelsPerGuiPx, oversized, false, textures, context);
+    }
+
+    /**
+     * Renders the models into one canvas at {@code pixelsPerGuiPx}.
+     *
+     * @param models               resolved models; faces z-sort across the WHOLE composite
+     *                             (vanilla depth-tests all models of an item into one buffer),
+     *                             ties keeping composite-then-JSON order
+     * @param pixelsPerGuiPx       target resolution, canvas px per GUI px (and per model unit)
+     * @param oversized            when false the canvas is the clipped 16-GUI-px slot box; when
+     *                             true it expands to the union of the slot box and the art's
+     *                             extent
+     * @param approximateRotations when true, unsupported gui rotations render the nearest flat
+     *                             projection instead of throwing (see the class javadoc for the
+     *                             fidelity limits)
+     * @param textures             texture loader (item-capped decode path)
+     * @param context              item ref and pack id for error messages
+     * @throws PackResolveException on a non-zero element rotation, an unsupported gui rotation
+     *                              (unless {@code approximateRotations} is set), an
+     *                              unresolvable face texture reference, a model over
+     *                              {@link #MAX_ELEMENTS_PER_MODEL} or a render over
+     *                              {@link #MAX_PAINTED_AREA_PX}
+     */
+    static Raster render(List<ModelInstance> models, int pixelsPerGuiPx, boolean oversized,
+                         boolean approximateRotations, TextureLookup textures, String context) {
         if (pixelsPerGuiPx < 1) {
             throw new IllegalArgumentException("pixelsPerGuiPx must be at least 1, got: " + pixelsPerGuiPx);
         }
         List<PaintFace> faces = new ArrayList<>();
         for (ModelInstance model : models) {
-            faces.addAll(collectPaintFaces(model, context));
+            if (model.elements().size() > MAX_ELEMENTS_PER_MODEL) {
+                throw new PackResolveException(
+                    "Model declares %s elements, exceeding the %s-element GUI render cap (%s)",
+                    String.valueOf(model.elements().size()), String.valueOf(MAX_ELEMENTS_PER_MODEL), context);
+            }
+            faces.addAll(collectPaintFaces(model, approximateRotations, context));
         }
         // Back-to-front by transformed visible-face z across the whole composite: vanilla
         // renders every model of an item into one depth-tested buffer, so a nearer quad from an
@@ -121,16 +179,45 @@ class ElementModelRenderer {
             }
         }
 
+        // Extreme extents saturate the int casts; the area cap below rejects them before any
+        // allocation happens, so saturation never silently distorts a render that survives.
         int leftPx = oversized ? (int) Math.floor(minGuiX * pixelsPerGuiPx) : 0;
         int topPx = oversized ? (int) Math.floor(minGuiY * pixelsPerGuiPx) : 0;
         int rightPx = oversized ? (int) Math.ceil(maxGuiX * pixelsPerGuiPx) : SLOT_UNITS * pixelsPerGuiPx;
         int bottomPx = oversized ? (int) Math.ceil(maxGuiY * pixelsPerGuiPx) : SLOT_UNITS * pixelsPerGuiPx;
 
+        // Total-area cap, checked BEFORE the canvas allocation: the canvas itself plus every
+        // face's clipped paint rect. Width and height are bounded individually first so the
+        // area products below cannot overflow long.
+        long canvasWidth = (long) rightPx - leftPx;
+        long canvasHeight = (long) bottomPx - topPx;
+        if (canvasWidth > MAX_PAINTED_AREA_PX || canvasHeight > MAX_PAINTED_AREA_PX) {
+            // Checked before the product so a saturated-int extent cannot overflow long.
+            throw paintedAreaExceeded(context);
+        }
+        long paintedArea = canvasWidth * canvasHeight;
+        if (paintedArea > MAX_PAINTED_AREA_PX) {
+            throw paintedAreaExceeded(context);
+        }
+        List<PaintRect> rects = new ArrayList<>(faces.size());
+        for (PaintFace face : faces) {
+            PaintRect rect = clippedCoverage(face, pixelsPerGuiPx, leftPx, topPx, rightPx, bottomPx);
+            rects.add(rect);
+            if (rect != null) {
+                paintedArea += rect.area();
+                if (paintedArea > MAX_PAINTED_AREA_PX) {
+                    throw paintedAreaExceeded(context);
+                }
+            }
+        }
+
         BufferedImage canvas = new BufferedImage(rightPx - leftPx, bottomPx - topPx, BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = canvas.createGraphics();
         try {
-            for (PaintFace face : faces) {
-                paintFace(graphics, face, pixelsPerGuiPx, leftPx, topPx, rightPx, bottomPx, textures, context);
+            for (int i = 0; i < faces.size(); i++) {
+                if (rects.get(i) != null) {
+                    paintFace(graphics, faces.get(i), rects.get(i), pixelsPerGuiPx, leftPx, topPx, textures, context);
+                }
             }
         } finally {
             graphics.dispose();
@@ -138,9 +225,38 @@ class ElementModelRenderer {
         return new Raster(canvas, leftPx, topPx);
     }
 
-    private static List<PaintFace> collectPaintFaces(ModelInstance model, String context) {
+    private static PackResolveException paintedAreaExceeded(String context) {
+        return new PackResolveException(
+            "Rendering would paint more than %s canvas px; refusing the render (%s)",
+            String.valueOf(MAX_PAINTED_AREA_PX), context);
+    }
+
+    /**
+     * The face's clipped pixel coverage on the canvas, null when it covers no pixel. Half-open
+     * pixel coverage by centers: pixel px is covered when
+     * {@code left <= (px + 0.5) / scale < right}, so adjacent faces sharing an edge never
+     * double-paint a pixel column.
+     */
+    private static PaintRect clippedCoverage(PaintFace paint, int pixelsPerGuiPx,
+                                             int canvasLeftPx, int canvasTopPx, int canvasRightPx, int canvasBottomPx) {
+        int startX = (int) Math.ceil(paint.leftGui() * pixelsPerGuiPx - 0.5);
+        int endX = (int) Math.ceil(paint.rightGui() * pixelsPerGuiPx - 0.5);
+        int startY = (int) Math.ceil(paint.topGui() * pixelsPerGuiPx - 0.5);
+        int endY = (int) Math.ceil(paint.bottomGui() * pixelsPerGuiPx - 0.5);
+        startX = Math.max(startX, canvasLeftPx);
+        endX = Math.min(endX, canvasRightPx);
+        startY = Math.max(startY, canvasTopPx);
+        endY = Math.min(endY, canvasBottomPx);
+        if (startX >= endX || startY >= endY) {
+            return null;
+        }
+        return new PaintRect(startX, startY, endX, endY);
+    }
+
+    private static List<PaintFace> collectPaintFaces(ModelInstance model, boolean approximateRotations,
+                                                     String context) {
         GuiTransform transform = model.transform();
-        boolean mirrored = isMirrored(transform, context);
+        boolean mirrored = isMirrored(transform, approximateRotations, context);
         double translationX = clamp(transform.translationX(), TRANSLATION_LIMIT);
         double translationY = clamp(transform.translationY(), TRANSLATION_LIMIT);
         double translationZ = clamp(transform.translationZ(), TRANSLATION_LIMIT);
@@ -189,11 +305,16 @@ class ElementModelRenderer {
     }
 
     /**
-     * Classifies the gui rotation as identity or horizontal mirror, throwing on anything else.
-     * Rotations within {@value #ROTATION_TOLERANCE_DEGREES} degrees of 0 or 180 about y (with
-     * zero x and z) snap to the nearest supported case, absorbing MCC's decorative tilts.
+     * Classifies the gui rotation as identity or horizontal mirror. Rotations within
+     * {@value #ROTATION_TOLERANCE_DEGREES} degrees of 0 or 180 about y (with zero x and z) snap
+     * to the nearest supported case, absorbing MCC's decorative tilts. Anything else throws -
+     * or, with {@code approximate} set, picks the nearest flat projection: the rotated south
+     * (+z) normal keeps a positive screen-z component exactly when
+     * {@code cos(rx) * cos(ry) >= 0} (rotation about z never moves the z axis), so the front
+     * view is nearest then and the mirrored back view otherwise. Edge-on rotations (cos product
+     * exactly 0) approximate as the front view.
      */
-    private static boolean isMirrored(GuiTransform transform, String context) {
+    private static boolean isMirrored(GuiTransform transform, boolean approximate, String context) {
         if (transform.rotationX() == 0 && transform.rotationZ() == 0) {
             double y = Math.abs(transform.rotationY());
             if (y <= ROTATION_TOLERANCE_DEGREES) {
@@ -203,28 +324,25 @@ class ElementModelRenderer {
                 return true;
             }
         }
+        if (approximate) {
+            log.debug("Approximating gui rotation [{}, {}, {}] with its nearest flat projection ({})",
+                transform.rotationX(), transform.rotationY(), transform.rotationZ(), context);
+            return Math.cos(Math.toRadians(transform.rotationX()))
+                * Math.cos(Math.toRadians(transform.rotationY())) < 0;
+        }
         throw new PackResolveException(
             "Unsupported gui rotation [%s, %s, %s]: only identity and the (0, 180, 0) mirror render in the flat GUI projection (%s)",
             String.valueOf(transform.rotationX()), String.valueOf(transform.rotationY()),
             String.valueOf(transform.rotationZ()), context);
     }
 
-    private static void paintFace(Graphics2D graphics, PaintFace paint, int pixelsPerGuiPx,
-                                  int canvasLeftPx, int canvasTopPx, int canvasRightPx, int canvasBottomPx,
+    private static void paintFace(Graphics2D graphics, PaintFace paint, PaintRect rect, int pixelsPerGuiPx,
+                                  int canvasLeftPx, int canvasTopPx,
                                   TextureLookup textures, String context) {
-        // Half-open pixel coverage by centers: pixel px is covered when left <= (px + 0.5) / s < right,
-        // so adjacent faces sharing an edge never double-paint a pixel column.
-        int startX = (int) Math.ceil(paint.leftGui() * pixelsPerGuiPx - 0.5);
-        int endX = (int) Math.ceil(paint.rightGui() * pixelsPerGuiPx - 0.5);
-        int startY = (int) Math.ceil(paint.topGui() * pixelsPerGuiPx - 0.5);
-        int endY = (int) Math.ceil(paint.bottomGui() * pixelsPerGuiPx - 0.5);
-        startX = Math.max(startX, canvasLeftPx);
-        endX = Math.min(endX, canvasRightPx);
-        startY = Math.max(startY, canvasTopPx);
-        endY = Math.min(endY, canvasBottomPx);
-        if (startX >= endX || startY >= endY) {
-            return;
-        }
+        int startX = rect.startX();
+        int endX = rect.endX();
+        int startY = rect.startY();
+        int endY = rect.endY();
 
         BufferedImage texture = textures.load(resolveTextureRef(paint.face().textureRef(), paint.model().textures(), context));
         ModelElement element = paint.element();

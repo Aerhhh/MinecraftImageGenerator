@@ -200,4 +200,84 @@ class MinecraftItemGeneratorModelTest {
         MinecraftItemGenerator viaModel = packBuilder().withItemModel("testpack:item/flat").build();
         assertNotEquals(GeneratorCacheKey.fromGenerator(viaItem), GeneratorCacheKey.fromGenerator(viaModel));
     }
+
+    @Test
+    void withItemDamageDrivesNormalizedDamageDispatch() {
+        BufferedImage worn = packBuilder().withItem("testpack:item/worn")
+            .withItemDamage(90, 100).build().generate().getImage();
+        assertEquals(0xFF0000FF, worn.getRGB(128, 128), "0.9 crosses the 0.75 threshold");
+
+        BufferedImage lightlyWorn = packBuilder().withItem("testpack:item/worn")
+            .withItemDamage(50, 100).build().generate().getImage();
+        assertEquals(0xFF00FF00, lightlyWorn.getRGB(128, 128), "0.5 crosses the 0.25 threshold only");
+
+        BufferedImage pristine = packBuilder().withItem("testpack:item/worn").build().generate().getImage();
+        assertEquals(0xFF808080, pristine.getRGB(128, 128), "unset damage evaluates the property at 0");
+    }
+
+    @Test
+    void withItemDamageDrivesRawDamageDispatch() {
+        BufferedImage broken = packBuilder().withItem("testpack:item/worn_raw")
+            .withItemDamage(3, 100).build().generate().getImage();
+        assertEquals(0xFFFF0000, broken.getRGB(128, 128), "raw damage 3 meets the raw threshold 3");
+
+        BufferedImage nearlyNew = packBuilder().withItem("testpack:item/worn_raw")
+            .withItemDamage(2, 100).build().generate().getImage();
+        assertEquals(0xFF808080, nearlyNew.getRGB(128, 128));
+    }
+
+    @Test
+    void withItemDamageValidatesItsArguments() {
+        assertThrows(IllegalArgumentException.class,
+            () -> new MinecraftItemGenerator.Builder().withItemDamage(-1, 10));
+        assertThrows(IllegalArgumentException.class,
+            () -> new MinecraftItemGenerator.Builder().withItemDamage(0, -1));
+        assertThrows(IllegalArgumentException.class,
+            () -> new MinecraftItemGenerator.Builder().withItemDamage(11, 10));
+    }
+
+    @Test
+    void cacheKeysDifferAcrossItemDamage() {
+        MinecraftItemGenerator pristine = packBuilder().withItem("testpack:item/worn").build();
+        MinecraftItemGenerator zeroOfMax = packBuilder().withItem("testpack:item/worn")
+            .withItemDamage(0, 100).build();
+        MinecraftItemGenerator worn = packBuilder().withItem("testpack:item/worn")
+            .withItemDamage(90, 100).build();
+        assertNotEquals(GeneratorCacheKey.fromGenerator(pristine), GeneratorCacheKey.fromGenerator(worn),
+            "item damage must enter the render cache key");
+        assertNotEquals(GeneratorCacheKey.fromGenerator(pristine), GeneratorCacheKey.fromGenerator(zeroOfMax),
+            "unset damage and damage 0/100 are distinct configurations");
+        assertNotEquals(GeneratorCacheKey.fromGenerator(zeroOfMax), GeneratorCacheKey.fromGenerator(worn));
+    }
+
+    @Test
+    void approximateGuiRotationsRenderTheUnsupportedRotation() {
+        // [30,225,0] picks the mirrored back view (cos 30 * cos 225 < 0): identical pixels to
+        // the explicit (0,180,0) mirror of the same model.
+        BufferedImage approximated = packBuilder().withItem("testpack:item/badspin")
+            .withApproximateGuiRotations(true).build().generate().getImage();
+        BufferedImage mirrored = packBuilder().withItem("testpack:item/mirrored").build()
+            .generate().getImage();
+        ImageAssertions.assertPixelsEqual(mirrored, approximated, "approximated [30,225,0]");
+
+        BufferedImage repeat = packBuilder().withItem("testpack:item/badspin")
+            .withApproximateGuiRotations(true).build().generate().getImage();
+        ImageAssertions.assertPixelsEqual(approximated, repeat, "approximation is deterministic");
+    }
+
+    @Test
+    void unsupportedRotationStillThrowsWithoutTheFlag() {
+        assertThrows(PackResolveException.class,
+            () -> packBuilder().withItem("testpack:item/badspin")
+                .withApproximateGuiRotations(false).build().generate());
+    }
+
+    @Test
+    void cacheKeysDifferAcrossApproximateGuiRotations() {
+        MinecraftItemGenerator strict = packBuilder().withItem("testpack:item/badspin").build();
+        MinecraftItemGenerator approximate = packBuilder().withItem("testpack:item/badspin")
+            .withApproximateGuiRotations(true).build();
+        assertNotEquals(GeneratorCacheKey.fromGenerator(strict), GeneratorCacheKey.fromGenerator(approximate),
+            "the approximation flag changes rendered pixels, so it must enter the cache key");
+    }
 }
