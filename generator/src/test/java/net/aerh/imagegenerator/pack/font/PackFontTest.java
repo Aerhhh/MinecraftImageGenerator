@@ -118,6 +118,30 @@ class PackFontTest {
     }
 
     @Test
+    void advanceForHdLargeCellSheetStaysVanillaExact() {
+        // Real-world HD (large-cell) default sheets ship 16x16-pixel cells at height 8, so the
+        // scale is 8 / 16 = 0.5 derived from the sheet height, not assumed from the cell being
+        // 8 px. The +1 inter-glyph gap is added AFTER the post-scale rounding and stays 1 GUI px
+        // (it is never scaled with the ink), so a glyph inked far into a 16 px cell still lands on
+        // the same advance a vanilla client computes. The ink widths below mirror the letters an
+        // HD default sheet actually carries (a mid-width 'e' at ink 10, a thin 'l' at ink 4, a
+        // full-cell glyph at ink 16).
+        BufferedImage image = sheet(32, 32);
+        // Cells are 16x16: 'A'/'B' on the top row (y 0-15), 'C'/'D' on the bottom row (y 16-31);
+        // 'A'/'C' in the left column (x 0-15), 'B'/'D' in the right column (x 16-31).
+        image.setRGB(9, 0, OPAQUE_WHITE);   // 'A': rightmost inked cell-column 9 -> ink 10
+        image.setRGB(3, 16, OPAQUE_WHITE);  // 'C': rightmost inked cell-column 3 -> ink 4
+        image.setRGB(31, 16, OPAQUE_WHITE); // 'D': rightmost inked cell-column 15 -> ink 16 (full cell)
+        PackFont font = PackFont.create("test:hd",
+            List.of(bitmap("test:font/hd.png", 8, 7, List.of("AB", "CD"))),
+            textures(Map.of("test:font/hd.png", image)));
+        assertEquals(6.0f, font.advanceOf('A', false), "ink 10 * 0.5 = 5.0 -> (int)5.5 = 5, + 1");
+        assertEquals(3.0f, font.advanceOf('C', false), "ink 4 * 0.5 = 2.0 -> (int)2.5 = 2, + 1");
+        assertEquals(9.0f, font.advanceOf('D', false), "ink 16 * 0.5 = 8.0 -> (int)8.5 = 8, + 1");
+        assertEquals(1.0f, font.advanceOf('B', false), "fully transparent cell keeps advance 1");
+    }
+
+    @Test
     void advanceAtFractionalScaleSevenTwelfths() {
         // 24x24 sheet, 12x12 cells, height 7: scale = 7/12.
         BufferedImage image = sheet(24, 24);
