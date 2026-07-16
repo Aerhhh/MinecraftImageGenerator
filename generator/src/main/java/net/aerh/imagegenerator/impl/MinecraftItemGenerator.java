@@ -16,14 +16,17 @@ import net.aerh.imagegenerator.effect.impl.HoverImageEffect;
 import net.aerh.imagegenerator.effect.impl.OverlayApplicationEffect;
 import net.aerh.imagegenerator.exception.GeneratorException;
 import net.aerh.imagegenerator.item.GeneratedObject;
+import net.aerh.imagegenerator.pack.AnimationTimeline;
 import net.aerh.imagegenerator.pack.CustomModelData;
 import net.aerh.imagegenerator.pack.ItemDamage;
+import net.aerh.imagegenerator.pack.PackAnimatedVisual;
 import net.aerh.imagegenerator.pack.PackId;
 import net.aerh.imagegenerator.pack.PackItemVisual;
 import net.aerh.imagegenerator.pack.PackRepository;
 import net.aerh.imagegenerator.pack.PackSprites;
 import net.aerh.imagegenerator.spritesheet.OverlayLoader;
 import net.aerh.imagegenerator.spritesheet.Spritesheet;
+import net.aerh.imagegenerator.util.AnimatedGifEncoder;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -31,6 +34,7 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -54,6 +58,8 @@ public class MinecraftItemGenerator implements Generator {
     @Nullable
     private final ItemDamage itemDamage;
     private final boolean fullGuiRotations;
+    // Final non-transient so the flag enters the reflective render cache key.
+    private final boolean animatedTextures;
     private final String data;
     private final String color;
     private final boolean enchanted;
@@ -70,6 +76,13 @@ public class MinecraftItemGenerator implements Generator {
     @Override
     public @NotNull GeneratedObject render(@Nullable GenerationContext generationContext) {
         log.debug("Rendering item '{}' ({})", displayId(), this);
+
+        if (animatedTextures && PackId.isActive(packId)) {
+            GeneratedObject animated = renderAnimatedTextures();
+            if (animated != null) {
+                return animated;
+            }
+        }
 
         // Load base item texture: selected pack first, then the vanilla spritesheet
         BufferedImage itemImage = resolveBaseTexture();
@@ -138,6 +151,71 @@ public class MinecraftItemGenerator implements Generator {
     }
 
     /**
+     * The animated-textures render: when the pack visual uses at least one animated texture,
+     * every timeline step renders one canvas (static effects applied per frame) and the result
+     * is the GIF form of {@link GeneratedObject} with per-frame delays. Null when the item is
+     * absent from the pack or none of its textures animate - the caller renders the static
+     * image exactly as before.
+     *
+     * <p>The enchant glint is NOT applied on this path (its 33 ms cycle cannot join the
+     * tick-based texture timeline); an enchanted item logs a warning and renders unglinted.
+     * Hover, overlay and durability effects apply per frame as usual.
+     */
+    @Nullable
+    private GeneratedObject renderAnimatedTextures() {
+        String packRef = itemModel != null ? namespacedItemModel() : itemId;
+        PackAnimatedVisual animation = packRepository.resolveItemVisualAnimation(
+            packId, packRef, customModelData, itemDamage, ELEMENTS_PX_PER_GUI_PX, fullGuiRotations).orElse(null);
+        if (animation == null) {
+            return null;
+        }
+        if (enchanted) {
+            log.warn("Item '{}': the enchant glint is not applied while animated pack textures drive the output",
+                displayId());
+        }
+        List<BufferedImage> frames = new ArrayList<>(animation.steps().size());
+        for (PackItemVisual visual : animation.steps()) {
+            BufferedImage base = switch (visual) {
+                case PackItemVisual.Sprite sprite -> PackSprites.scaleToCanvas(sprite.sprite(), 256);
+                case PackItemVisual.ElementsRaster raster -> raster.image();
+            };
+            frames.add(applyStaticEffects(base));
+        }
+        if (bigImage && frames.getFirst().getWidth() <= 16 && frames.getFirst().getHeight() <= 16) {
+            frames = frames.stream().map(frame -> ImageUtil.upscaleImage(frame, 10)).toList();
+        }
+        List<Integer> delaysMs = animation.stepTicks().stream()
+            .map(AnimationTimeline::ticksToMillis)
+            .toList();
+        try {
+            byte[] gifData = AnimatedGifEncoder.encode(frames, delaysMs);
+            log.debug("Rendered texture-animated item '{}' ({} frames)", displayId(), frames.size());
+            return new GeneratedObject(gifData, frames, delaysMs);
+        } catch (IOException e) {
+            throw new GeneratorException("Failed to encode animation", e);
+        }
+    }
+
+    /**
+     * Runs the effect pipeline over one animation frame with the glint suppressed (see
+     * {@link #renderAnimatedTextures()}); every other effect sees the same context the static
+     * path builds.
+     */
+    private BufferedImage applyStaticEffects(BufferedImage base) {
+        EffectContext.Builder contextBuilder = new EffectContext.Builder()
+            .withImage(base)
+            .withItemId(displayId())
+            .withEnchanted(false)
+            .withHovered(hoverEffect)
+            .putMetadata("data", data)
+            .putMetadata("color", color);
+        if (durabilityPercent != null) {
+            contextBuilder.putMetadata("durabilityPercent", durabilityPercent);
+        }
+        return effectPipeline.execute(contextBuilder.build()).getImage();
+    }
+
+    /**
      * Loads the base item visual: the selected pack first (flat sprites scale onto the 256
      * canvas exactly as before; elements models rasterize at the same 16-px-per-GUI-px target,
      * unclipped for {@code oversized_in_gui} items), then the vanilla spritesheet.
@@ -195,6 +273,7 @@ public class MinecraftItemGenerator implements Generator {
         private CustomModelData customModelData;
         private ItemDamage itemDamage;
         private boolean fullGuiRotations;
+        private boolean animatedTextures;
         private String data;
         private String color;
         private boolean enchanted;
@@ -267,6 +346,22 @@ public class MinecraftItemGenerator implements Generator {
          */
         public MinecraftItemGenerator.Builder withFullGuiRotations(boolean fullGuiRotations) {
             this.fullGuiRotations = fullGuiRotations;
+            return this;
+        }
+
+        /**
+         * Opts the render into animated pack textures (default false): when the resolved pack
+         * visual - layer0 sprite layers or elements-model face textures - uses at least one
+         * texture with an animation mcmeta, the item renders one canvas per timeline step and
+         * {@code generate()} returns the GIF form of {@link GeneratedObject} with per-frame
+         * delays (1 tick = 50 ms; timelines cap per
+         * {@link net.aerh.imagegenerator.pack.AnimationTimeline}). Items without animated
+         * textures render the static image exactly as before. The {@code interpolate} flag is
+         * honored as nearest-frame (no cross-fade), and the enchant glint is not applied while
+         * animated textures drive the output.
+         */
+        public MinecraftItemGenerator.Builder withAnimatedTextures(boolean animatedTextures) {
+            this.animatedTextures = animatedTextures;
             return this;
         }
 
@@ -390,7 +485,7 @@ public class MinecraftItemGenerator implements Generator {
             }
 
             return new MinecraftItemGenerator(
-                itemId, itemModel, customModelData, itemDamage, fullGuiRotations, data, color,
+                itemId, itemModel, customModelData, itemDamage, fullGuiRotations, animatedTextures, data, color,
                 enchanted, hoverEffect, bigImage, durabilityPercent, overlayLoader, effectPipeline,
                 packId, packRepository
             );

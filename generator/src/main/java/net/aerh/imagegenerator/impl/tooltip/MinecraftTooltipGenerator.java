@@ -19,9 +19,11 @@ import net.aerh.imagegenerator.exception.GeneratorException;
 import net.aerh.imagegenerator.image.MinecraftTooltip;
 import net.aerh.imagegenerator.impl.nbt.NbtTextComponentUtil;
 import net.aerh.imagegenerator.item.GeneratedObject;
+import net.aerh.imagegenerator.pack.AnimatedTooltipSprites;
 import net.aerh.imagegenerator.pack.PackId;
 import net.aerh.imagegenerator.pack.PackRepository;
 import net.aerh.imagegenerator.pack.TooltipSprites;
+import net.aerh.imagegenerator.util.AnimatedGifEncoder;
 import net.aerh.imagegenerator.parser.ParseContext;
 import net.aerh.imagegenerator.text.PackGlyphDispatcher;
 import net.aerh.imagegenerator.text.TextColorRemap;
@@ -57,11 +59,13 @@ public class MinecraftTooltipGenerator implements Generator {
     private final int maxLineLength;
     private final boolean renderBorder;
     private final int scaleFactor;
-    // packId, tooltipStyle, and textColorRemap are final non-transient so they enter the render
-    // cache key; the repository reference is transient so instances never split it.
+    // packId, tooltipStyle, textColorRemap and animatedTextures are final non-transient so they
+    // enter the render cache key; the repository reference is transient so instances never
+    // split it.
     private final PackId packId;
     private final String tooltipStyle;
     private final TextColorRemap textColorRemap;
+    private final boolean animatedTextures;
     private final transient PackRepository packRepository;
 
     @Override
@@ -86,6 +90,13 @@ public class MinecraftTooltipGenerator implements Generator {
 
         if (tooltip.isAnimated()) {
             try {
+                if (tooltip.getFrameDelaysMs() != null) {
+                    // The animated-chrome path: frames may hold for different times.
+                    byte[] gifData = AnimatedGifEncoder.encode(tooltip.getAnimationFrames(), tooltip.getFrameDelaysMs());
+                    log.debug("Rendered texture-animated tooltip for '{}' ({} frames)",
+                        name, tooltip.getAnimationFrames().size());
+                    return new GeneratedObject(gifData, tooltip.getAnimationFrames(), tooltip.getFrameDelaysMs());
+                }
                 byte[] gifData = ImageUtil.toGifBytes(tooltip.getAnimationFrames(), tooltip.getFrameDelayMs(), true);
                 log.debug("Rendered animated tooltip for '{}' ({} frames, delay {}ms)", name, tooltip.getAnimationFrames().size(), tooltip.getFrameDelayMs());
                 return new GeneratedObject(gifData, tooltip.getAnimationFrames(), tooltip.getFrameDelayMs());
@@ -121,6 +132,7 @@ public class MinecraftTooltipGenerator implements Generator {
             .withScaleFactor(settings.getScaleFactor())
             .withAprilFools(settings.isAprilFools())
             .withThemeSprites(resolveThemeSprites())
+            .withAnimatedThemeSprites(resolveAnimatedThemeSprites())
             .withTextColorRemap(textColorRemap)
             .withPackFontSource(PackGlyphDispatcher.FontSource.forPack(packId, packRepository));
 
@@ -175,6 +187,24 @@ public class MinecraftTooltipGenerator implements Generator {
         return repository.resolveDefaultTooltipSprites(packId).orElse(null);
     }
 
+    /**
+     * Resolves the theme sprites' animations when the render opted into animated textures:
+     * present when the selected style (or the default-tooltip override) ships at least one
+     * animated sprite - the "shiny" frame strips. Null keeps the chrome static; the
+     * missing-style policy stays with {@link #resolveThemeSprites()}, which always runs first.
+     */
+    @Nullable
+    private AnimatedTooltipSprites resolveAnimatedThemeSprites() {
+        if (!animatedTextures || !PackId.isActive(packId) || !renderBorder) {
+            return null;
+        }
+        PackRepository repository = repository();
+        if (tooltipStyle != null) {
+            return repository.resolveTooltipSpritesAnimation(packId, tooltipStyle).orElse(null);
+        }
+        return repository.resolveDefaultTooltipSpritesAnimation(packId).orElse(null);
+    }
+
     private PackRepository repository() {
         return packRepository != null ? packRepository : PackRepository.global();
     }
@@ -207,6 +237,8 @@ public class MinecraftTooltipGenerator implements Generator {
         private String tooltipStyle;
         private transient PackRepository packRepository;
         private transient TextColorRemap textColorRemap;
+        // Transient like the other non-command options: buildSlashCommand must not emit it.
+        private transient boolean animatedTextures;
 
         public MinecraftTooltipGenerator.Builder withName(String itemName) {
             this.itemName = itemName;
@@ -304,6 +336,25 @@ public class MinecraftTooltipGenerator implements Generator {
 
         public MinecraftTooltipGenerator.Builder withScaleFactor(int scaleFactor) {
             this.scaleFactor = Math.max(1, scaleFactor);
+            return this;
+        }
+
+        /**
+         * Opts the render into animated pack textures (default false): when the selected
+         * tooltip style (or the pack's default-tooltip override) ships an animated background
+         * or frame sprite - the 17-frame "shiny" strips - the chrome animates and
+         * {@code generate()} returns the GIF form of {@link GeneratedObject} with per-frame
+         * delays (1 tick = 50 ms, timelines capped per
+         * {@link net.aerh.imagegenerator.pack.AnimationTimeline}; a long-hold frames-list entry
+         * produces a long-hold GIF frame). Obfuscated text, when present, ticks on the same
+         * shared timeline; PACK-GLYPH obfuscation is seeded per frame (deterministic), while
+         * built-in font obfuscation stays random per render, so a tooltip mixing animated chrome
+         * with built-in {@code &k} text is not byte-reproducible. Obfuscated text also forces the
+         * timeline to sample every tick, so pairing it with a long chrome hold can truncate that
+         * hold at the step cap. Styles without animated sprites render exactly as before.
+         */
+        public MinecraftTooltipGenerator.Builder withAnimatedTextures(boolean animatedTextures) {
+            this.animatedTextures = animatedTextures;
             return this;
         }
 
@@ -541,6 +592,7 @@ public class MinecraftTooltipGenerator implements Generator {
                 pack,
                 tooltipStyle,
                 textColorRemap,
+                animatedTextures,
                 packRepository
             );
         }

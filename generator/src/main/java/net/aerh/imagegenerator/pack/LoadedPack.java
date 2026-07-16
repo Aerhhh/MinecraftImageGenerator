@@ -18,10 +18,12 @@ import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -60,6 +62,15 @@ final class LoadedPack {
      * paths always start with {@code assets/}, so the prefix can never collide with a real path.
      */
     private static final String SHEET_CAPPED_KEY_PREFIX = "sheet:";
+    /**
+     * Texture cache key prefix requesting the FULL decoded texture with no animation crop - the
+     * uncropped flipbook sheet the animated resolution paths crop frames from on demand. May
+     * combine with {@link #SHEET_CAPPED_KEY_PREFIX} ({@code "anim:sheet:<path>"}); the decode
+     * cap selection is unchanged. Like the sheet prefix, it can never collide with a real path
+     * (paths always start with {@code assets/}). Storing the sheet once and cropping per frame
+     * keeps the cache from double-storing sheets AND per-frame crops.
+     */
+    private static final String FULL_SHEET_KEY_PREFIX = "anim:";
     private static final int MAX_PARENT_DEPTH = 8;
     /**
      * How many {@code layerN} textures a generated flat model may stack: vanilla's
@@ -341,6 +352,102 @@ final class LoadedPack {
     }
 
     /**
+     * Resolves a tooltip style's sprite ANIMATIONS: the style resolves exactly like
+     * {@link #resolveTooltipSprites(String)}, and each sprite whose texture carries an animation
+     * mcmeta contributes its {@link PackAnimation}.
+     *
+     * @return empty when the pack defines no such style, or when NEITHER sprite is animated -
+     *     callers render the static sprites instead
+     * @throws IllegalArgumentException when the style ref itself is malformed (caller input)
+     * @throws PackResolveException     when the style exists but is broken
+     */
+    public Optional<AnimatedTooltipSprites> resolveTooltipSpritesAnimation(String styleRef) {
+        ResourceRef ref = ResourceRef.parse(styleRef, "minecraft");
+        TooltipStyleEntry entry = tooltipStyles.get(ref.toString());
+        if (entry == null) {
+            return Optional.empty();
+        }
+        if (entry.backgroundPath == null || entry.framePath == null) {
+            throw new PackResolveException("Tooltip style `%s` in pack `%s` is missing its %s sprite",
+                ref.toString(), id.toString(), entry.backgroundPath == null ? "background" : "frame");
+        }
+        return animatedTooltipSprites(entry.backgroundPath, entry.framePath);
+    }
+
+    /**
+     * Resolves the sprite animations of the pack's default tooltip override; the animated
+     * counterpart of {@link #resolveDefaultTooltipSprites()}.
+     *
+     * @return empty when the pack does not override the default tooltip, or when neither sprite
+     *     is animated
+     * @throws PackResolveException when only one of the two sprites is present
+     */
+    public Optional<AnimatedTooltipSprites> resolveDefaultTooltipSpritesAnimation() {
+        boolean hasBackground = source.exists(DEFAULT_BACKGROUND_PATH);
+        boolean hasFrame = source.exists(DEFAULT_FRAME_PATH);
+        if (!hasBackground && !hasFrame) {
+            return Optional.empty();
+        }
+        if (!hasBackground || !hasFrame) {
+            throw new PackResolveException("Pack `%s` overrides only the default tooltip %s sprite; both are required",
+                id.toString(), hasBackground ? "background" : "frame");
+        }
+        return animatedTooltipSprites(DEFAULT_BACKGROUND_PATH, DEFAULT_FRAME_PATH);
+    }
+
+    /** Empty unless at least one of the two sprites is animated; sheet-capped like all sprites. */
+    private Optional<AnimatedTooltipSprites> animatedTooltipSprites(String backgroundPath, String framePath) {
+        PackAnimation background = textureAnimation(backgroundPath, true).orElse(null);
+        PackAnimation frame = textureAnimation(framePath, true).orElse(null);
+        if (background == null && frame == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new AnimatedTooltipSprites(
+            new TooltipSprites(loadGuiSprite(backgroundPath), loadGuiSprite(framePath)), background, frame));
+    }
+
+    /**
+     * Resolves the animation of the pack's generic chest container background; the animated
+     * counterpart of {@link #resolveContainerBackground()}.
+     *
+     * @return empty when the pack does not override the texture, or when it is not animated
+     * @throws PackResolveException when the texture exists but fails to decode
+     */
+    public Optional<PackAnimation> resolveContainerBackgroundAnimation() {
+        if (!source.exists(GENERIC_CONTAINER_PATH)) {
+            return Optional.empty();
+        }
+        return textureAnimation(GENERIC_CONTAINER_PATH, false);
+    }
+
+    /**
+     * Resolves a texture's animation: present when the texture has a valid animation mcmeta
+     * with at least two frame entries. The uncropped flipbook sheet is served by the texture
+     * cache under the {@link #FULL_SHEET_KEY_PREFIX} (bounded by the existing cache weights);
+     * frames crop from it on demand. A malformed animation follows the decode path's
+     * warn-and-fallback policy and resolves empty; an undecodable TEXTURE stays loud, exactly
+     * like the static path.
+     */
+    private Optional<PackAnimation> textureAnimation(String texturePath, boolean sheetCapped) {
+        String mcmetaPath = texturePath + ".mcmeta";
+        if (!source.exists(mcmetaPath)) {
+            return Optional.empty();
+        }
+        try {
+            McMeta meta = PackJsonParser.parseMcmeta(source.read(mcmetaPath));
+            if (meta.animation() == null) {
+                return Optional.empty();
+            }
+            BufferedImage sheet = textureCache.get(
+                FULL_SHEET_KEY_PREFIX + (sheetCapped ? SHEET_CAPPED_KEY_PREFIX : "") + texturePath);
+            return PackAnimation.resolve(sheet, meta.animation());
+        } catch (PackLoadException e) {
+            log.warn("Pack {}: ignoring malformed animation mcmeta for {}: {}", id, texturePath, e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    /**
      * Style refs with both sprites present, sorted, for discovery/autocomplete. A style listed
      * here can still fail at resolve time (e.g. malformed gui scaling mcmeta) - loudly.
      */
@@ -494,7 +601,8 @@ final class LoadedPack {
             return Optional.empty();
         }
         return Optional.of(composeSpriteLayers(itemRef,
-            resolveGuiModels(itemRef, entry, CustomModelData.EMPTY, null), CustomModelData.EMPTY));
+            resolveGuiModels(itemRef, entry, CustomModelData.EMPTY, null), CustomModelData.EMPTY,
+            textureCache::get));
     }
 
     /**
@@ -550,6 +658,128 @@ final class LoadedPack {
         if (entry == null) {
             return Optional.empty();
         }
+        ResolvedModels resolved = resolveModels(itemRef, entry, data, damage);
+        if (!resolved.elements()) {
+            return Optional.of(new PackItemVisual.Sprite(
+                composeSpriteLayers(itemRef, resolved.models(), data, textureCache::get)));
+        }
+        ElementModelRenderer.Raster raster = ElementModelRenderer.render(
+            buildModelInstances(itemRef, resolved, data), pixelsPerGuiPx, entry.oversizedInGui(), fullGuiRotations,
+            this::loadElementTexture, "item `" + itemRef + "` in pack `" + id + "`");
+        return Optional.of(new PackItemVisual.ElementsRaster(
+            raster.image(), raster.offsetX(), raster.offsetY(), entry.oversizedInGui()));
+    }
+
+    /**
+     * Resolves an item ref across its own animation timeline: the item's model dispatch and
+     * chains resolve exactly like {@link #resolveItemVisual(String, CustomModelData, ItemDamage,
+     * int, boolean)}, every texture the resolved visual uses is probed for an animation mcmeta,
+     * and each timeline step renders the same visual with each animated texture showing its
+     * frame at that step. Detection covers every DECLARED element face - a never-visible
+     * animated face still marks the item animated (its frames simply render identically).
+     *
+     * @return empty when the ref is bare, foreign or unknown, or when NO texture of the
+     *     resolved visual is animated - callers render the static visual instead
+     * @throws PackResolveException when the item exists but cannot be rendered (the exact
+     *                              failure modes of the static resolution)
+     */
+    public Optional<PackAnimatedVisual> resolveItemVisualAnimation(String itemRef, CustomModelData data,
+                                                                   @Nullable ItemDamage damage, int pixelsPerGuiPx,
+                                                                   boolean fullGuiRotations) {
+        ItemEntry entry = lookupItem(itemRef);
+        if (entry == null) {
+            return Optional.empty();
+        }
+        ResolvedModels resolved = resolveModels(itemRef, entry, data, damage);
+        String context = "item `" + itemRef + "` in pack `" + id + "`";
+        Map<String, PackAnimation> animated = collectAnimatedTextures(itemRef, resolved, context);
+        if (animated.isEmpty()) {
+            return Optional.empty();
+        }
+        AnimationTimeline timeline = AnimationTimeline.of(
+            animated.values().stream().map(PackAnimation::frameTicks).toList());
+        List<String> animatedPaths = List.copyOf(animated.keySet());
+        List<ElementModelRenderer.ModelInstance> instances =
+            resolved.elements() ? buildModelInstances(itemRef, resolved, data) : null;
+        List<PackItemVisual> steps = new ArrayList<>(timeline.steps().size());
+        for (AnimationTimeline.Step step : timeline.steps()) {
+            Map<String, BufferedImage> framesByPath = new HashMap<>();
+            for (int sourceIndex = 0; sourceIndex < animatedPaths.size(); sourceIndex++) {
+                String path = animatedPaths.get(sourceIndex);
+                framesByPath.put(path, animated.get(path).frameImage(step.framePositions().get(sourceIndex)));
+            }
+            Function<String, BufferedImage> lookup =
+                path -> framesByPath.containsKey(path) ? framesByPath.get(path) : textureCache.get(path);
+            if (!resolved.elements()) {
+                steps.add(new PackItemVisual.Sprite(
+                    composeSpriteLayers(itemRef, resolved.models(), data, lookup)));
+            } else {
+                ElementModelRenderer.Raster raster = ElementModelRenderer.render(
+                    instances, pixelsPerGuiPx, entry.oversizedInGui(), fullGuiRotations,
+                    textureRef -> lookup.apply(parseRefOrResolveError(textureRef, "minecraft").texturePath()),
+                    context);
+                steps.add(new PackItemVisual.ElementsRaster(
+                    raster.image(), raster.offsetX(), raster.offsetY(), entry.oversizedInGui()));
+            }
+        }
+        return Optional.of(new PackAnimatedVisual(steps, timeline.stepTicks()));
+    }
+
+    /**
+     * The animated textures a resolved visual can draw, keyed by texture path in deterministic
+     * first-use order: flat visuals enumerate their generated layer paths, elements visuals
+     * every declared face's resolved reference (unresolvable references are skipped here - the
+     * render itself fails loudly if such a face actually paints).
+     */
+    private Map<String, PackAnimation> collectAnimatedTextures(String itemRef, ResolvedModels resolved,
+                                                               String context) {
+        Map<String, PackAnimation> animated = new LinkedHashMap<>();
+        Set<String> probed = new HashSet<>();
+        if (!resolved.elements()) {
+            for (GuiModelResolver.GuiModel model : resolved.models()) {
+                for (String path : resolveGeneratedLayerPaths(model.modelRef())) {
+                    probeAnimation(animated, probed, path);
+                }
+            }
+            return animated;
+        }
+        for (ChainData chain : resolved.chains()) {
+            for (ModelElement element : chain.elements()) {
+                for (ModelElement.Face face : element.faces().values()) {
+                    String textureRef;
+                    try {
+                        textureRef = ElementModelRenderer.resolveTextureRef(
+                            face.textureRef(), chain.textures(), context);
+                    } catch (PackResolveException e) {
+                        continue;
+                    }
+                    probeAnimation(animated, probed, parseRefOrResolveError(textureRef, "minecraft").texturePath());
+                }
+            }
+        }
+        return animated;
+    }
+
+    /** Probes one texture path for an animation, at most once per path. */
+    private void probeAnimation(Map<String, PackAnimation> animated, Set<String> probed, String texturePath) {
+        if (!probed.add(texturePath)) {
+            return;
+        }
+        textureAnimation(texturePath, false).ifPresent(animation -> animated.put(texturePath, animation));
+    }
+
+    /**
+     * The dispatch-resolved models of an item with their chains walked, plus whether the item
+     * renders through the elements pipeline. A composite mixing elements and flat layer0 models
+     * fails loudly here - shared by the static and animated resolutions so the two can never
+     * disagree.
+     */
+    private record ResolvedModels(List<GuiModelResolver.GuiModel> models, List<ChainData> chains,
+                                  boolean elements) {
+    }
+
+    private ResolvedModels resolveModels(String itemRef, ItemEntry entry, CustomModelData data,
+                                         @Nullable ItemDamage damage) {
         List<GuiModelResolver.GuiModel> models = resolveGuiModels(itemRef, entry, data, damage);
         List<ChainData> chains = new ArrayList<>(models.size());
         boolean anyElements = false;
@@ -563,28 +793,27 @@ final class LoadedPack {
                 allElements = false;
             }
         }
-        if (!anyElements) {
-            return Optional.of(new PackItemVisual.Sprite(composeSpriteLayers(itemRef, models, data)));
-        }
-        if (!allElements) {
+        if (anyElements && !allElements) {
             throw new PackResolveException(
                 "Item `%s` in pack `%s` mixes elements models and flat layer0 models in one composite; unsupported",
                 itemRef, id.toString());
         }
-        List<ElementModelRenderer.ModelInstance> instances = new ArrayList<>(models.size());
-        for (int i = 0; i < models.size(); i++) {
-            ChainData chain = chains.get(i);
+        return new ResolvedModels(List.copyOf(models), List.copyOf(chains), anyElements);
+    }
+
+    /** The renderer inputs of an elements-resolved item; tints evaluate against {@code data}. */
+    private List<ElementModelRenderer.ModelInstance> buildModelInstances(String itemRef, ResolvedModels resolved,
+                                                                         CustomModelData data) {
+        List<ElementModelRenderer.ModelInstance> instances = new ArrayList<>(resolved.models().size());
+        for (int i = 0; i < resolved.models().size(); i++) {
+            ChainData chain = resolved.chains().get(i);
             instances.add(new ElementModelRenderer.ModelInstance(
                 chain.elements(), chain.textures(),
                 chain.guiTransform() != null ? chain.guiTransform() : GuiTransform.IDENTITY,
-                evaluateElementTints(itemRef, models.get(i).tints(), data),
+                evaluateElementTints(itemRef, resolved.models().get(i).tints(), data),
                 chain.guiLight()));
         }
-        ElementModelRenderer.Raster raster = ElementModelRenderer.render(
-            instances, pixelsPerGuiPx, entry.oversizedInGui(), fullGuiRotations,
-            this::loadElementTexture, "item `" + itemRef + "` in pack `" + id + "`");
-        return Optional.of(new PackItemVisual.ElementsRaster(
-            raster.image(), raster.offsetX(), raster.offsetY(), entry.oversizedInGui()));
+        return instances;
     }
 
     /**
@@ -659,15 +888,19 @@ final class LoadedPack {
      * tint sources warn and stay untinted (vanilla-style dye/potion items rendered fine before
      * tints were parsed; see {@link GuiModelResolver#evaluateTintsLenient}). Byte-identical to
      * the pre-elements sprite path for single-layer untinted models.
+     *
+     * <p>{@code textures} maps a layer's texture path to its image: the texture cache for
+     * static renders, a per-step frame lookup for animated ones. Layer images are never
+     * mutated (the first layer is copied, tints copy too), so shared frame instances are safe.
      */
     private BufferedImage composeSpriteLayers(String itemRef, List<GuiModelResolver.GuiModel> models,
-                                              CustomModelData data) {
+                                              CustomModelData data, Function<String, BufferedImage> textures) {
         BufferedImage sprite = null;
         for (GuiModelResolver.GuiModel model : models) {
             List<Integer> tints = GuiModelResolver.evaluateTintsLenient(model.tints(), data);
             List<String> layerPaths = resolveGeneratedLayerPaths(model.modelRef());
             for (int index = 0; index < layerPaths.size(); index++) {
-                BufferedImage layer = textureCache.get(layerPaths.get(index));
+                BufferedImage layer = textures.apply(layerPaths.get(index));
                 int tint = index < tints.size() ? tints.get(index) : GuiModelResolver.WHITE;
                 if (tint != GuiModelResolver.WHITE) {
                     layer = tintedCopy(layer, tint);
@@ -882,6 +1115,7 @@ final class LoadedPack {
 
     /**
      * Cache loader; {@code cacheKey} is the texture path, optionally prefixed with
+     * {@link #FULL_SHEET_KEY_PREFIX} (skip the animation first-frame crop) and/or
      * {@link #SHEET_CAPPED_KEY_PREFIX}. The decode cap is selected by the PREFIX - i.e. by how
      * the call site USES the texture - never by the path itself: tooltip sprite sheets
      * legitimately exceed the item cap (real packs ship animated frame strips like 146x2482),
@@ -889,8 +1123,10 @@ final class LoadedPack {
      * fail at the strict item cap, or the image-bomb guard would be bypassable by path choice.
      */
     private BufferedImage loadTexture(String cacheKey) {
-        boolean sheetCapped = cacheKey.startsWith(SHEET_CAPPED_KEY_PREFIX);
-        String texturePath = sheetCapped ? cacheKey.substring(SHEET_CAPPED_KEY_PREFIX.length()) : cacheKey;
+        boolean fullSheet = cacheKey.startsWith(FULL_SHEET_KEY_PREFIX);
+        String cappedKey = fullSheet ? cacheKey.substring(FULL_SHEET_KEY_PREFIX.length()) : cacheKey;
+        boolean sheetCapped = cappedKey.startsWith(SHEET_CAPPED_KEY_PREFIX);
+        String texturePath = sheetCapped ? cappedKey.substring(SHEET_CAPPED_KEY_PREFIX.length()) : cappedKey;
         int maxDim = sheetCapped ? limits.sheetTextureMaxDim() : limits.maxTextureDim();
         BufferedImage image;
         try {
@@ -899,12 +1135,21 @@ final class LoadedPack {
             throw new PackResolveException(GeneratorException.formatMessage(
                 "Texture `%s` in pack `%s` failed to load: %s", texturePath, id.toString(), e.getMessage()), e);
         }
+        if (fullSheet) {
+            // The animated paths crop frames themselves; hand back the whole flipbook.
+            return image;
+        }
         String mcmetaPath = texturePath + ".mcmeta";
         if (source.exists(mcmetaPath)) {
             try {
-                McMeta meta = PackJsonParser.parseMcmeta(source.read(mcmetaPath));
-                if (meta.animation() != null) {
-                    return TextureDecoder.firstFrame(image, meta.animation());
+                // The static crop uses the LENIENT first-frame parse, not the strict full-animation
+                // parse: a malformed animation section (e.g. frametime 0, a non-array frames value)
+                // still yields the first-frame crop it did before full-model parsing, keeping the
+                // flag-off output byte-identical. The animated resolution path parses the same
+                // mcmeta strictly and warns-and-falls-back on the same malformations.
+                AnimationMeta firstFrameMeta = PackJsonParser.parseFirstFrameMeta(source.read(mcmetaPath));
+                if (firstFrameMeta != null) {
+                    return TextureDecoder.firstFrame(image, firstFrameMeta);
                 }
             } catch (PackLoadException e) {
                 log.warn("Pack {}: ignoring malformed mcmeta for {}: {}", id, texturePath, e.getMessage());

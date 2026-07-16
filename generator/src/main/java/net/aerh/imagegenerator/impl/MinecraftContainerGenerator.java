@@ -19,11 +19,15 @@ import net.aerh.imagegenerator.context.GenerationContext;
 import net.aerh.imagegenerator.image.MinecraftTooltip;
 import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.item.InventoryItem;
+import net.aerh.imagegenerator.pack.AnimationTimeline;
 import net.aerh.imagegenerator.pack.CustomModelData;
+import net.aerh.imagegenerator.pack.PackAnimatedVisual;
+import net.aerh.imagegenerator.pack.PackAnimation;
 import net.aerh.imagegenerator.pack.PackId;
 import net.aerh.imagegenerator.pack.PackItemVisual;
 import net.aerh.imagegenerator.pack.PackRepository;
 import net.aerh.imagegenerator.parser.inventory.InventoryStringParser;
+import net.aerh.imagegenerator.util.AnimatedGifEncoder;
 import net.aerh.imagegenerator.text.PackGlyphDispatcher;
 import net.aerh.imagegenerator.text.RgbColor;
 import net.aerh.imagegenerator.text.TextColor;
@@ -38,6 +42,7 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -147,6 +152,8 @@ public class MinecraftContainerGenerator implements Generator {
     // Final non-transient so it enters the render cache key: the flag changes rendered pixels
     // for slots whose models carry unsupported gui rotations.
     private final boolean fullGuiRotations;
+    // Final non-transient so the flag enters the reflective render cache key.
+    private final boolean animatedTextures;
     // packId is final non-transient so it enters the render cache key; the repository reference
     // is transient so instances never split it.
     @Nullable
@@ -238,7 +245,285 @@ public class MinecraftContainerGenerator implements Generator {
     public @NotNull GeneratedObject render(@Nullable GenerationContext generationContext) {
         log.debug("Rendering container ({})", this);
 
+        if (animatedTextures) {
+            GeneratedObject animated = renderAnimated(generationContext);
+            if (animated != null) {
+                return animated;
+            }
+        }
+        return renderStatic(generationContext);
+    }
+
+    /** The historical static render, byte-identical with the animated-textures flag off. */
+    private GeneratedObject renderStatic(@Nullable GenerationContext generationContext) {
         int pixelSize = 2 * scaleFactor;
+        Layout layout = computeLayout(pixelSize);
+        BufferedImage canvas = new BufferedImage(layout.canvasWidth(), layout.canvasHeight(), BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = canvas.createGraphics();
+        try {
+            graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
+            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+
+            drawBackground(graphics, layout.originX(), layout.originY(), pixelSize, layout.guiHeight());
+            if (layout.titleLine() != null) {
+                layout.titleLine().drawLineOnto(graphics, 0,
+                    layout.originX() + TITLE_X * pixelSize, layout.originY() + TITLE_Y * pixelSize);
+            }
+            drawItems(graphics, layout.originX(), layout.originY(), pixelSize, generationContext);
+        } finally {
+            graphics.dispose();
+        }
+
+        log.debug("Rendered container image (dimensions {}x{})", canvas.getWidth(), canvas.getHeight());
+        return new GeneratedObject(canvas);
+    }
+
+    /**
+     * The animated-textures render: the pack container background's animation and every
+     * texture-animated slot item join one shared scene timeline (LCM of the cycles, capped per
+     * {@link AnimationTimeline}); each step composes the full scene - background frame, title,
+     * items - exactly in the static z-order, with slot visuals resolved once and reused across
+     * steps. Null when nothing in the scene is texture-animated (the static render runs
+     * instead), and on an encoding failure (warned; the static render is the fallback).
+     */
+    @Nullable
+    private GeneratedObject renderAnimated(@Nullable GenerationContext generationContext) {
+        int pixelSize = 2 * scaleFactor;
+        PackAnimation backgroundAnimation = PackId.isActive(packId)
+            ? repository().resolveContainerBackgroundAnimation(packId).orElse(null)
+            : null;
+        List<SlotPlacement> placements = resolvePlacements(pixelSize, generationContext);
+        boolean anyAnimatedSlot = placements.stream().anyMatch(placement ->
+            placement.visual() instanceof SlotVisualSource.AnimatedRaster
+                || placement.visual() instanceof SlotVisualSource.AnimatedImage);
+        if (backgroundAnimation == null && !anyAnimatedSlot) {
+            return null;
+        }
+
+        // Timeline sources in deterministic order: the background first (when animated), then
+        // every animated slot in placement order.
+        List<List<Integer>> sources = new ArrayList<>();
+        int backgroundSource = -1;
+        if (backgroundAnimation != null) {
+            backgroundSource = sources.size();
+            sources.add(backgroundAnimation.frameTicks());
+        }
+        int[] placementSources = new int[placements.size()];
+        for (int index = 0; index < placements.size(); index++) {
+            placementSources[index] = switch (placements.get(index).visual()) {
+                case SlotVisualSource.AnimatedRaster animated -> {
+                    sources.add(animated.stepTicks());
+                    yield sources.size() - 1;
+                }
+                case SlotVisualSource.AnimatedImage animated -> {
+                    sources.add(animated.stepTicks());
+                    yield sources.size() - 1;
+                }
+                default -> -1;
+            };
+        }
+        AnimationTimeline timeline = AnimationTimeline.of(sources);
+
+        Layout layout = computeLayout(pixelSize);
+        BufferedImage staticBackground = backgroundAnimation == null && PackId.isActive(packId)
+            ? repository().resolveContainerBackground(packId).orElse(null)
+            : null;
+        List<BufferedImage> frames = new ArrayList<>(timeline.steps().size());
+        for (AnimationTimeline.Step step : timeline.steps()) {
+            BufferedImage canvas = new BufferedImage(layout.canvasWidth(), layout.canvasHeight(), BufferedImage.TYPE_INT_ARGB);
+            Graphics2D graphics = canvas.createGraphics();
+            try {
+                graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
+                graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+
+                BufferedImage background = backgroundAnimation != null
+                    ? backgroundAnimation.frameImage(step.framePositions().get(backgroundSource))
+                    : staticBackground;
+                drawResolvedBackground(graphics, layout.originX(), layout.originY(), pixelSize,
+                    layout.guiHeight(), background);
+                if (layout.titleLine() != null) {
+                    layout.titleLine().drawLineOnto(graphics, 0,
+                        layout.originX() + TITLE_X * pixelSize, layout.originY() + TITLE_Y * pixelSize);
+                }
+                drawPlacements(graphics, layout.originX(), layout.originY(), pixelSize,
+                    placements, placementSources, step);
+            } finally {
+                graphics.dispose();
+            }
+            frames.add(canvas);
+        }
+
+        List<Integer> delaysMs = timeline.stepDelaysMillis();
+        try {
+            byte[] gifData = AnimatedGifEncoder.encode(frames, delaysMs);
+            log.debug("Rendered texture-animated container ({} frames)", frames.size());
+            return new GeneratedObject(gifData, frames, delaysMs);
+        } catch (IOException e) {
+            // Warn, not error: the render still succeeds through the static path.
+            log.warn("Failed to encode animated container, falling back to the static render", e);
+            return null;
+        }
+    }
+
+    /** One slot's resolved visual for the animated compose. */
+    private sealed interface SlotVisualSource {
+
+        /** A static elements raster, drawn with its slot-anchored offsets. */
+        record StaticRaster(PackItemVisual.ElementsRaster raster) implements SlotVisualSource {
+        }
+
+        /** A static item image, scaled into the slot interior like the classic pipeline. */
+        record StaticImage(BufferedImage image) implements SlotVisualSource {
+        }
+
+        /** A texture-animated elements raster: one raster per timeline step of its own cycle. */
+        record AnimatedRaster(List<PackItemVisual.ElementsRaster> steps,
+                              List<Integer> stepTicks) implements SlotVisualSource {
+        }
+
+        /** A texture-animated item image: one frame per timeline step of its own cycle. */
+        record AnimatedImage(List<BufferedImage> steps, List<Integer> stepTicks) implements SlotVisualSource {
+        }
+    }
+
+    /** One occupied slot of the animated compose: index, count badge and resolved visual. */
+    private record SlotPlacement(int slotIndex, int amount, SlotVisualSource visual) {
+    }
+
+    /**
+     * Resolves every occupied slot's visual for the animated compose, mirroring
+     * {@link #drawItems}' iteration exactly (parse order, per-slot custom model data, null and
+     * malformed entries skipped) so placements draw in the same order the static path paints.
+     * Identical specs share one resolution via per-call caches.
+     */
+    private List<SlotPlacement> resolvePlacements(int pixelSize, @Nullable GenerationContext generationContext) {
+        List<SlotPlacement> placements = new ArrayList<>();
+        if (slots.isEmpty()) {
+            return placements;
+        }
+        List<InventoryItem> items = new InventoryStringParser(rows * COLUMNS).parse(buildInventoryString());
+        Map<ElementsRasterKey, Optional<PackAnimatedVisual>> animationCache = new HashMap<>();
+        Map<ItemVisualKey, GeneratedObject> generatedCache = new HashMap<>();
+        for (InventoryItem item : items) {
+            if (item.getItemName().equalsIgnoreCase("null")) {
+                continue;
+            }
+            int[] itemSlots = item.getSlot();
+            int[] amounts = item.getAmount();
+            if (itemSlots == null || amounts == null || itemSlots.length != amounts.length) {
+                continue;
+            }
+            for (int index = 0; index < itemSlots.length; index++) {
+                CustomModelData data = slotCustomModelData.getOrDefault(itemSlots[index], CustomModelData.EMPTY);
+                SlotVisualSource visual = resolveSlotVisualSource(item, data, pixelSize, generationContext,
+                    animationCache, generatedCache);
+                if (visual != null) {
+                    placements.add(new SlotPlacement(itemSlots[index], amounts[index], visual));
+                }
+            }
+        }
+        return placements;
+    }
+
+    /**
+     * Resolves one slot's visual source: elements-based specs probe the animated resolution
+     * first (falling back to their static raster), everything else runs the shared item
+     * pipeline with the animated-textures flag - a texture-animated result carries per-frame
+     * delays, which convert to the tick durations the scene timeline consumes.
+     */
+    @Nullable
+    private SlotVisualSource resolveSlotVisualSource(InventoryItem item, CustomModelData data, int pixelSize,
+                                                     @Nullable GenerationContext generationContext,
+                                                     Map<ElementsRasterKey, Optional<PackAnimatedVisual>> animationCache,
+                                                     Map<ItemVisualKey, GeneratedObject> generatedCache) {
+        PackItemVisual.ElementsRaster staticRaster = resolveElementsRaster(item, data, pixelSize);
+        if (staticRaster != null) {
+            PackAnimatedVisual animation = animationCache.computeIfAbsent(
+                    new ElementsRasterKey(item.getItemName(), data),
+                    key -> repository().resolveItemVisualAnimation(packId, key.itemName(), key.data(), null,
+                        pixelSize, fullGuiRotations))
+                .orElse(null);
+            if (animation != null && animation.steps().getFirst() instanceof PackItemVisual.ElementsRaster) {
+                List<PackItemVisual.ElementsRaster> steps = animation.steps().stream()
+                    .map(PackItemVisual.ElementsRaster.class::cast)
+                    .toList();
+                return new SlotVisualSource.AnimatedRaster(steps, animation.stepTicks());
+            }
+            return new SlotVisualSource.StaticRaster(staticRaster);
+        }
+        ItemVisualKey visualKey = new ItemVisualKey(item.getItemName(), item.getExtraContent(),
+            item.getDurabilityPercent(), data);
+        GeneratedObject generated = generatedCache.computeIfAbsent(visualKey,
+            key -> MinecraftInventoryGenerator.generateSlotObject(item, generationContext,
+                PackId.isActive(packId) ? packId : null, packRepository, key.customModelData(), true));
+        if (generated.getFrameDelaysMs() != null) {
+            List<Integer> stepTicks = generated.getFrameDelaysMs().stream()
+                .map(AnimationTimeline::millisToTicks)
+                .toList();
+            return new SlotVisualSource.AnimatedImage(generated.getAnimationFrames(), stepTicks);
+        }
+        // A static flat item resolved here with the animated-textures flag is byte-identical to
+        // the static-flag pipeline result (a non-animated item's renderAnimatedTextures returns
+        // null and the static path runs). Seed the instance cache the static render reads so a
+        // fall-through static render - the flag is on but nothing in the scene animates - reuses
+        // this result instead of running the item pipeline a second time per slot.
+        itemVisualCache.putIfAbsent(visualKey, generated.getImage());
+        return new SlotVisualSource.StaticImage(generated.getImage());
+    }
+
+    /** Canvas x of a 0-based slot offset's 16x16 interior top-left, anchored to the GUI origin. */
+    private static int slotInteriorX(int slotOffset, int originX, int pixelSize) {
+        return originX + (SLOT_ORIGIN_X + SLOT_PITCH * (slotOffset % COLUMNS)) * pixelSize;
+    }
+
+    /** Canvas y of a 0-based slot offset's 16x16 interior top-left, anchored to the GUI origin. */
+    private static int slotInteriorY(int slotOffset, int originY, int pixelSize) {
+        return originY + (SLOT_ORIGIN_Y + SLOT_PITCH * (slotOffset / COLUMNS)) * pixelSize;
+    }
+
+    /**
+     * Draws one timeline step's slot items in placement order with the exact draw calls of the
+     * static path: rasters at their slot-anchored offsets, images scaled into the slot
+     * interior, count badges above.
+     */
+    private void drawPlacements(Graphics2D graphics, int originX, int originY, int pixelSize,
+                                List<SlotPlacement> placements, int[] placementSources,
+                                AnimationTimeline.Step step) {
+        for (int index = 0; index < placements.size(); index++) {
+            SlotPlacement placement = placements.get(index);
+            int slotOffset = placement.slotIndex() - 1;
+            int x = slotInteriorX(slotOffset, originX, pixelSize);
+            int y = slotInteriorY(slotOffset, originY, pixelSize);
+            int position = placementSources[index] >= 0 ? step.framePositions().get(placementSources[index]) : 0;
+            switch (placement.visual()) {
+                case SlotVisualSource.StaticRaster source -> graphics.drawImage(source.raster().image(),
+                    x + source.raster().offsetX(), y + source.raster().offsetY(), null);
+                case SlotVisualSource.AnimatedRaster source -> {
+                    PackItemVisual.ElementsRaster raster = source.steps().get(position);
+                    graphics.drawImage(raster.image(), x + raster.offsetX(), y + raster.offsetY(), null);
+                }
+                case SlotVisualSource.StaticImage source -> graphics.drawImage(source.image(),
+                    x, y, SLOT_INTERIOR * pixelSize, SLOT_INTERIOR * pixelSize, null);
+                case SlotVisualSource.AnimatedImage source -> graphics.drawImage(source.steps().get(position),
+                    x, y, SLOT_INTERIOR * pixelSize, SLOT_INTERIOR * pixelSize, null);
+            }
+            if (placement.amount() > 1) {
+                MinecraftInventoryGenerator.drawStackCount(
+                    graphics, placement.amount(), x - pixelSize, y - pixelSize, pixelSize);
+            }
+        }
+    }
+
+    /**
+     * The canvas layout of one render: the title line (built once), the GUI rect origin on the
+     * title-expanded canvas and the canvas dimensions. Shared by the static render and the
+     * per-step animated compose so their geometry can never drift.
+     */
+    private record Layout(MinecraftTooltip titleLine, int originX, int originY,
+                          int canvasWidth, int canvasHeight, int guiHeight) {
+    }
+
+    private Layout computeLayout(int pixelSize) {
         int guiHeight = BASE_GUI_HEIGHT + SLOT_PITCH * rows;
         int guiWidthPx = GUI_WIDTH * pixelSize;
         int guiHeightPx = guiHeight * pixelSize;
@@ -262,26 +547,10 @@ public class MinecraftContainerGenerator implements Generator {
 
         int originX = overdrawLeft * pixelSize;
         int originY = overdrawTop * pixelSize;
-        BufferedImage canvas = new BufferedImage(
+        return new Layout(titleLine, originX, originY,
             originX + guiWidthPx + overdrawRight * pixelSize,
             originY + guiHeightPx + overdrawBottom * pixelSize,
-            BufferedImage.TYPE_INT_ARGB);
-        Graphics2D graphics = canvas.createGraphics();
-        try {
-            graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
-            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-
-            drawBackground(graphics, originX, originY, pixelSize, guiHeight);
-            if (titleLine != null) {
-                titleLine.drawLineOnto(graphics, 0, originX + TITLE_X * pixelSize, originY + TITLE_Y * pixelSize);
-            }
-            drawItems(graphics, originX, originY, pixelSize, generationContext);
-        } finally {
-            graphics.dispose();
-        }
-
-        log.debug("Rendered container image (dimensions {}x{})", canvas.getWidth(), canvas.getHeight());
-        return new GeneratedObject(canvas);
+            guiHeight);
     }
 
     /** Canvas px rounded UP to whole GUI px of overdraw; never negative. */
@@ -322,6 +591,16 @@ public class MinecraftContainerGenerator implements Generator {
         BufferedImage packBackground = PackId.isActive(packId)
             ? repository().resolveContainerBackground(packId).orElse(null)
             : null;
+        drawResolvedBackground(graphics, originX, originY, pixelSize, guiHeight, packBackground);
+    }
+
+    /**
+     * Draws an already-resolved background texture (or the fallback chrome when null) - the
+     * base-layer drawing shared by the static render and the per-step animated compose, so the
+     * two-section stitch can never drift between them.
+     */
+    private void drawResolvedBackground(Graphics2D graphics, int originX, int originY, int pixelSize, int guiHeight,
+                                        @Nullable BufferedImage packBackground) {
         if (packBackground == null) {
             drawFallbackChrome(graphics, originX, originY, pixelSize, guiHeight);
             return;
@@ -421,8 +700,8 @@ public class MinecraftContainerGenerator implements Generator {
                     continue;
                 }
                 int slotOffset = itemSlots[index] - 1;
-                int x = originX + (SLOT_ORIGIN_X + SLOT_PITCH * (slotOffset % COLUMNS)) * pixelSize;
-                int y = originY + (SLOT_ORIGIN_Y + SLOT_PITCH * (slotOffset / COLUMNS)) * pixelSize;
+                int x = slotInteriorX(slotOffset, originX, pixelSize);
+                int y = slotInteriorY(slotOffset, originY, pixelSize);
                 if (raster != null) {
                     // Already at this generator's pixel size; the offsets anchor the art on the
                     // slot exactly like the vanilla client (oversized art spans neighbors and
@@ -864,6 +1143,7 @@ public class MinecraftContainerGenerator implements Generator {
         private final SortedMap<Integer, CustomModelData> slotCustomModelData = new TreeMap<>();
         private int scaleFactor = 1;
         private boolean fullGuiRotations;
+        private boolean animatedTextures;
         private PackId packId;
         private PackRepository packRepository;
 
@@ -982,6 +1262,19 @@ public class MinecraftContainerGenerator implements Generator {
         }
 
         /**
+         * Opts the render into animated pack textures (default false): an animated pack
+         * container background and every texture-animated slot item join one shared scene
+         * timeline (the LCM of the cycles, capped per
+         * {@link net.aerh.imagegenerator.pack.AnimationTimeline}) and {@code build().generate()}
+         * returns the GIF form of {@link GeneratedObject} with per-frame delays. Scenes without
+         * animated textures render the static image exactly as before.
+         */
+        public Builder withAnimatedTextures(boolean animatedTextures) {
+            this.animatedTextures = animatedTextures;
+            return this;
+        }
+
+        /**
          * Validates the slot indices against the final row count and builds the generator.
          *
          * @throws IllegalArgumentException when {@code rows} was never set (or is out of range),
@@ -1000,7 +1293,8 @@ public class MinecraftContainerGenerator implements Generator {
                 }
             }
             return new MinecraftContainerGenerator(rows, title, new TreeMap<>(slots),
-                new TreeMap<>(slotCustomModelData), scaleFactor, fullGuiRotations, packId, packRepository);
+                new TreeMap<>(slotCustomModelData), scaleFactor, fullGuiRotations, animatedTextures,
+                packId, packRepository);
         }
     }
 }

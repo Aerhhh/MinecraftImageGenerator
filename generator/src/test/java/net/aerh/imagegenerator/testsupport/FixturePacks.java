@@ -168,6 +168,42 @@ public final class FixturePacks {
             write(root, "assets/testpack/textures/item/animated.png.mcmeta", """
                 {"animation":{"frametime":3,"frames":[2,0,1]}}""");
 
+            // Mixed per-frame times: two frames at the default frametime 2 plus a 100-tick hold
+            // on frame 0 - the "shiny strip" timing shape at item scale. Frame 0 red, frame 1
+            // green.
+            delegatingItem(root, "animated_hold", "testpack:item/animated_hold");
+            model(root, "animated_hold", "item/generated", "testpack:item/animated_hold");
+            BufferedImage holdFlipbook = transparent(16, 32);
+            fill(holdFlipbook, 0, 0xFFFF0000);
+            fill(holdFlipbook, 1, 0xFF00FF00);
+            texture(root, "animated_hold", holdFlipbook);
+            write(root, "assets/testpack/textures/item/animated_hold.png.mcmeta", """
+                {"animation":{"frametime":2,"frames":[0,1,{"index":0,"time":100}]}}""");
+
+            // Animated texture whose mcmeta lists an out-of-bounds frame index: the animated
+            // resolution must warn and fall back to static (the decode-path policy).
+            delegatingItem(root, "animated_badmeta", "testpack:item/animated_badmeta");
+            model(root, "animated_badmeta", "item/generated", "testpack:item/animated_badmeta");
+            BufferedImage badFlipbook = transparent(16, 32);
+            fill(badFlipbook, 0, 0xFF881100);
+            fill(badFlipbook, 1, 0xFF118800);
+            texture(root, "animated_badmeta", badFlipbook);
+            write(root, "assets/testpack/textures/item/animated_badmeta.png.mcmeta", """
+                {"animation":{"frames":[0,99]}}""");
+
+            // Animated texture whose mcmeta is malformed for the STRICT full-animation parse
+            // (frametime 0) but still names a flipbook. The flag-off static path must keep
+            // cropping the first frame (the lenient pre-full-model behavior), not fall back to
+            // the raw uncropped 16x32 sheet. Frame 0 teal, frame 1 orange.
+            delegatingItem(root, "animated_badtime", "testpack:item/animated_badtime");
+            model(root, "animated_badtime", "item/generated", "testpack:item/animated_badtime");
+            BufferedImage badTimeFlipbook = transparent(16, 32);
+            fill(badTimeFlipbook, 0, 0xFF00AAAA);
+            fill(badTimeFlipbook, 1, 0xFFAA5500);
+            texture(root, "animated_badtime", badTimeFlipbook);
+            write(root, "assets/testpack/textures/item/animated_badtime.png.mcmeta", """
+                {"animation":{"frametime":0}}""");
+
             // Emissive marker texture (alpha 252)
             delegatingItem(root, "emissive", "testpack:item/emissive");
             model(root, "emissive", "item/generated", "testpack:item/emissive");
@@ -218,7 +254,9 @@ public final class FixturePacks {
             write(root, "assets/testpack/textures/gui/sprites/tooltip/anim_background.png.mcmeta", """
                 {"animation":{"frametime":2,"frames":[2,0,1]},
                  "gui":{"scaling":{"type":"nine_slice","width":8,"height":8,"border":1}}}""");
-            tooltipSprite(root, NAMESPACE, "anim_frame", solid(8, 8, 0xFF030303));
+            // Ring like real tooltip frames: the animated background must stay visible through
+            // the frame sprite's transparent center when the two composite.
+            tooltipSprite(root, NAMESPACE, "anim_frame", ring(8, 8, 1, 0xFF030303));
 
             return root;
         } catch (IOException e) {
@@ -312,6 +350,60 @@ public final class FixturePacks {
             return root;
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to write tall animated tooltip fixture pack", e);
+        }
+    }
+
+    /**
+     * Writes a pack combining an animated tooltip style with a DEFAULT pack font of several
+     * equal-advance obfuscatable glyphs, so animated-chrome tests can observe pack-glyph
+     * obfuscation ticking per frame (built-in font obfuscation uses {@code ThreadLocalRandom} and
+     * never consumes the seeded frame index, so it cannot pin the wiring).
+     *
+     * <p>Contents ({@code testpack} namespace unless noted):
+     * <ul>
+     * <li>Style {@code anim}: the background is an 8x24 flipbook of three 8x8 frames (red, green,
+     *     blue) with a frames list {@code [2, 0, 1]} at frametime 2 (chrome cycle 6 ticks) and
+     *     nine-slice gui scaling; the frame sprite is an 8x8 ring.</li>
+     * <li>{@code minecraft:default}: a reference to {@code testpack:glyphs}, so lore text picks
+     *     the pack glyphs up without an explicit font id.</li>
+     * <li>{@code testpack:glyphs}: bitmap font, an 18x3 sheet cut 6x1 mapping U+E000..U+E005 to
+     *     solid 3x3 cells of six distinct colors - all sharing advance 4, so obfuscation of any
+     *     one substitutes among all six.</li>
+     * </ul>
+     */
+    public static Path writeAnimatedGlyphTooltipPack(Path root) {
+        try {
+            packMcmeta(root, "animated glyph tooltip test fixture");
+
+            BufferedImage themeFlipbook = transparent(8, 24);
+            fillFrame(themeFlipbook, 0, 8, 0xFFFF0000);
+            fillFrame(themeFlipbook, 1, 8, 0xFF00FF00);
+            fillFrame(themeFlipbook, 2, 8, 0xFF0000FF);
+            tooltipSprite(root, NAMESPACE, "anim_background", themeFlipbook);
+            write(root, "assets/testpack/textures/gui/sprites/tooltip/anim_background.png.mcmeta", """
+                {"animation":{"frametime":2,"frames":[2,0,1]},
+                 "gui":{"scaling":{"type":"nine_slice","width":8,"height":8,"border":1}}}""");
+            tooltipSprite(root, NAMESPACE, "anim_frame", ring(8, 8, 1, 0xFF030303));
+
+            BufferedImage glyphSheet = transparent(18, 3);
+            int[] colors = {0xFFFF0000, 0xFF00FF00, 0xFF0000FF, 0xFFFFFF00, 0xFF00FFFF, 0xFFFF00FF};
+            for (int cell = 0; cell < 6; cell++) {
+                for (int y = 0; y < 3; y++) {
+                    for (int x = 0; x < 3; x++) {
+                        glyphSheet.setRGB(cell * 3 + x, y, colors[cell]);
+                    }
+                }
+            }
+            fontTexture(root, NAMESPACE, "glyphs.png", glyphSheet);
+            fontJson(root, NAMESPACE, "glyphs", """
+                {"providers":[{"type":"bitmap","file":"testpack:font/glyphs.png",
+                  "height":3,"ascent":3,"chars":["\\uE000\\uE001\\uE002\\uE003\\uE004\\uE005"]}]}""");
+            fontJson(root, "minecraft", "default", """
+                {"providers":[{"type":"reference","id":"testpack:glyphs"}]}""");
+
+            return root;
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to write animated glyph tooltip fixture pack", e);
         }
     }
 
@@ -605,6 +697,34 @@ public final class FixturePacks {
     }
 
     /**
+     * Writes a pack whose {@code generic_54} container texture is an ANIMATED flipbook: two
+     * 256x256 frames stacked vertically (512 total) with an explicit 256x256 frame size and
+     * frametime 2 - frame 0 solid 0xFF113355, frame 1 solid 0xFF553311. Plus one static marker
+     * item ({@code testpack:item/marker}, solid 0xFFAA5500) so slot items can prove the static
+     * scene parts stay identical across animation frames.
+     */
+    public static Path writeAnimatedContainerPack(Path root) {
+        try {
+            packMcmeta(root, "animated container test fixture");
+
+            BufferedImage flipbook = transparent(256, 512);
+            fillFrame(flipbook, 0, 256, 0xFF113355);
+            fillFrame(flipbook, 1, 256, 0xFF553311);
+            containerTexture(root, flipbook);
+            write(root, "assets/minecraft/textures/gui/container/generic_54.png.mcmeta", """
+                {"animation":{"frametime":2,"width":256,"height":256}}""");
+
+            delegatingItem(root, "marker", "testpack:item/marker");
+            model(root, "marker", "item/generated", "testpack:item/marker");
+            texture(root, "marker", solid(16, 16, 0xFFAA5500));
+
+            return root;
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to write animated container fixture pack", e);
+        }
+    }
+
+    /**
      * Writes a pack of ELEMENTS-BASED item models (the Wynncraft/MCC UI-quad shape): flat quads
      * with display.gui transforms, custom_model_data dispatch, tints and oversized_in_gui.
      * Everything is synthetic and generated at test runtime.
@@ -755,6 +875,31 @@ public final class FixturePacks {
                 {"animation":{"frametime":3,"frames":[2,0,1]}}""");
             solidQuadModel(root, "elem_animated", "testpack:item/elem_flipbook");
             delegatingItem(root, "animated_quad", "testpack:item/elem_animated");
+
+            // A second animated quad with a DIFFERENT cycle (2 frames x 2 ticks = 4, coprime
+            // with animated_quad's 9), for scene-timeline LCM tests. Default frame order.
+            BufferedImage fastFlipbook = transparent(16, 32);
+            fill(fastFlipbook, 0, 0xFFFF8800);
+            fill(fastFlipbook, 1, 0xFF0088FF);
+            texture(root, "elem_flipbook_fast", fastFlipbook);
+            write(root, "assets/testpack/textures/item/elem_flipbook_fast.png.mcmeta", """
+                {"animation":{"frametime":2}}""");
+            solidQuadModel(root, "elem_animated_fast", "testpack:item/elem_flipbook_fast");
+            delegatingItem(root, "animated_quad_fast", "testpack:item/elem_animated_fast");
+
+            // A FLAT (layer0 sprite) animated item: a 16x48 flipbook, default frame order,
+            // frametime 3 (3 frames, cycle 9). Unlike animated_quad this is NOT an elements
+            // model, so a composite resolves it through the item pipeline (the AnimatedImage /
+            // flat slot path), not the elements raster timeline. Frame 0 red, 1 green, 2 blue.
+            BufferedImage spriteFlipbook = transparent(16, 48);
+            fill(spriteFlipbook, 0, 0xFFCC0000);
+            fill(spriteFlipbook, 1, 0xFF00CC00);
+            fill(spriteFlipbook, 2, 0xFF0000CC);
+            texture(root, "sprite_flipbook", spriteFlipbook);
+            write(root, "assets/testpack/textures/item/sprite_flipbook.png.mcmeta", """
+                {"animation":{"frametime":3}}""");
+            model(root, "animated_sprite_model", "item/generated", "testpack:item/sprite_flipbook");
+            delegatingItem(root, "animated_sprite", "testpack:item/animated_sprite_model");
 
             item(root, "gauge", """
                 {"model":{"type":"range_dispatch","property":"minecraft:custom_model_data","index":0,"scale":1.0,

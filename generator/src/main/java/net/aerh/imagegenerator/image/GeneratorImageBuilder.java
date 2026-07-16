@@ -6,12 +6,15 @@ import net.aerh.imagegenerator.context.GenerationContext;
 import net.aerh.imagegenerator.Generator;
 import net.aerh.imagegenerator.exception.GeneratorException;
 import net.aerh.imagegenerator.item.GeneratedObject;
+import net.aerh.imagegenerator.pack.AnimationTimeline;
+import net.aerh.imagegenerator.util.AnimatedGifEncoder;
 import org.jetbrains.annotations.Nullable;
 
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -188,6 +191,17 @@ public class GeneratorImageBuilder {
             throw new GeneratorException("No generators provided to build an image.");
         }
 
+        // When any object carries PER-FRAME delays (tick-timed pack texture animations), the
+        // uniform maxFrames/modulo path below would collapse its variable timing to one delay -
+        // a 5-second hold becoming 100 ms. Those composites go through the shared timeline
+        // instead. Composites of only uniform-delay animations (the enchant glint) keep the
+        // established path below, byte-identical.
+        boolean perFrameDelays = generatedObjects.stream()
+            .anyMatch(obj -> obj.isAnimated() && obj.getFrameDelaysMs() != null);
+        if (perFrameDelays) {
+            return buildTickTimedComposite(generatedObjects);
+        }
+
         int maxFrames = 1;
         int frameDelayMs = 50; // Default delay
         boolean delaySet = false;
@@ -259,5 +273,93 @@ public class GeneratorImageBuilder {
         byte[] gifData = ImageUtil.toGifBytes(compositeFrames, frameDelayMs, true);
 
         return new GeneratedObject(gifData, compositeFrames, frameDelayMs);
+    }
+
+    /**
+     * Composites objects whose animations carry PER-FRAME delays (tick-timed pack texture
+     * animations) onto one shared {@link AnimationTimeline}, so a variable-delay animation - a
+     * shiny hold, mixed 2-tick and 100-tick frames - keeps its authored timing instead of
+     * collapsing to a single uniform delay. Each animated object is a timeline source over its
+     * own frames (per-frame delays converted to ticks; any uniform-delay animation in the mix
+     * expands to one tick duration per frame); static objects draw their single image in every
+     * step. The honest per-step delays go through {@link AnimatedGifEncoder}, which itself falls
+     * back to the uniform encoder when every step happens to share a delay.
+     */
+    private GeneratedObject buildTickTimedComposite(List<GeneratedObject> generatedObjects)
+        throws IOException, GeneratorException {
+        List<GeneratedObject> animated = generatedObjects.stream().filter(GeneratedObject::isAnimated).toList();
+        List<List<Integer>> sources = new ArrayList<>(animated.size());
+        for (GeneratedObject obj : animated) {
+            sources.add(sourceTicks(obj));
+        }
+        AnimationTimeline timeline = AnimationTimeline.of(sources);
+
+        // Dimensions from the stored first frame / static image, exactly as the uniform path.
+        int totalWidth = 0;
+        int maxHeight = 0;
+        for (int i = 0; i < generatedObjects.size(); i++) {
+            BufferedImage frameImage = generatedObjects.get(i).getImage();
+            if (frameImage == null) {
+                throw new GeneratorException("Generated image (frame 0) is null for "
+                    + generatedObjects.get(i).getClass().getSimpleName());
+            }
+            totalWidth += frameImage.getWidth();
+            if (i < generatedObjects.size() - 1) {
+                totalWidth += IMAGE_PADDING_PX;
+            }
+            maxHeight = Math.max(maxHeight, frameImage.getHeight());
+        }
+        if (totalWidth <= 0 || maxHeight <= 0) {
+            throw new GeneratorException("Calculated animated image dimensions are invalid (width="
+                + totalWidth + ", height=" + maxHeight + ")");
+        }
+
+        List<BufferedImage> compositeFrames = new ArrayList<>(timeline.steps().size());
+        for (AnimationTimeline.Step step : timeline.steps()) {
+            BufferedImage compositeFrame = new BufferedImage(totalWidth + 2 * IMAGE_BORDER_PADDING_PX, maxHeight + 2 * IMAGE_BORDER_PADDING_PX, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D graphics = compositeFrame.createGraphics();
+            int currentX = IMAGE_BORDER_PADDING_PX;
+            int animatedIndex = 0;
+
+            for (GeneratedObject obj : generatedObjects) {
+                BufferedImage currentFrameImage;
+                if (obj.isAnimated()) {
+                    List<BufferedImage> frames = obj.getAnimationFrames();
+                    if (frames == null || frames.isEmpty()) {
+                        throw new GeneratorException("Animated object has null or empty frames list: "
+                            + obj.getClass().getSimpleName());
+                    }
+                    currentFrameImage = frames.get(step.framePositions().get(animatedIndex));
+                    animatedIndex++;
+                } else {
+                    currentFrameImage = obj.getImage();
+                }
+
+                int yOffset = IMAGE_BORDER_PADDING_PX + (maxHeight - currentFrameImage.getHeight()) / 2;
+                graphics.drawImage(currentFrameImage, currentX, yOffset, null);
+                currentX += currentFrameImage.getWidth() + IMAGE_PADDING_PX;
+            }
+
+            graphics.dispose();
+            compositeFrames.add(compositeFrame);
+        }
+
+        List<Integer> delaysMs = timeline.stepDelaysMillis();
+        byte[] gifData = AnimatedGifEncoder.encode(compositeFrames, delaysMs);
+        return new GeneratedObject(gifData, compositeFrames, delaysMs);
+    }
+
+    /**
+     * One composite timeline source's per-frame tick durations: an object's per-frame delays
+     * converted to ticks, or - for a uniform-delay animation mixed into a per-frame composite -
+     * its single delay repeated once per frame.
+     */
+    private static List<Integer> sourceTicks(GeneratedObject obj) {
+        List<Integer> delaysMs = obj.getFrameDelaysMs();
+        if (delaysMs != null) {
+            return delaysMs.stream().map(AnimationTimeline::millisToTicks).toList();
+        }
+        return Collections.nCopies(obj.getAnimationFrames().size(),
+            AnimationTimeline.millisToTicks(obj.getFrameDelayMs()));
     }
 }

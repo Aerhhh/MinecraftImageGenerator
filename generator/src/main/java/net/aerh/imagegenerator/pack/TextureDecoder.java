@@ -651,30 +651,62 @@ class TextureDecoder {
 
     /**
      * Crops a decoded flipbook texture to its static first frame (the frame the mcmeta's frames
-     * list starts at). The crop is an exact per-pixel copy: like {@link #decode}'s ARGB
+     * list starts at). See {@link #frame(BufferedImage, int, int, int)} for the crop semantics.
+     *
+     * @throws PackLoadException when the frame index or size falls outside the texture bounds
+     */
+    public static BufferedImage firstFrame(BufferedImage image, AnimationMeta meta) {
+        return frame(image, frameWidth(image, meta), frameHeight(image, meta), meta.firstFrameIndex());
+    }
+
+    /** The effective frame width: the explicit override, defaulting to the texture width. */
+    public static int frameWidth(BufferedImage image, AnimationMeta meta) {
+        return meta.frameWidth() != null ? meta.frameWidth() : image.getWidth();
+    }
+
+    /**
+     * The effective frame height: the explicit override, defaulting to the frame width - the
+     * square-frames vertical-flipbook convention this library uses everywhere.
+     */
+    public static int frameHeight(BufferedImage image, AnimationMeta meta) {
+        return meta.frameHeight() != null ? meta.frameHeight() : frameWidth(image, meta);
+    }
+
+    /**
+     * Crops one frame of a flipbook texture, indexed the vanilla way: the frame size cuts the
+     * sheet into a grid ({@code width / frameWidth} columns by {@code height / frameHeight} rows)
+     * and frames run left to right then top to bottom (row-major), so frame {@code i} sits at
+     * column {@code i % columns}, row {@code i / columns}. A single-column vertical flipbook
+     * (the common case, {@code frameWidth == sheet width}) reduces to column 0 and
+     * {@code row == frameIndex}. The crop is an exact per-pixel copy: like {@link #decode}'s ARGB
      * conversion it composites with {@link AlphaComposite#Src}, so translucent pixels keep their
      * exact channel values instead of drifting by one through SrcOver premultiplication.
      *
      * @throws PackLoadException when the frame index or size falls outside the texture bounds
      */
-    public static BufferedImage firstFrame(BufferedImage image, AnimationMeta meta) {
-        int frameWidth = meta.frameWidth() != null ? meta.frameWidth() : image.getWidth();
-        // Vanilla default: square frames sized by texture width, stacked vertically.
-        int frameHeight = meta.frameHeight() != null ? meta.frameHeight() : frameWidth;
-        // long arithmetic: untrusted index * height can overflow int and wrap past the bounds check.
-        long y = (long) meta.firstFrameIndex() * frameHeight;
-        if (frameWidth <= 0 || frameHeight <= 0 || meta.firstFrameIndex() < 0
-            || frameWidth > image.getWidth() || y + frameHeight > image.getHeight()) {
+    public static BufferedImage frame(BufferedImage image, int frameWidth, int frameHeight, int frameIndex) {
+        if (frameWidth <= 0 || frameHeight <= 0 || frameIndex < 0
+            || frameWidth > image.getWidth() || frameHeight > image.getHeight()) {
             throw new PackLoadException("Animation frame %s is outside texture bounds (%sx%s, frame %sx%s)",
-                String.valueOf(meta.firstFrameIndex()), String.valueOf(image.getWidth()),
+                String.valueOf(frameIndex), String.valueOf(image.getWidth()),
                 String.valueOf(image.getHeight()), String.valueOf(frameWidth), String.valueOf(frameHeight));
         }
+        int columns = image.getWidth() / frameWidth;
+        int rows = image.getHeight() / frameHeight;
+        // long arithmetic: an untrusted index could overflow int before the grid bounds check.
+        if (frameIndex >= (long) columns * rows) {
+            throw new PackLoadException("Animation frame %s is outside texture bounds (%sx%s, frame %sx%s)",
+                String.valueOf(frameIndex), String.valueOf(image.getWidth()),
+                String.valueOf(image.getHeight()), String.valueOf(frameWidth), String.valueOf(frameHeight));
+        }
+        int x = (frameIndex % columns) * frameWidth;
+        int y = (frameIndex / columns) * frameHeight;
         BufferedImage frame = new BufferedImage(frameWidth, frameHeight, BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = frame.createGraphics();
         try {
             // Src, not the default SrcOver: see toArgb - the crop must copy pixels exactly.
             graphics.setComposite(AlphaComposite.Src);
-            graphics.drawImage(image.getSubimage(0, (int) y, frameWidth, frameHeight), 0, 0, null);
+            graphics.drawImage(image.getSubimage(x, y, frameWidth, frameHeight), 0, 0, null);
         } finally {
             graphics.dispose();
         }

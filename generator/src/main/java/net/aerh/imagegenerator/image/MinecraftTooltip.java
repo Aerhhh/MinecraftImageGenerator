@@ -5,7 +5,10 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.aerh.imagegenerator.builder.ClassBuilder;
+import net.aerh.imagegenerator.pack.AnimatedTooltipSprites;
+import net.aerh.imagegenerator.pack.AnimationTimeline;
 import net.aerh.imagegenerator.pack.GuiSpriteRenderer;
+import net.aerh.imagegenerator.pack.PackAnimation;
 import net.aerh.imagegenerator.pack.TooltipSprites;
 import net.aerh.imagegenerator.text.ChatFormat;
 import net.aerh.imagegenerator.text.PackGlyphDispatcher;
@@ -22,6 +25,7 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -76,6 +80,13 @@ public class MinecraftTooltip {
      */
     private final boolean textShadow;
     private final TooltipSprites themeSprites;
+    /**
+     * The theme sprites' animations, when the caller opted into animated pack textures and at
+     * least one sprite animates; null keeps the render fully on the historical path. Only
+     * meaningful together with {@link #themeSprites} (the animated chrome replaces the static
+     * theme layer frame by frame).
+     */
+    private final AnimatedTooltipSprites animatedThemeSprites;
     private final TextColorRemap textColorRemap;
     private final PackGlyphDispatcher packGlyphs;
 
@@ -90,8 +101,21 @@ public class MinecraftTooltip {
     private boolean isAnimated = false;
     @Getter
     private int frameDelayMs;
+    /**
+     * The frame delay the builder configured, kept apart from {@link #frameDelayMs} (which the
+     * animated-chrome path reassigns to the first step's delay) so repeated {@link #render()}
+     * calls derive the obfuscation ticker from the configuration, never from a previous render.
+     */
+    private final int configuredFrameDelayMs;
     @Getter
     private int animationFrameCount;
+    /**
+     * Per-frame delays in milliseconds when the animated-chrome path produced frames that hold
+     * for DIFFERENT times; null on every other path, where {@link #getFrameDelayMs()} applies
+     * to all frames.
+     */
+    @Getter
+    private List<Integer> frameDelaysMs;
 
     private transient TextColor currentColor;
     private transient Font currentFont;
@@ -162,10 +186,11 @@ public class MinecraftTooltip {
      * @param aprilFools          Whether to randomly swap characters to alternate fonts.
      * @param textShadow          Whether text draws its drop shadow; see {@link #textShadow}.
      * @param themeSprites        Pack tooltip sprites replacing the programmatic chrome, or null.
+     * @param animatedThemeSprites The theme sprites' animations, or null; see {@link #animatedThemeSprites}.
      * @param textColorRemap      Shader-equivalent text color replacement table, or null.
      * @param packFontSource      Resolver for pack font ids, or null when no pack is active.
      */
-    private MinecraftTooltip(List<LineSegment> lines, TextColor defaultColor, int alpha, int padding, boolean firstLinePadding, boolean renderBorder, boolean centeredText, int frameDelayMs, int animationFrameCount, int scaleFactor, boolean aprilFools, boolean textShadow, TooltipSprites themeSprites, TextColorRemap textColorRemap, PackGlyphDispatcher.FontSource packFontSource) {
+    private MinecraftTooltip(List<LineSegment> lines, TextColor defaultColor, int alpha, int padding, boolean firstLinePadding, boolean renderBorder, boolean centeredText, int frameDelayMs, int animationFrameCount, int scaleFactor, boolean aprilFools, boolean textShadow, TooltipSprites themeSprites, AnimatedTooltipSprites animatedThemeSprites, TextColorRemap textColorRemap, PackGlyphDispatcher.FontSource packFontSource) {
         this.lines = lines;
         this.currentColor = defaultColor;
         this.alpha = alpha;
@@ -174,11 +199,13 @@ public class MinecraftTooltip {
         this.renderBorder = renderBorder;
         this.centeredText = centeredText;
         this.frameDelayMs = frameDelayMs;
+        this.configuredFrameDelayMs = frameDelayMs;
         this.animationFrameCount = animationFrameCount;
         this.scaleFactor = scaleFactor;
         this.aprilFools = aprilFools;
         this.textShadow = textShadow;
         this.themeSprites = themeSprites;
+        this.animatedThemeSprites = animatedThemeSprites;
         this.textColorRemap = textColorRemap;
         this.packGlyphs = PackGlyphDispatcher.of(packFontSource);
 
@@ -955,6 +982,7 @@ public class MinecraftTooltip {
      */
     public MinecraftTooltip render() {
         this.animationFrames.clear();
+        this.frameDelaysMs = null;
 
         // Determine the largest width using the measureLines method
         BufferedImage dummyImage = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
@@ -980,10 +1008,15 @@ public class MinecraftTooltip {
             .flatMap(line -> line.getSegments().stream())
             .anyMatch(ColorSegment::isObfuscated);
 
-        int framesToGenerate = this.isAnimated ? this.animationFrameCount : 1;
         int frameWidth = Math.max(1, finalWidth);
         int frameHeight = Math.max(1, finalHeight);
-        BufferedImage themeLayer = isThemed() ? buildThemeLayer(frameWidth, frameHeight) : null;
+
+        if (isThemed() && this.animatedThemeSprites != null) {
+            return renderAnimatedChrome(frameWidth, frameHeight, this.isAnimated);
+        }
+
+        int framesToGenerate = this.isAnimated ? this.animationFrameCount : 1;
+        BufferedImage themeLayer = isThemed() ? buildThemeLayer(frameWidth, frameHeight, this.themeSprites) : null;
 
         for (int i = 0; i < framesToGenerate; i++) {
             BufferedImage frameImage = new BufferedImage(frameWidth, frameHeight, BufferedImage.TYPE_INT_ARGB);
@@ -1027,20 +1060,83 @@ public class MinecraftTooltip {
     }
 
     /**
+     * The animated-chrome render: the theme sprites' animations - and, when obfuscated segments
+     * are present, the obfuscation ticker - share one {@link AnimationTimeline}, and every
+     * timeline step composes a frame from its theme layer (cached per distinct sprite-frame
+     * pair) plus the text pass. Obfuscation keeps its per-frame determinism: the frame index it
+     * seeds with is its own ticker position, exactly as the obfuscation-only path counts
+     * frames. The obfuscation ticker approximates {@link #frameDelayMs} to whole ticks
+     * (minimum one; the 50 ms default maps exactly).
+     *
+     * @param obfuscated whether obfuscated segments are present (precomputed by {@link #render})
+     */
+    private MinecraftTooltip renderAnimatedChrome(int frameWidth, int frameHeight, boolean obfuscated) {
+        PackAnimation background = this.animatedThemeSprites.background();
+        PackAnimation frameAnimation = this.animatedThemeSprites.frame();
+        List<List<Integer>> sources = new ArrayList<>(3);
+        int backgroundSource = -1;
+        int frameSource = -1;
+        int obfuscationSource = -1;
+        if (background != null) {
+            backgroundSource = sources.size();
+            sources.add(background.frameTicks());
+        }
+        if (frameAnimation != null) {
+            frameSource = sources.size();
+            sources.add(frameAnimation.frameTicks());
+        }
+        if (obfuscated) {
+            int obfuscationTicks = Math.max(1,
+                Math.round(this.configuredFrameDelayMs / (float) AnimationTimeline.MILLIS_PER_TICK));
+            obfuscationSource = sources.size();
+            sources.add(Collections.nCopies(this.animationFrameCount, obfuscationTicks));
+        }
+        AnimationTimeline timeline = AnimationTimeline.of(sources);
+
+        Map<Long, BufferedImage> themeLayers = new HashMap<>();
+        List<Integer> delays = new ArrayList<>(timeline.steps().size());
+        for (AnimationTimeline.Step step : timeline.steps()) {
+            int backgroundPosition = backgroundSource >= 0 ? step.framePositions().get(backgroundSource) : 0;
+            int framePosition = frameSource >= 0 ? step.framePositions().get(frameSource) : 0;
+            BufferedImage themeLayer = themeLayers.computeIfAbsent(
+                ((long) backgroundPosition << 32) | framePosition,
+                key -> buildThemeLayer(frameWidth, frameHeight,
+                    this.animatedThemeSprites.spritesAt(backgroundPosition, framePosition)));
+
+            BufferedImage frameImage = new BufferedImage(frameWidth, frameHeight, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D graphics = frameImage.createGraphics();
+            graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
+            graphics.drawImage(themeLayer, 0, 0, null);
+            drawLinesInternal(graphics, obfuscationSource >= 0 ? step.framePositions().get(obfuscationSource) : 0);
+            BufferedImage processedFrame = this.addPadding(frameImage);
+            graphics.dispose();
+
+            this.animationFrames.add(processedFrame);
+            delays.add(AnimationTimeline.ticksToMillis(step.durationTicks()));
+        }
+
+        this.isAnimated = true;
+        this.frameDelaysMs = List.copyOf(delays);
+        this.frameDelayMs = delays.getFirst();
+        this.image = this.animationFrames.getFirst();
+        return this;
+    }
+
+    /**
      * Composes the sprite chrome for one canvas: background rendered first, frame blitted over
      * the identical rect (vanilla layering; any apparent inset is transparent pixels in the art),
      * both at GUI-px resolution and then upscaled so one texel covers pixelSize canvas px.
      */
-    private BufferedImage buildThemeLayer(int width, int height) {
+    private BufferedImage buildThemeLayer(int width, int height, TooltipSprites sprites) {
         int guiWidth = width / pixelSize;
         int guiHeight = height / pixelSize;
         BufferedImage layer = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = layer.createGraphics();
         try {
             graphics.drawImage(upscale(GuiSpriteRenderer.render(
-                themeSprites.background().texture(), themeSprites.background().scaling(), guiWidth, guiHeight), pixelSize), 0, 0, null);
+                sprites.background().texture(), sprites.background().scaling(), guiWidth, guiHeight), pixelSize), 0, 0, null);
             graphics.drawImage(upscale(GuiSpriteRenderer.render(
-                themeSprites.frame().texture(), themeSprites.frame().scaling(), guiWidth, guiHeight), pixelSize), 0, 0, null);
+                sprites.frame().texture(), sprites.frame().scaling(), guiWidth, guiHeight), pixelSize), 0, 0, null);
         } finally {
             graphics.dispose();
         }
@@ -1080,6 +1176,7 @@ public class MinecraftTooltip {
         private boolean aprilFools = false;
         private boolean textShadow = true;
         private TooltipSprites themeSprites;
+        private AnimatedTooltipSprites animatedThemeSprites;
         private TextColorRemap textColorRemap;
         private PackGlyphDispatcher.FontSource packFontSource;
 
@@ -1182,6 +1279,18 @@ public class MinecraftTooltip {
             return this;
         }
 
+        /**
+         * Animates the sprite chrome: each timeline step composes its own theme layer from the
+         * animated sprites' frames, and obfuscated text (when present) ticks on the same shared
+         * timeline while keeping its per-frame determinism. Only takes effect together with
+         * {@link #withThemeSprites} while the border is enabled; null (the default) keeps the
+         * static chrome.
+         */
+        public Builder withAnimatedThemeSprites(AnimatedTooltipSprites animatedThemeSprites) {
+            this.animatedThemeSprites = animatedThemeSprites;
+            return this;
+        }
+
         public Builder withTextColorRemap(TextColorRemap textColorRemap) {
             this.textColorRemap = textColorRemap;
             return this;
@@ -1214,6 +1323,7 @@ public class MinecraftTooltip {
                 this.aprilFools,
                 this.textShadow,
                 this.themeSprites,
+                this.animatedThemeSprites,
                 this.textColorRemap,
                 this.packFontSource
             );

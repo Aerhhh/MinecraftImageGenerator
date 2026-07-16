@@ -376,21 +376,117 @@ class PackJsonParser {
         return parseAnimationSection(parseObject(json));
     }
 
+    /**
+     * Parses the full vanilla animation model: {@code frametime} (default 1 tick, must be
+     * positive), the frames list with int and {@code {index, time}} entries (every entry is
+     * validated, and a per-frame {@code time} overrides {@code frametime}), the frame-size
+     * overrides and the {@code interpolate} flag. Absent frames list means default order (all
+     * flipbook frames top to bottom).
+     */
     private static AnimationMeta parseAnimationSection(JsonObject root) {
         if (!root.has("animation") || !root.get("animation").isJsonObject()) {
             throw new PackLoadException("Texture mcmeta has no 'animation' section");
+        }
+        JsonObject animation = root.getAsJsonObject("animation");
+        int defaultFrameTime = animation.has("frametime")
+            ? requireIntegralInt(animation, "frametime", "Animation section") : 1;
+        if (defaultFrameTime < 1) {
+            throw new PackLoadException("Animation frametime must be positive, got %s",
+                String.valueOf(defaultFrameTime));
+        }
+        List<AnimationMeta.FrameEntry> frameEntries = null;
+        if (animation.has("frames")) {
+            JsonElement framesElement = animation.get("frames");
+            if (!framesElement.isJsonArray()) {
+                throw new PackLoadException("Animation 'frames' must be an array");
+            }
+            List<AnimationMeta.FrameEntry> entries = new ArrayList<>();
+            for (JsonElement frameElement : framesElement.getAsJsonArray()) {
+                entries.add(parseFrameEntry(frameElement, defaultFrameTime));
+            }
+            frameEntries = List.copyOf(entries);
+        }
+        Integer width = optionalInt(animation, "width");
+        Integer height = optionalInt(animation, "height");
+        return new AnimationMeta(frameEntries, defaultFrameTime, width, height,
+            optionalBoolean(animation, "interpolate"));
+    }
+
+    /**
+     * One frames-list entry: a bare number is a frame index at the default time; an object
+     * requires a numeric {@code index} and may override {@code time} (positive ticks).
+     */
+    private static AnimationMeta.FrameEntry parseFrameEntry(JsonElement entry, int defaultFrameTime) {
+        if (entry.isJsonObject()) {
+            JsonObject frame = entry.getAsJsonObject();
+            JsonElement index = frame.get("index");
+            if (index == null || !index.isJsonPrimitive() || !index.getAsJsonPrimitive().isNumber()) {
+                throw new PackLoadException("Animation frame entry is missing numeric 'index'");
+            }
+            int time = defaultFrameTime;
+            if (frame.has("time")) {
+                time = requireIntegralInt(frame, "time", "Animation frame entry");
+                if (time < 1) {
+                    throw new PackLoadException("Animation frame time must be positive, got %s",
+                        String.valueOf(time));
+                }
+            }
+            return new AnimationMeta.FrameEntry(index.getAsInt(), time);
+        }
+        if (!entry.isJsonPrimitive() || !entry.getAsJsonPrimitive().isNumber()) {
+            throw new PackLoadException("Animation frame entry must be a number or an object with 'index'");
+        }
+        return new AnimationMeta.FrameEntry(entry.getAsInt(), defaultFrameTime);
+    }
+
+    /**
+     * Parses ONLY the first-frame crop metadata a STATIC texture load needs - the frame-size
+     * overrides plus the first frame index - tolerating an otherwise malformed animation section
+     * exactly as the pre-full-model parse did: {@code frametime}, per-frame times and frame
+     * entries past the first are never validated here. This keeps the flag-off first-frame crop
+     * of a pack with a malformed animation mcmeta byte-identical (a first-frame crop, not the raw
+     * flipbook sheet), while the strict {@link #parseAnimationMeta} / {@link #parseMcmeta} path
+     * the animated resolution uses still rejects the same mcmeta loudly and falls back to static.
+     * The gui section is validated strictly (mirroring the historical two-section parse), so a
+     * malformed gui section still fails and yields no crop.
+     *
+     * @return the first-frame metadata, or null when the mcmeta declares no animation section
+     * @throws PackLoadException when the bytes are not a JSON object, the gui section is
+     *                           malformed, or the FIRST frame entry is not a number or an
+     *                           {@code index}-object
+     */
+    static AnimationMeta parseFirstFrameMeta(byte[] json) {
+        JsonObject root = parseObject(json);
+        // Validate the gui section for its throwing side effect only (loadTexture ignores gui
+        // scaling), matching the historical parseMcmeta that parsed both sections.
+        parseGuiSection(root);
+        if (!root.has("animation") || !root.get("animation").isJsonObject()) {
+            return null;
         }
         JsonObject animation = root.getAsJsonObject("animation");
         int firstFrameIndex = 0;
         if (animation.has("frames") && animation.get("frames").isJsonArray()) {
             JsonArray frames = animation.getAsJsonArray("frames");
             if (!frames.isEmpty()) {
-                firstFrameIndex = firstFrameIndex(frames.get(0));
+                firstFrameIndex = leadingFrameIndex(frames.get(0));
             }
         }
-        Integer width = optionalInt(animation, "width");
-        Integer height = optionalInt(animation, "height");
-        return new AnimationMeta(firstFrameIndex, width, height);
+        return new AnimationMeta(firstFrameIndex, optionalInt(animation, "width"), optionalInt(animation, "height"));
+    }
+
+    /** The flipbook index of a frames list's first entry (a bare number or an {@code index}-object). */
+    private static int leadingFrameIndex(JsonElement first) {
+        if (first.isJsonObject()) {
+            JsonElement index = first.getAsJsonObject().get("index");
+            if (index == null || !index.isJsonPrimitive() || !index.getAsJsonPrimitive().isNumber()) {
+                throw new PackLoadException("Animation frame entry is missing numeric 'index'");
+            }
+            return index.getAsInt();
+        }
+        if (!first.isJsonPrimitive() || !first.getAsJsonPrimitive().isNumber()) {
+            throw new PackLoadException("Animation frame entry must be a number or an object with 'index'");
+        }
+        return first.getAsInt();
     }
 
     private static GuiScaling parseGuiSection(JsonObject root) {
@@ -496,20 +592,6 @@ class PackJsonParser {
             throw new PackLoadException("Expected boolean for member '%s'", member);
         }
         return element.getAsBoolean();
-    }
-
-    private static int firstFrameIndex(JsonElement first) {
-        if (first.isJsonObject()) {
-            JsonElement index = first.getAsJsonObject().get("index");
-            if (index == null || !index.isJsonPrimitive() || !index.getAsJsonPrimitive().isNumber()) {
-                throw new PackLoadException("Animation frame entry is missing numeric 'index'");
-            }
-            return index.getAsInt();
-        }
-        if (!first.isJsonPrimitive() || !first.getAsJsonPrimitive().isNumber()) {
-            throw new PackLoadException("Animation frame entry must be a number or an object with 'index'");
-        }
-        return first.getAsInt();
     }
 
     private static ItemModelNode parseFallback(JsonObject node) {

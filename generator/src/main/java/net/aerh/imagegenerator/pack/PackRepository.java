@@ -182,6 +182,26 @@ public final class PackRepository {
     }
 
     /**
+     * Resolves an item ref across its own animation timeline: the visual resolves exactly like
+     * {@link #resolveItemVisual(PackId, String, CustomModelData, ItemDamage, int, boolean)},
+     * and when at least one texture it uses carries an animation mcmeta the result is one
+     * visual per timeline step with per-step tick durations (the least common multiple of the
+     * animated texture cycles, capped per {@link AnimationTimeline}).
+     *
+     * @return empty when the pack does not contain the item, or when no texture of the resolved
+     *     visual is animated - callers render the static visual instead
+     * @throws PackResolveException when the pack is not registered, or the item exists but
+     *                              cannot be rendered
+     */
+    public Optional<PackAnimatedVisual> resolveItemVisualAnimation(PackId packId, String itemRef,
+                                                                   CustomModelData data, @Nullable ItemDamage damage,
+                                                                   int pixelsPerGuiPx, boolean fullGuiRotations) {
+        Objects.requireNonNull(data, "data");
+        return requireRegistered(packId)
+            .resolveItemVisualAnimation(itemRef, data, damage, pixelsPerGuiPx, fullGuiRotations);
+    }
+
+    /**
      * Resolves a tooltip style ref (the {@code minecraft:tooltip_style} component value) against
      * a registered pack.
      *
@@ -215,6 +235,33 @@ public final class PackRepository {
     }
 
     /**
+     * Resolves a tooltip style's sprite animations against a registered pack: the animated
+     * counterpart of {@link #resolveTooltipSprites(PackId, String)}, present when at least one
+     * of the style's two sprites carries an animation mcmeta (the "shiny" frame strips real
+     * packs ship).
+     *
+     * @return empty when the pack defines no such style, or when neither sprite is animated
+     * @throws IllegalArgumentException when the style ref itself is malformed
+     * @throws PackResolveException     when the pack is not registered, or the style exists but
+     *                                  is broken
+     */
+    public Optional<AnimatedTooltipSprites> resolveTooltipSpritesAnimation(PackId packId, String styleRef) {
+        return requireRegistered(packId).resolveTooltipSpritesAnimation(styleRef);
+    }
+
+    /**
+     * Resolves the sprite animations of a registered pack's default tooltip override: the
+     * animated counterpart of {@link #resolveDefaultTooltipSprites(PackId)}.
+     *
+     * @return empty when the pack does not override the default tooltip, or when neither sprite
+     *     is animated
+     * @throws PackResolveException when the pack is not registered, or only one sprite is present
+     */
+    public Optional<AnimatedTooltipSprites> resolveDefaultTooltipSpritesAnimation(PackId packId) {
+        return requireRegistered(packId).resolveDefaultTooltipSpritesAnimation();
+    }
+
+    /**
      * Resolves a registered pack's override of the generic chest container background
      * ({@code minecraft:textures/gui/container/generic_54.png}).
      *
@@ -225,6 +272,18 @@ public final class PackRepository {
      */
     public Optional<BufferedImage> resolveContainerBackground(PackId packId) {
         return requireRegistered(packId).resolveContainerBackground();
+    }
+
+    /**
+     * Resolves the animation of a registered pack's generic chest container background: the
+     * animated counterpart of {@link #resolveContainerBackground(PackId)}.
+     *
+     * @return empty when the pack does not override the texture, or when it is not animated
+     * @throws PackResolveException when the pack is not registered, or the texture exists but
+     *                              fails to decode
+     */
+    public Optional<PackAnimation> resolveContainerBackgroundAnimation(PackId packId) {
+        return requireRegistered(packId).resolveContainerBackgroundAnimation();
     }
 
     /**

@@ -299,7 +299,7 @@ MinecraftTooltip tooltip = MinecraftTooltip.builder()
 `withTooltipStyle(...)` (shown above) selects a pack's `minecraft:tooltip_style` sprite pair - `<style>_background` and `<style>_frame` - honoring their nine-slice `gui.scaling` mcmeta. Three details worth knowing:
 
 - Missing styles fail loudly: requesting a style the pack does not define throws instead of rendering the vanilla missing texture.
-- Without an explicit style, a pack override of the default tooltip sprites (`minecraft:tooltip/background` + `minecraft:tooltip/frame`) still themes every tooltip; animated sprite strips contribute their first frame.
+- Without an explicit style, a pack override of the default tooltip sprites (`minecraft:tooltip/background` + `minecraft:tooltip/frame`) still themes every tooltip; animated sprite strips contribute their first frame unless the render opts into `withAnimatedTextures(true)` (see Animated textures).
 - `PackRepository.global().tooltipStyles(packId)` lists every style a pack defines.
 
 ### Container screens
@@ -411,6 +411,35 @@ new MinecraftHudLineGenerator.Builder()
 - Runs without an explicit color draw in white with a drop shadow, matching vanilla bossbar names.
 - `TitleRun` is the same styled-run type the container title uses, so pack fonts, colors, bold and italic behave identically in both.
 
+### Animated textures
+
+Animated pack textures (vertical flipbooks with an `animation` mcmeta) collapse to their first frame by default. `withAnimatedTextures(true)` - available on the item, tooltip, inventory and container builders - renders the real flipbook instead: when the resolved visual uses at least one animated texture, `generate()` returns the GIF form of `GeneratedObject`, with `getFrameDelaysMs()` carrying the per-frame delays (frames legitimately hold for different times - a shiny-strip frames list like `[0..16, {"index": 0, "time": 100}]` produces one long-hold frame):
+
+```java
+// An item whose layer0 sprite (or elements-model face texture) is animated
+new MinecraftItemGenerator.Builder()
+    .withItemModel("emberveil:item/ember_blade")
+    .withPack("emberveil:main")
+    .withAnimatedTextures(true)
+    .build();
+
+// A "shiny" tooltip style whose background sprite is a 17-frame strip
+new MinecraftTooltipGenerator.Builder()
+    .withName("&6Soulrend")
+    .withItemLore("&7A blade of &kliving&7 flame")
+    .withPack("emberveil:main")
+    .withTooltipStyle("emberveil:mythic")
+    .withAnimatedTextures(true)
+    .build();
+```
+
+- The full vanilla animation model is honored: `frametime` (default 1 tick = 50 ms), frames lists with int and `{index, time}` entries (a per-frame `time` overrides `frametime`), default top-to-bottom frame order when the list is absent, and `width`/`height` frame-size overrides. `interpolate` is parsed but rendered as nearest-frame - a documented approximation, so interpolated packs animate with hard frame steps.
+- Multiple animated sources in one scene (several slot items, an animated container background, chrome plus obfuscated text) share one timeline: the least common multiple of the cycles, sampled wherever any source changes frame. Timelines cap at `AnimationTimeline.MAX_ANIMATION_FRAMES` (120) steps and `AnimationTimeline.MAX_CYCLE_TICKS` (1200) ticks; longer cycles truncate deterministically with a warning and loop early.
+- In tooltips, animated chrome and the obfuscated-text animation tick on the same shared timeline. Pack-glyph obfuscation is seeded per frame, so it is deterministic; built-in font obfuscation stays random per render, so a tooltip that mixes animated chrome with built-in `&k` text is not byte-reproducible. Obfuscated text also forces the timeline to sample every tick, so pairing it with a long chrome hold (a shiny strip's 100-tick frame) can push the cycle past the 120-step cap and truncate the hold - deterministically, but earlier than the chrome alone would loop.
+- The enchant glint is not applied while animated textures drive an item's output (its 33 ms cycle cannot join the tick-based timeline; a warning is logged); in inventories, glint-animated slot items render their static frame while texture animation drives the scene.
+- Font glyphs never animate: vanilla does not animate font atlas textures. Server-side glyph animation (Wynncraft-style codepoint cycling) is the caller's concern.
+- Renders without any animated texture stay static and byte-identical to the flag-off output.
+
 ### Limitations
 
 Documented edges of the pack renderer, all deliberate:
@@ -420,7 +449,7 @@ Documented edges of the pack renderer, all deliberate:
 - **True 3D:** the orthographic pipeline paints faces back-to-front by projected center depth (a painter's algorithm). Flat stacks and convex solids order exactly like a depth test; mutually intersecting elements are approximated by their center depth. There is no perspective, matching the vanilla GUI camera.
 - **Tall glyphs in tooltips:** the standard tooltip canvas stays line-height based, so glyph art much taller than the line clips there. The container generator expands its canvas from measured art extents on every side; the HUD generator grows its canvas bottom for deep art, but its top edge stays the screen top, so art crossing the top or side edges clips exactly as in game.
 - **Effects on elements renders in slots:** container slot modifiers (`enchant`, `hover`, durability) are ignored for elements-model slot items, with a warning. The standalone item generator is not limited this way - it applies its effect pipeline to elements renders like any other render.
-- **Animation:** container renders are static images; animated slot items and animated GUI sprites contribute their first frame.
+- **Animation:** animated pack textures contribute their first frame unless the render opts into `withAnimatedTextures(true)` (see Animated textures); `interpolate` renders as nearest-frame, and shared timelines cap at 120 steps / 1200 ticks.
 - **Shaders:** shader-driven effects (core shader text animations and the like) are out of scope.
 
 ## Features

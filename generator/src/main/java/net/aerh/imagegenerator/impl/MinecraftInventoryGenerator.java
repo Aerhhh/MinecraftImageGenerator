@@ -10,12 +10,15 @@ import net.aerh.imagegenerator.builder.ClassBuilder;
 import net.aerh.imagegenerator.image.ImageCoordinates;
 import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.item.InventoryItem;
+import net.aerh.imagegenerator.pack.AnimationTimeline;
 import net.aerh.imagegenerator.pack.CustomModelData;
+import net.aerh.imagegenerator.pack.PackAnimatedVisual;
 import net.aerh.imagegenerator.pack.PackId;
 import net.aerh.imagegenerator.pack.PackItemVisual;
 import net.aerh.imagegenerator.pack.PackRepository;
 import net.aerh.imagegenerator.parser.inventory.InventoryStringParser;
 import net.aerh.imagegenerator.spritesheet.Spritesheet;
+import net.aerh.imagegenerator.util.AnimatedGifEncoder;
 import net.aerh.imagegenerator.util.MinecraftFonts;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -102,6 +105,8 @@ public class MinecraftInventoryGenerator implements Generator {
     private final int totalSlots;
     private final String inventoryString;
     private final boolean animateGlint;
+    // Final non-transient so the flag enters the reflective render cache key.
+    private final boolean animatedTextures;
     @Nullable
     private final PackId packId;
     @ToString.Exclude
@@ -131,8 +136,13 @@ public class MinecraftInventoryGenerator implements Generator {
     private record SlotVisualKey(String itemName, String extraContent, Integer durabilityPercent) {
     }
 
-    /** Downscaled per-slot imagery shared by every slot item with the same spec. */
-    private record SlotVisual(BufferedImage itemImage, List<BufferedImage> animationFrames, Integer frameDelayMs) {
+    /**
+     * Downscaled per-slot imagery shared by every slot item with the same spec.
+     * {@code frameDelaysMs} carries the per-frame delays of tick-timed pack texture animations;
+     * null for uniform-delay (glint) animations.
+     */
+    private record SlotVisual(BufferedImage itemImage, List<BufferedImage> animationFrames, Integer frameDelayMs,
+                              @Nullable List<Integer> frameDelaysMs) {
     }
 
     public MinecraftInventoryGenerator(int rows, int slotsPerRow, String containerTitle, String inventoryString,
@@ -143,6 +153,14 @@ public class MinecraftInventoryGenerator implements Generator {
     public MinecraftInventoryGenerator(int rows, int slotsPerRow, String containerTitle, String inventoryString,
                                         boolean drawBorder, boolean drawBackground, boolean animateGlint,
                                         @Nullable PackId packId, @Nullable PackRepository packRepository) {
+        this(rows, slotsPerRow, containerTitle, inventoryString, drawBorder, drawBackground, animateGlint, false,
+            packId, packRepository);
+    }
+
+    public MinecraftInventoryGenerator(int rows, int slotsPerRow, String containerTitle, String inventoryString,
+                                        boolean drawBorder, boolean drawBackground, boolean animateGlint,
+                                        boolean animatedTextures, @Nullable PackId packId,
+                                        @Nullable PackRepository packRepository) {
         this.rows = rows;
         this.slotsPerRow = slotsPerRow;
         this.containerTitle = containerTitle;
@@ -152,6 +170,7 @@ public class MinecraftInventoryGenerator implements Generator {
         this.drawBackground = drawBackground;
         this.totalSlots = rows * slotsPerRow;
         this.animateGlint = animateGlint;
+        this.animatedTextures = animatedTextures;
         this.packId = packId;
         this.packRepository = packRepository != null ? packRepository : PackRepository.global();
 
@@ -301,14 +320,41 @@ public class MinecraftInventoryGenerator implements Generator {
         List<InventoryItem> items = resolveSlotConflicts(parser.parse(inventoryString));
 
         boolean hasAnimation = false;
+        boolean hasTextureAnimation = false;
         for (InventoryItem item : items) {
             processItem(item, generationContext);
             if (item.getAnimationFrames() != null && !item.getAnimationFrames().isEmpty()) {
                 hasAnimation = true;
+                if (item.getFrameDelaysMs() != null) {
+                    hasTextureAnimation = true;
+                }
             }
         }
 
-        if (animateGlint && hasAnimation) {
+        if (animatedTextures && hasTextureAnimation) {
+            SceneAnimation scene = buildTextureAnimationFrames(items);
+            try {
+                byte[] gifData = AnimatedGifEncoder.encode(scene.frames(), scene.delaysMs());
+                this.inventoryImage = scene.frames().getFirst();
+
+                if (this.g2d != null) {
+                    this.g2d.dispose();
+                }
+
+                this.g2d = inventoryImage.createGraphics();
+                this.g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
+                this.g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+                this.g2d.setFont(MinecraftFonts.getFont(MinecraftFonts.REGULAR).deriveFont((float) scaleFactor * 8));
+
+                this.generatedObject = new GeneratedObject(gifData, scene.frames(), scene.delaysMs());
+
+                return;
+            } catch (IOException e) {
+                // Warn, not error: the render still succeeds with the static first frame.
+                log.warn("Failed to encode texture-animated inventory, falling back to static frame", e);
+                this.inventoryImage = scene.frames().getFirst();
+            }
+        } else if (animateGlint && hasAnimation) {
             List<BufferedImage> frames = buildAnimationFrames(items);
             if (!frames.isEmpty()) {
                 int frameDelay = determineFrameDelay(items);
@@ -398,15 +444,24 @@ public class MinecraftInventoryGenerator implements Generator {
         SlotVisualKey cacheKey = new SlotVisualKey(item.getItemName(), item.getExtraContent(), item.getDurabilityPercent());
         SlotVisual visual = slotVisualCache.get(cacheKey);
         if (visual == null) {
-            BufferedImage elementsImage = resolveElementsImage(item);
-            if (elementsImage != null) {
-                visual = new SlotVisual(elementsImage, null, null);
+            // Determine the elements-model raster ONCE. An elements item takes the dedicated
+            // raster path (its static raster, or its animated timeline when the flag is on and a
+            // face texture animates); everything else - flat sprites, vanilla items, heads - goes
+            // to the item pipeline, which resolves and renders any flat animation itself. Probing
+            // the static type first means a flat animated item is no longer resolved once here and
+            // rendered again by the pipeline.
+            PackItemVisual.ElementsRaster staticRaster = resolveStaticElementsRaster(item);
+            if (staticRaster != null) {
+                SlotVisual animated = animatedTextures ? animatedElementsVisual(item) : null;
+                visual = animated != null ? animated
+                    : new SlotVisual(clipToItemBox(staticRaster), null, null, null);
             } else {
                 GeneratedObject generated = generateSlotObject(item, generationContext);
                 visual = new SlotVisual(
                     downscaleToCompositeResolution(generated.getImage()),
                     downscaleFramesToCompositeResolution(generated.getAnimationFrames()),
-                    generated.getFrameDelayMs() > 0 ? generated.getFrameDelayMs() : null);
+                    generated.getFrameDelayMs() > 0 ? generated.getFrameDelayMs() : null,
+                    generated.getFrameDelaysMs());
             }
             slotVisualCache.put(cacheKey, visual);
         }
@@ -414,24 +469,27 @@ public class MinecraftInventoryGenerator implements Generator {
         item.setItemImage(visual.itemImage());
         item.setAnimationFrames(visual.animationFrames());
         item.setFrameDelayMs(visual.frameDelayMs());
+        item.setFrameDelaysMs(visual.frameDelaysMs());
     }
 
     /**
-     * Resolves a slot item spec against the active pack's elements-model path directly at this
-     * composite's slot resolution, mirroring {@link MinecraftContainerGenerator}'s elements
-     * handling. Null when the spec is not an elements model - flat pack sprites and vanilla
-     * items keep the exact pre-elements pipeline, effects included.
+     * Resolves a slot item spec's STATIC elements raster against the active pack's elements-model
+     * path at this composite's slot resolution, mirroring {@link MinecraftContainerGenerator}'s
+     * elements handling. Null when the spec is not an elements model - flat pack sprites, vanilla
+     * items and player heads keep the exact pre-elements pipeline, effects included. Returns the
+     * unclipped raster (callers clip into the item box); warns once about ignored modifiers when
+     * the spec IS an elements model, so the animated and static elements paths never warn twice.
      *
-     * <p><b>Oversized art clips at the slot box in inventories</b>, a documented difference
-     * from the container compositor: the container anchors {@code oversized_in_gui} art on the
-     * slot center and lets it span neighboring slots, while this composite draws every slot
-     * visual inside its fixed item box, so overflow is cropped at the 16-GUI-px slot interior.
-     * Item modifiers (enchant, hover, durability) do not apply to elements renders, matching
-     * the container; a spec declaring any logs a warning (the shared
+     * <p><b>Oversized art clips at the slot box in inventories</b>, a documented difference from
+     * the container compositor: the container anchors {@code oversized_in_gui} art on the slot
+     * center and lets it span neighboring slots, while this composite draws every slot visual
+     * inside its fixed item box, so overflow is cropped at the 16-GUI-px slot interior. Item
+     * modifiers (enchant, hover, durability) do not apply to elements renders, matching the
+     * container; a spec declaring any logs a warning (the shared
      * {@link MinecraftContainerGenerator#warnIgnoredElementsModifiers} condition and wording).
      */
     @Nullable
-    private BufferedImage resolveElementsImage(InventoryItem item) {
+    private PackItemVisual.ElementsRaster resolveStaticElementsRaster(InventoryItem item) {
         if (!PackId.isActive(packId) || MinecraftContainerGenerator.isVanillaPlayerHead(item.getItemName())) {
             return null;
         }
@@ -442,11 +500,44 @@ public class MinecraftInventoryGenerator implements Generator {
             return null;
         }
         MinecraftContainerGenerator.warnIgnoredElementsModifiers(item);
+        return raster;
+    }
+
+    /**
+     * The animated timeline for a slot item ALREADY KNOWN to be an elements model (its static
+     * raster resolved): every timeline step renders (and clips into the item box, like the static
+     * path) one frame. Null when the elements model's face textures do not animate - the caller
+     * then draws the static raster. Never resolves a flat item's animation (the caller routes
+     * flat items to the item pipeline before reaching here), so a flat animated slot item is
+     * resolved and rendered exactly once. Modifiers were already warned about by
+     * {@link #resolveStaticElementsRaster}.
+     */
+    @Nullable
+    private SlotVisual animatedElementsVisual(InventoryItem item) {
+        PackAnimatedVisual animation = packRepository.resolveItemVisualAnimation(
+            packId, item.getItemName(), CustomModelData.EMPTY, null, scaleFactor, false).orElse(null);
+        if (animation == null || !(animation.steps().getFirst() instanceof PackItemVisual.ElementsRaster)) {
+            return null;
+        }
+        List<BufferedImage> frames = new ArrayList<>(animation.steps().size());
+        for (PackItemVisual step : animation.steps()) {
+            frames.add(clipToItemBox((PackItemVisual.ElementsRaster) step));
+        }
+        List<Integer> delaysMs = animation.stepTicks().stream()
+            .map(AnimationTimeline::ticksToMillis)
+            .toList();
+        return new SlotVisual(frames.getFirst(), frames, delaysMs.getFirst(), delaysMs);
+    }
+
+    /**
+     * Clips an elements raster into this composite's fixed item box: the raster offsets anchor
+     * the art on the slot box origin, so drawing into the fixed box crops any oversized
+     * overflow at the box edge. Shared by the static and animated elements paths.
+     */
+    private static BufferedImage clipToItemBox(PackItemVisual.ElementsRaster raster) {
         BufferedImage clipped = new BufferedImage(itemSize, itemSize, BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = clipped.createGraphics();
         try {
-            // The raster offsets anchor the art on the slot box origin; drawing into the fixed
-            // item box crops any oversized overflow at the box edge.
             graphics.drawImage(raster.image(), raster.offsetX(), raster.offsetY(), null);
         } finally {
             graphics.dispose();
@@ -455,7 +546,8 @@ public class MinecraftInventoryGenerator implements Generator {
     }
 
     private GeneratedObject generateSlotObject(InventoryItem item, @Nullable GenerationContext generationContext) {
-        return generateSlotObject(item, generationContext, packId, packRepository);
+        return generateSlotObject(item, generationContext, packId, packRepository, CustomModelData.EMPTY,
+            animatedTextures);
     }
 
     /**
@@ -482,6 +574,18 @@ public class MinecraftInventoryGenerator implements Generator {
     static GeneratedObject generateSlotObject(InventoryItem item, @Nullable GenerationContext generationContext,
                                               @Nullable PackId packId, @Nullable PackRepository packRepository,
                                               CustomModelData customModelData) {
+        return generateSlotObject(item, generationContext, packId, packRepository, customModelData, false);
+    }
+
+    /**
+     * Like the five-argument overload with the item generator's animated-textures flag: when
+     * set and the pack visual uses animated textures, the returned object carries per-frame
+     * delays ({@link GeneratedObject#getFrameDelaysMs()}), the marker composites use to build
+     * the scene timeline. The dedicated player head pipeline never animates.
+     */
+    static GeneratedObject generateSlotObject(InventoryItem item, @Nullable GenerationContext generationContext,
+                                              @Nullable PackId packId, @Nullable PackRepository packRepository,
+                                              CustomModelData customModelData, boolean animatedTextures) {
         if (item.getItemName().contains("player_head")) {
             String skinValue = item.getExtraContent();
             if (skinValue != null && skinValue.contains(",")) {
@@ -508,6 +612,7 @@ public class MinecraftInventoryGenerator implements Generator {
         MinecraftItemGenerator.Builder itemBuilder = new MinecraftItemGenerator.Builder()
             .withItem(item.getItemName())
             .withCustomModelData(customModelData)
+            .withAnimatedTextures(animatedTextures)
             .isEnchanted(contentLower != null && contentLower.contains("enchant"))
             .withHoverEffect(contentLower != null && contentLower.contains("hover"))
             .withData(item.getExtraContent());
@@ -678,6 +783,64 @@ public class MinecraftInventoryGenerator implements Generator {
             .orElse(33);
     }
 
+    /** The composed frames of a tick-timed scene animation plus their per-frame delays. */
+    private record SceneAnimation(List<BufferedImage> frames, List<Integer> delaysMs) {
+    }
+
+    /**
+     * Composes the scene frames of a texture-animated inventory: every texture-animated slot
+     * item is a source of the shared scene timeline (the LCM of the item cycles, capped per
+     * {@link AnimationTimeline}), and each step copies the static base canvas (background,
+     * slots, title) and draws every item with the texture-animated ones showing their step
+     * frame. Glint-animated items (uniform delays, no tick durations) render their static
+     * frame with a warning - the 33 ms glint cycle cannot join a tick-based timeline.
+     */
+    private SceneAnimation buildTextureAnimationFrames(List<InventoryItem> items) {
+        List<List<Integer>> sources = new ArrayList<>();
+        List<InventoryItem> animatedItems = new ArrayList<>();
+        boolean glintCollapsed = false;
+        for (InventoryItem item : items) {
+            if (item.getFrameDelaysMs() != null) {
+                sources.add(item.getFrameDelaysMs().stream()
+                    .map(AnimationTimeline::millisToTicks)
+                    .toList());
+                animatedItems.add(item);
+            } else if (item.getAnimationFrames() != null && !item.getAnimationFrames().isEmpty()) {
+                glintCollapsed = true;
+            }
+        }
+        if (glintCollapsed) {
+            log.warn("Glint-animated slot items render their static frame while animated pack textures drive the output");
+        }
+
+        AnimationTimeline timeline = AnimationTimeline.of(sources);
+        List<BufferedImage> originalImages = animatedItems.stream().map(InventoryItem::getItemImage).toList();
+        List<BufferedImage> frames = new ArrayList<>(timeline.steps().size());
+        for (AnimationTimeline.Step step : timeline.steps()) {
+            BufferedImage frame = new BufferedImage(inventoryImage.getWidth(), inventoryImage.getHeight(), BufferedImage.TYPE_INT_ARGB);
+            Graphics2D frameGraphics = frame.createGraphics();
+            frameGraphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
+            frameGraphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+            frameGraphics.setFont(MinecraftFonts.getFont(MinecraftFonts.REGULAR).deriveFont((float) scaleFactor * 8));
+            frameGraphics.drawImage(inventoryImage, 0, 0, null);
+
+            for (int index = 0; index < animatedItems.size(); index++) {
+                InventoryItem item = animatedItems.get(index);
+                item.setItemImage(item.getAnimationFrames().get(step.framePositions().get(index)));
+            }
+            for (InventoryItem item : items) {
+                drawItem(frameGraphics, item);
+            }
+
+            frameGraphics.dispose();
+            frames.add(frame);
+        }
+        for (int index = 0; index < animatedItems.size(); index++) {
+            animatedItems.get(index).setItemImage(originalImages.get(index));
+        }
+        return new SceneAnimation(frames, timeline.stepDelaysMillis());
+    }
+
     @Override
     public @NotNull GeneratedObject render(@Nullable GenerationContext generationContext) {
         log.debug("Rendering inventory ({})", this);
@@ -705,6 +868,7 @@ public class MinecraftInventoryGenerator implements Generator {
         private boolean drawBackground = true;
         private String inventoryString;
         private boolean animateGlint;
+        private boolean animatedTextures;
         private PackId packId;
         private PackRepository packRepository;
 
@@ -750,6 +914,21 @@ public class MinecraftInventoryGenerator implements Generator {
         }
 
         /**
+         * Opts the render into animated pack textures (default false): when at least one slot
+         * item's pack visual uses an animated texture, every texture-animated item joins one
+         * shared scene timeline (the LCM of the item cycles, capped per
+         * {@link net.aerh.imagegenerator.pack.AnimationTimeline}) and {@code generate()}
+         * returns the GIF form of {@link GeneratedObject} with per-frame delays. Scenes without
+         * texture-animated items render exactly as before ({@code withAnimateGlint} included).
+         * While texture animation drives the output, glint-animated items render their static
+         * frame with a warning - the 33 ms glint cycle cannot join a tick-based timeline.
+         */
+        public Builder withAnimatedTextures(boolean animatedTextures) {
+            this.animatedTextures = animatedTextures;
+            return this;
+        }
+
+        /**
          * Selects the resource pack to resolve every item slot from. Propagated to every
          * {@link MinecraftItemGenerator.Builder} built while rendering item slots. Null or
          * {@link PackId#VANILLA} renders from the built-in vanilla spritesheet exactly as before.
@@ -782,7 +961,7 @@ public class MinecraftInventoryGenerator implements Generator {
         @Override
         protected MinecraftInventoryGenerator construct() {
             return new MinecraftInventoryGenerator(rows, slotsPerRow, containerTitle, inventoryString, drawBorder,
-                drawBackground, animateGlint, packId, packRepository);
+                drawBackground, animateGlint, animatedTextures, packId, packRepository);
         }
     }
 }
