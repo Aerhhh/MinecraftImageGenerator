@@ -66,6 +66,8 @@ public final class TextSegment extends ColorSegment {
                 textSegment.setUnderlined(NbtTextComponentUtil.parseBooleanStrict(jsonObject.get("underlined")));
             if (jsonObject.has("strikethrough"))
                 textSegment.setStrikethrough(NbtTextComponentUtil.parseBooleanStrict(jsonObject.get("strikethrough")));
+            if (jsonObject.has("shadow_color"))
+                textSegment.setShadowEnabled(NbtTextComponentUtil.shadowColorDraws(jsonObject.get("shadow_color")));
 
             return textSegment;
         }

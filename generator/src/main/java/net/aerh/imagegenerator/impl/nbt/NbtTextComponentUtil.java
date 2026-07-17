@@ -4,9 +4,13 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSyntaxException;
 import net.aerh.imagegenerator.text.ChatFormat;
+import net.aerh.imagegenerator.text.MinecraftFont;
 import net.aerh.imagegenerator.text.TextColor;
+import net.aerh.imagegenerator.text.segment.ColorSegment;
+import net.aerh.imagegenerator.text.segment.LineSegment;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Locale;
@@ -282,6 +286,167 @@ public final class NbtTextComponentUtil {
         if (to.underlined()) result.append("&").append(ChatFormat.UNDERLINE.getCode());
         if (to.strikethrough()) result.append("&").append(ChatFormat.STRIKETHROUGH.getCode());
         if (to.obfuscated()) result.append("&").append(ChatFormat.OBFUSCATED.getCode());
+    }
+
+    /**
+     * Walks a JSON text component tree into a {@link LineSegment} of {@link ColorSegment}s that
+     * retains, per drawn run, its resolved color, font, formatting flags AND drop-shadow state.
+     * <p>
+     * Unlike {@link #toFormattedString(JsonObject)} - which flattens the tree to an ampersand
+     * string and therefore cannot carry a {@code font} id or a {@code shadow_color} - this walk
+     * preserves both. Each segment inherits color, font, the five formatting flags and the
+     * shadow state from its parent (Minecraft's inheritance model: children inherit from their
+     * parent, not from preceding siblings), overriding only the properties it declares. A
+     * built-in {@code font} maps to its {@link MinecraftFont}; any other id is kept as a raw
+     * pack font id. A {@code shadow_color} whose alpha byte is zero disables the run's shadow.
+     * <p>
+     * Runs are emitted in draw order: the component's own {@code text} first, then each
+     * {@code extra} child recursively. Empty-text nodes contribute no segment but still pass
+     * their resolved style down to their children. A component without a resolvable style still
+     * yields its literal text under the inherited style, so nothing is dropped.
+     *
+     * @param component the JSON text component object
+     *
+     * @return the parsed line, one {@link ColorSegment} per non-empty drawn run
+     */
+    public static LineSegment toLineSegment(JsonObject component) {
+        LineSegment.Builder builder = LineSegment.builder();
+        appendSegments(builder, component, ComponentStyle.ROOT);
+        return builder.build();
+    }
+
+    /**
+     * Recursively appends a component's own text run and its {@code extra} children to
+     * {@code builder}, threading resolved style down the tree.
+     */
+    private static void appendSegments(LineSegment.Builder builder, JsonObject component, ComponentStyle inherited) {
+        ComponentStyle resolved = inherited.resolve(component);
+
+        if (component.has("text")) {
+            String text = component.get("text").getAsString();
+            if (!text.isEmpty()) {
+                builder.withSegments(resolved.toSegment(text));
+            }
+        }
+
+        if (component.has("extra")) {
+            for (JsonElement extraElement : component.getAsJsonArray("extra")) {
+                if (extraElement.isJsonObject()) {
+                    appendSegments(builder, extraElement.getAsJsonObject(), resolved);
+                } else if (extraElement.isJsonPrimitive()) {
+                    String text = extraElement.getAsString();
+                    if (!text.isEmpty()) {
+                        builder.withSegments(resolved.toSegment(text));
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * The resolved style inherited down a component tree by {@link #toLineSegment}: a color (null
+     * until one is declared, matching the segment default), a font (a built-in {@link MinecraftFont}
+     * or a raw pack font id), the five formatting flags and whether the run draws its drop shadow.
+     */
+    private record ComponentStyle(@Nullable TextColor color, MinecraftFont font, @Nullable String packFontId,
+                                  boolean bold, boolean italic, boolean underlined, boolean strikethrough,
+                                  boolean obfuscated, boolean shadowEnabled) {
+
+        static final ComponentStyle ROOT =
+            new ComponentStyle(null, MinecraftFont.DEFAULT, null, false, false, false, false, false, true);
+
+        ComponentStyle resolve(JsonObject component) {
+            TextColor resolvedColor = color;
+            if (component.has("color")) {
+                TextColor declared = TextColor.fromJsonString(component.get("color").getAsString());
+                if (declared != null) {
+                    resolvedColor = declared;
+                }
+            }
+
+            MinecraftFont resolvedFont = font;
+            String resolvedPackFontId = packFontId;
+            if (component.has("font")) {
+                String fontId = component.get("font").getAsString();
+                MinecraftFont builtIn = MinecraftFont.fromResourceLocationOrNull(fontId);
+                if (builtIn != null) {
+                    resolvedFont = builtIn;
+                    resolvedPackFontId = null;
+                } else {
+                    resolvedPackFontId = fontId;
+                }
+            }
+
+            boolean resolvedShadow = shadowEnabled;
+            if (component.has("shadow_color")) {
+                resolvedShadow = shadowColorDraws(component.get("shadow_color"));
+            }
+
+            return new ComponentStyle(
+                resolvedColor,
+                resolvedFont,
+                resolvedPackFontId,
+                resolveFlag(component, "bold", bold),
+                resolveFlag(component, "italic", italic),
+                resolveFlag(component, "underlined", underlined),
+                resolveFlag(component, "strikethrough", strikethrough),
+                resolveFlag(component, "obfuscated", obfuscated),
+                resolvedShadow
+            );
+        }
+
+        private static boolean resolveFlag(JsonObject component, String key, boolean inherited) {
+            return component.has(key) ? parseBooleanStrict(component.get(key)) : inherited;
+        }
+
+        ColorSegment toSegment(String text) {
+            ColorSegment.Builder builder = ColorSegment.builder()
+                .withText(text)
+                .withFont(font)
+                .withPackFontId(packFontId)
+                .isBold(bold)
+                .isItalic(italic)
+                .isUnderlined(underlined)
+                .isStrikethrough(strikethrough)
+                .isObfuscated(obfuscated)
+                .withShadowEnabled(shadowEnabled);
+            if (color != null) {
+                builder.withColor(color);
+            }
+            return builder.build();
+        }
+    }
+
+    /**
+     * Whether a {@code shadow_color} component value draws a visible drop shadow, i.e. its alpha
+     * component is non-zero. Accepts the packed-ARGB integer form (e.g. {@code 16777215} =
+     * {@code 0x00FFFFFF} = alpha 0 = no shadow) and the {@code [a, r, g, b]} float-array form
+     * (each in {@code 0..1}); an unrecognized shape defaults to drawing the shadow (the vanilla
+     * default), so a malformed value never silently suppresses a shadow.
+     *
+     * @param element the {@code shadow_color} JSON element
+     *
+     * @return true when the shadow should be drawn
+     */
+    public static boolean shadowColorDraws(JsonElement element) {
+        if (element == null) {
+            return true;
+        }
+        if (element.isJsonPrimitive()) {
+            JsonPrimitive primitive = element.getAsJsonPrimitive();
+            if (primitive.isNumber()) {
+                long argb = primitive.getAsLong();
+                return ((argb >>> 24) & 0xFF) != 0;
+            }
+            return true;
+        }
+        if (element.isJsonArray()) {
+            JsonArray array = element.getAsJsonArray();
+            if (array.size() == 4 && array.get(0).isJsonPrimitive() && array.get(0).getAsJsonPrimitive().isNumber()) {
+                return array.get(0).getAsDouble() != 0.0;
+            }
+        }
+        return true;
     }
 
     /**

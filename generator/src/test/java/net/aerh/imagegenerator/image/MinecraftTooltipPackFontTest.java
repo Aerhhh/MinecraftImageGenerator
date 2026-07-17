@@ -135,6 +135,17 @@ class MinecraftTooltipPackFontTest {
     }
 
     @Test
+    void shadowDisabledSegmentDrawsGlyphWithoutItsDropShadow() {
+        // shadow_color alpha 0 (shadowEnabled=false) suppresses only the shadow pass; the glyph
+        // cell itself draws identically to the shadowed case.
+        BufferedImage image = render(whiteSegment(GLYPH_RED).withShadowEnabled(false).build());
+
+        assertRect(image, START, START + 5, GLYPH_TOP, GLYPH_BOTTOM, RED, "glyph cell still drawn");
+        assertEquals(0, image.getRGB(16, 20), "no shadow to the right of the cell");
+        assertEquals(0, image.getRGB(13, 24), "no shadow below the cell");
+    }
+
+    @Test
     void glyphBetweenAsciiCharactersUsesThePackAdvance() {
         int widthA = builtInWidth("A");
         int widthB = builtInWidth("B");

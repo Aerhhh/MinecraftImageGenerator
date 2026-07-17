@@ -32,6 +32,13 @@ public class ColorSegment {
      */
     protected @Nullable String packFontId;
     protected boolean italic, bold, underlined, obfuscated, strikethrough;
+    /**
+     * Whether this segment draws its drop shadow. Defaults to {@code true} (the vanilla behavior).
+     * Set {@code false} to mirror a {@code shadow_color} component whose alpha byte is zero
+     * (e.g. {@code 16777215} = {@code 0x00FFFFFF}), which disables the drop shadow for that run.
+     * Only the shadow pass is affected; foreground draw and advances are unchanged.
+     */
+    protected boolean shadowEnabled = true;
 
     public ColorSegment(@NotNull String text) {
         this.setText(text);
@@ -195,6 +202,9 @@ public class ColorSegment {
         if (this.isUnderlined()) object.addProperty("underlined", true);
         if (this.isObfuscated()) object.addProperty("obfuscated", true);
         if (this.isStrikethrough()) object.addProperty("strikethrough", true);
+        // A disabled shadow round-trips as the canonical alpha-0 white; enabled shadows (the
+        // default) emit nothing, so segments that never touched shadow_color stay byte-identical.
+        if (!this.shadowEnabled) object.addProperty("shadow_color", 16777215);
 
         return object;
     }
@@ -249,6 +259,7 @@ public class ColorSegment {
         protected MinecraftFont font = MinecraftFont.DEFAULT;
         protected String packFontId;
         protected boolean italic, bold, underlined, obfuscated, strikethrough;
+        protected boolean shadowEnabled = true;
 
         public Builder isBold() {
             return this.isBold(true);
@@ -320,6 +331,15 @@ public class ColorSegment {
             return this;
         }
 
+        /**
+         * Whether this segment draws its drop shadow (default {@code true}); see
+         * {@link ColorSegment#shadowEnabled}.
+         */
+        public Builder withShadowEnabled(boolean shadowEnabled) {
+            this.shadowEnabled = shadowEnabled;
+            return this;
+        }
+
         @Override
         public @NotNull ColorSegment build() {
             ColorSegment colorSegment = new ColorSegment(this.text);
@@ -331,6 +351,7 @@ public class ColorSegment {
             colorSegment.setBold(this.bold);
             colorSegment.setUnderlined(this.underlined);
             colorSegment.setStrikethrough(this.strikethrough);
+            colorSegment.setShadowEnabled(this.shadowEnabled);
             return colorSegment;
         }
     }

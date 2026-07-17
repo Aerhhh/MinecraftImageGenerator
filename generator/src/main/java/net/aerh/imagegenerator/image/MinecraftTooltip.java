@@ -848,7 +848,7 @@ public class MinecraftTooltip {
             // the line top; locationY is always a whole multiple of pixelSize.
             double lineTopGuiPx = this.locationY / (double) pixelSize - 7.0;
             packGlyph.draw(graphics, this.locationX / (double) pixelSize, lineTopGuiPx, pixelSize,
-                foregroundColor(), this.textShadow ? shadowColor() : null);
+                foregroundColor(), this.textShadow && colorSegment.isShadowEnabled() ? shadowColor() : null);
         }
 
         drawDecorations(graphics, colorSegment, width, drawX, false);
@@ -939,7 +939,7 @@ public class MinecraftTooltip {
         drawDecorations(frameGraphics, colorSegment, width, drawX, true);
 
         // Draw Drop Shadow Text
-        if (this.textShadow) {
+        if (this.textShadow && colorSegment.isShadowEnabled()) {
             frameGraphics.setColor(shadowColor());
             frameGraphics.drawString(textToDraw, drawX + pixelSize, this.locationY + pixelSize);
         }
@@ -964,6 +964,11 @@ public class MinecraftTooltip {
      * @param dropShadow   Whether this is the shadow pass or the foreground pass.
      */
     private void drawDecorations(Graphics2D graphics, ColorSegment colorSegment, int width, int drawX, boolean dropShadow) {
+        // A shadow-disabled segment (shadow_color alpha 0) skips the decoration shadow pass too,
+        // so strikethrough/underline match the shadowless glyph and text of the same run.
+        if (dropShadow && !colorSegment.isShadowEnabled()) {
+            return;
+        }
         if (colorSegment.isStrikethrough()) {
             this.drawThickLineInternal(graphics, width, drawX, this.locationY, -1, STRIKETHROUGH_OFFSET * scaleFactor, dropShadow);
         }
