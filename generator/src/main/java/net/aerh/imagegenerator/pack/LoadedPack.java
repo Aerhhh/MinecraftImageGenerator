@@ -9,6 +9,7 @@ import net.aerh.imagegenerator.exception.PackResolveException;
 import net.aerh.imagegenerator.pack.font.BitmapProviderCache;
 import net.aerh.imagegenerator.pack.font.FontProviderDefinition;
 import net.aerh.imagegenerator.pack.font.FontResolver;
+import net.aerh.imagegenerator.pack.font.MovementTintRule;
 import net.aerh.imagegenerator.pack.font.PackFont;
 import net.aerh.imagegenerator.pack.font.VanillaFontSheets;
 import org.jetbrains.annotations.Nullable;
@@ -109,6 +110,13 @@ final class LoadedPack {
     private final PackSource source;
     private final PackLimits limits;
     private final boolean normalizeEmissiveAlpha;
+    /**
+     * The pack's movement text shader no-tint rule, or null when the pack ships no such shader.
+     * Detected once at construction (see {@link MovementShaderDetector}) and threaded into every
+     * resolved {@link PackFont} so movement marker run colors keep their glyphs' native texel color.
+     * Null leaves the font path tinting vanilla-style, byte-identical to before.
+     */
+    private final MovementTintRule movementTintRule;
     private final Set<String> namespaces = new HashSet<>();
     private final Map<String, ItemEntry> items = new HashMap<>();
     private final Map<String, ModelInfo> models = new HashMap<>();
@@ -166,6 +174,7 @@ final class LoadedPack {
         this.source = source;
         this.limits = limits;
         this.normalizeEmissiveAlpha = EMISSIVE_ALPHA_PACK_IDS.contains(id.toString());
+        this.movementTintRule = MovementShaderDetector.detect(source).orElse(null);
         this.textureCache = Caffeine.newBuilder()
             .maximumWeight(limits.textureCacheMaxBytes())
             // long arithmetic: large custom maxTextureDim configs can overflow int and silently
@@ -531,7 +540,7 @@ final class LoadedPack {
     /** Cache loader for {@link #resolveFont(String)}; {@code key} is the normalized font id. */
     private PackFont resolveFontUncached(String key) {
         List<FontProviderDefinition> resolved = FontResolver.resolveProviders(key, this::fontDefinitions);
-        return PackFont.create(key, resolved, fontSheetLoader, fontProviderCache);
+        return PackFont.create(key, resolved, fontSheetLoader, fontProviderCache, movementTintRule);
     }
 
     private static boolean isValidResourceLocation(String namespace, String path) {

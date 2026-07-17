@@ -1159,6 +1159,73 @@ public final class FixturePacks {
         }
     }
 
+    /**
+     * Writes a font pack that ALSO ships the custom movement text shader chain, so pack loading
+     * detects the no-tint rule (marker green 235, blue table {@code 0,4,...,72}) and applies it to
+     * the pack's glyphs. Everything is synthetic and generated at test runtime.
+     *
+     * <p>Contents (namespace {@code testpack} unless noted):
+     * <ul>
+     * <li>The five shader chain files the detector gates on, with a real
+     *     {@code const int MOVEMENT_MARKER = 235;} and {@code MOVEMENT(MOVEMENT_MARKER, B)} entries
+     *     for every {@code B} in {@code 0,4,...,72}.</li>
+     * <li>{@code testpack:art}: bitmap font, a 2x2 sheet mapping U+E000 to a native four-color
+     *     cell (top-left teal 0xFF159485, top-right gold 0xFFA35D21, bottom-left leaf 0xFF6D9B1A,
+     *     bottom-right outline 0xFF2B1818) and, in a second 2x2 sheet, U+E001 to a solid white
+     *     cell (a designed-to-tint monochrome glyph). Height 2, ascent 2, scale 1.</li>
+     * <li>{@code minecraft:default}: references {@code testpack:art}, so plain lore text picks the
+     *     glyphs up without an explicit font id.</li>
+     * </ul>
+     */
+    public static Path writeMovementShaderFontPack(Path root) {
+        try {
+            packMcmeta(root, "movement shader font test fixture");
+            movementShaderChain(root, 235, 0, 72, 4);
+
+            BufferedImage artSheet = transparent(2, 2);
+            artSheet.setRGB(0, 0, 0xFF159485);
+            artSheet.setRGB(1, 0, 0xFFA35D21);
+            artSheet.setRGB(0, 1, 0xFF6D9B1A);
+            artSheet.setRGB(1, 1, 0xFF2B1818);
+            fontTexture(root, NAMESPACE, "art.png", artSheet);
+            fontTexture(root, NAMESPACE, "mono.png", solid(2, 2, 0xFFFFFFFF));
+            fontJson(root, NAMESPACE, "art", """
+                {"providers":[
+                  {"type":"bitmap","file":"testpack:font/art.png","height":2,"ascent":2,"chars":["\\uE000"]},
+                  {"type":"bitmap","file":"testpack:font/mono.png","height":2,"ascent":2,"chars":["\\uE001"]}]}""");
+            fontJson(root, "minecraft", "default", """
+                {"providers":[{"type":"reference","id":"testpack:art"}]}""");
+
+            return root;
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to write movement shader font fixture pack", e);
+        }
+    }
+
+    /**
+     * Writes the custom movement text shader chain the {@link net.aerh.imagegenerator.pack pack}
+     * loader gates the no-tint rule on: the custom text pipeline shader, the two render-stage text
+     * includes, and the movement include plus its config. The include declares
+     * {@code const int MOVEMENT_MARKER = <markerGreen>;} and the config lists a
+     * {@code MOVEMENT(MOVEMENT_MARKER, B)} entry for every {@code B} from {@code firstBlue} to
+     * {@code lastBlue} inclusive in steps of {@code blueStep}. The pipeline and render stubs carry
+     * only enough text to look like GLSL; only their PRESENCE is part of the gate.
+     */
+    public static void movementShaderChain(Path root, int markerGreen, int firstBlue, int lastBlue, int blueStep)
+        throws IOException {
+        String shaderDir = "assets/minecraft/shaders";
+        write(root, shaderDir + "/core/pipeline/text.fsh", "#version 150\n// custom text pipeline\nvoid main() {}\n");
+        write(root, shaderDir + "/include/render/text.vsh", "#version 150\n// render text vertex stage\n");
+        write(root, shaderDir + "/include/render/text.fsh", "#version 150\n// render text fragment stage\n");
+        write(root, shaderDir + "/include/movement.glsl",
+            "#version 150\nconst int MOVEMENT_MARKER = " + markerGreen + ";\n#define COLOR vec3(1)\n");
+        StringBuilder config = new StringBuilder("#version 150\n");
+        for (int blue = firstBlue; blue <= lastBlue; blue += blueStep) {
+            config.append("MOVEMENT(MOVEMENT_MARKER, ").append(blue).append(") { }\n");
+        }
+        write(root, shaderDir + "/include/config/movement.glsl", config.toString());
+    }
+
     private static void writeBytes(Path root, String relative, byte[] bytes) throws IOException {
         Path path = root.resolve(relative);
         Files.createDirectories(path.getParent());

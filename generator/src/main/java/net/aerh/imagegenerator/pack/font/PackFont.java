@@ -131,11 +131,13 @@ public final class PackFont {
 
     private final String id;
     private final List<Provider> providers;
+    private final MovementTintRule tintRule;
     private volatile List<Integer> mappedCodePoints;
 
-    private PackFont(String id, List<Provider> providers) {
+    private PackFont(String id, List<Provider> providers, MovementTintRule tintRule) {
         this.id = id;
         this.providers = providers;
+        this.tintRule = tintRule;
     }
 
     /**
@@ -165,6 +167,22 @@ public final class PackFont {
      */
     public static PackFont create(String fontId, List<FontProviderDefinition> definitions, TextureLoader textures,
                                   BitmapProviderCache sharedProviders) {
+        return create(fontId, definitions, textures, sharedProviders, null);
+    }
+
+    /**
+     * Builds the runtime font like {@link #create(String, List, TextureLoader, BitmapProviderCache)}
+     * and additionally installs a {@link MovementTintRule}: when {@code tintRule} is non-null (the
+     * pack ships the custom movement text shader), glyphs served by {@link #glyph(int)} apply the
+     * rule's no-tint substitution to the run color before their own tint multiply, so a movement
+     * marker run color keeps the glyph's native texel color. A {@code null} rule leaves glyphs
+     * un-wrapped and rendering byte-identical to before, the gate for packs without the shader.
+     *
+     * @throws PackResolveException when the list still contains a reference provider, a present
+     *                              sheet fails to decode, or a sheet is too small for its grid
+     */
+    public static PackFont create(String fontId, List<FontProviderDefinition> definitions, TextureLoader textures,
+                                  BitmapProviderCache sharedProviders, MovementTintRule tintRule) {
         List<Provider> providers = new ArrayList<>();
         for (FontProviderDefinition definition : definitions) {
             switch (definition) {
@@ -213,7 +231,7 @@ public final class PackFont {
                     fontId, reference.id());
             }
         }
-        return new PackFont(fontId, List.copyOf(providers));
+        return new PackFont(fontId, List.copyOf(providers), tintRule);
     }
 
     /** The normalized font id this font was resolved as (e.g. {@code minecraft:default}). */
@@ -232,10 +250,24 @@ public final class PackFont {
         for (Provider provider : providers) {
             PackGlyph glyph = claimedGlyph(provider, codePoint);
             if (glyph != null) {
-                return Optional.of(glyph);
+                return Optional.of(withTintRule(glyph));
             }
         }
         return Optional.empty();
+    }
+
+    /**
+     * Wraps a served glyph in the pack's {@link MovementTintRule} when one is active, so its draw
+     * neutralizes a movement marker run color. Space glyphs are left un-wrapped: they draw nothing,
+     * so the rule is a no-op for them, and keeping the concrete {@link SpaceGlyph} type preserves
+     * {@link #spaceAdvance(int)}'s type check. With no rule, the glyph passes through unchanged, so
+     * shader-less packs render byte-identically.
+     */
+    private PackGlyph withTintRule(PackGlyph glyph) {
+        if (tintRule == null || glyph instanceof SpaceGlyph) {
+            return glyph;
+        }
+        return new TintRuleGlyph(glyph, tintRule);
     }
 
     /**
