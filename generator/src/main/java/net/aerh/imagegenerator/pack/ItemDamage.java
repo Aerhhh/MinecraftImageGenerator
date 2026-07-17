@@ -3,7 +3,7 @@ package net.aerh.imagegenerator.pack;
 /**
  * The damage state of a damageable item: the {@code minecraft:damage} and
  * {@code minecraft:max_damage} component values that item model definitions evaluate through
- * {@code range_dispatch} nodes with {@code property: minecraft:damage} (Wynncraft-style weapon
+ * {@code range_dispatch} nodes with {@code property: minecraft:damage} (server-style weapon
  * skin selection). With {@code normalize: true} (the vanilla default) the property reads
  * {@code damage / maxDamage} clamped to 0..1; with {@code normalize: false} it reads the raw
  * {@code damage} value.

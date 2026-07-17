@@ -252,7 +252,7 @@ class ElementModelRendererTest {
     void mirrorReordersDepthAcrossElements() {
         // Two double-faced full quads: A behind (z 0..1), B in front (z 2..3). The (0,180,0)
         // mirror negates z, so A becomes the NEARER element and must paint over B - the exact
-        // stack shape of Wynncraft's mirrored wN models.
+        // stack shape of real packs' mirrored wN models.
         BufferedImage red = solid(RED);
         BufferedImage green = solid(GREEN);
         ModelElement back = new ModelElement(0, 0, 0, 16, 16, 1, null, true, Map.of(
@@ -972,7 +972,7 @@ class ElementModelRendererTest {
     void smallTiltsSnapToIdentityAndNearMirrorToMirror() {
         ElementModelRenderer.Raster tilted = render(quadrants(),
             new GuiTransform(0, 2, 0, 0, 0, 0, 1, 1, 1), 4, false, fullQuad(face(), null));
-        assertEquals(RED, tilted.image().getRGB(0, 0), "MCC's 2-degree tilt renders as identity");
+        assertEquals(RED, tilted.image().getRGB(0, 0), "a 2-degree decorative tilt renders as identity");
 
         ElementModelRenderer.Raster nearMirror = render(quadrants(),
             new GuiTransform(0, 184, 0, 0, 0, 0, 1, 1, 1), 4, false, fullQuad(null, face()));

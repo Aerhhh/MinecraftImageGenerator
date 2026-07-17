@@ -30,7 +30,7 @@ import java.util.Map;
  * and east faces are the visible three, north on the lower right.
  *
  * <p><b>Rotation classification:</b> rotations with x = z = 0 and |y| within 5 degrees of 0
- * snap to the identity, and within 5 degrees of 180 to the horizontal mirror (absorbing MCC's
+ * snap to the identity, and within 5 degrees of 180 to the horizontal mirror (absorbing packs'
  * decorative 2-degree tilts; flat art stays pixel-crisp). Models classified this way whose
  * elements carry no active rotation render through the exact flat fast paths, whose pixel
  * output is pinned by tests and must never change. Any other gui rotation renders through the
@@ -83,7 +83,7 @@ class ElementModelRenderer {
 
     /**
      * Maximum elements one model may contribute to a GUI render. Real UI packs stack dozens of
-     * quads per model (Wynncraft-class item skins run to a few hundred); 4096 leaves generous
+     * quads per model (large production server item skins run to a few hundred); 4096 leaves generous
      * headroom while bounding the per-face work a crafted many-element model can demand.
      * Renders over the cap fail with a loud {@link PackResolveException}.
      */
@@ -382,7 +382,7 @@ class ElementModelRenderer {
     /**
      * Classifies the gui rotation. Rotations within {@value #ROTATION_TOLERANCE_DEGREES}
      * degrees of 0 or 180 about y (with zero x and z) snap to the nearest flat view, absorbing
-     * MCC's decorative tilts. Anything else renders orthographically under
+     * packs' decorative tilts. Anything else renders orthographically under
      * {@code fullRotations} and throws without it.
      */
     private static ViewClass classify(GuiTransform transform, boolean fullRotations, String context) {

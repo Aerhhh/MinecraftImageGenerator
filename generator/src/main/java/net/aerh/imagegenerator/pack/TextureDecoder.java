@@ -557,7 +557,7 @@ class TextureDecoder {
     /** Bits per pixel for the manually-decodable subset, or -1 for unsupported combinations. */
     private static int bitsPerPixel(int colorType, int bitDepth) {
         return switch (colorType) {
-            // Palette and grayscale share the sub-byte packing rules; Wynncraft ships 1-bit
+            // Palette and grayscale share the sub-byte packing rules; some server packs ship 1-bit
             // grayscale font sheets, so low-depth gray is part of the real-world subset.
             case COLOR_TYPE_PALETTE, COLOR_TYPE_GRAY ->
                 bitDepth == 1 || bitDepth == 2 || bitDepth == 4 || bitDepth == 8 ? bitDepth : -1;

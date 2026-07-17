@@ -447,7 +447,7 @@ class TextureDecoderTest {
 
     @Test
     void corruptedAdler32OneBitGrayDecodesPixelIdentical() {
-        // Wynncraft ships 1-bit grayscale font sheets with corrupted checksums. Width 20 keeps
+        // Some server packs ship 1-bit grayscale font sheets with corrupted checksums. Width 20 keeps
         // the row stride off byte boundaries, exercising sub-byte sample unpacking.
         byte[] valid = buildPng(20, 10, 1, 0, null, null, cyclingGrayRows(20, 10, 1));
         BufferedImage strict = TextureDecoder.decode(valid, 1024, false);

@@ -485,7 +485,7 @@ final class LoadedPack {
     }
 
     /**
-     * Resolves a font id (e.g. {@code minecraft:default}, {@code mcc:chest_backgrounds}; a bare
+     * Resolves a font id (e.g. {@code minecraft:default}, {@code mypack:chest_backgrounds}; a bare
      * id defaults to the {@code minecraft} namespace) to its resolved font: references expanded,
      * filters applied for Force Unicode OFF / jp OFF, bitmap sheets decoded and metrics computed.
      * Resolved fonts are held in a cache bounded by retained glyph-cell bytes and soft

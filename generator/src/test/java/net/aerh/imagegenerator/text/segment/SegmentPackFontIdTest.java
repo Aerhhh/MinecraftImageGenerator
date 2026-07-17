@@ -16,8 +16,8 @@ class SegmentPackFontIdTest {
 
     @Test
     void unknownFontResourceLocationIsKeptRaw() {
-        TextSegment segment = TextSegment.fromJson("{\"text\":\"hi\",\"font\":\"wynn:chat\"}");
-        assertEquals("wynn:chat", segment.getPackFontId());
+        TextSegment segment = TextSegment.fromJson("{\"text\":\"hi\",\"font\":\"mypack:chat\"}");
+        assertEquals("mypack:chat", segment.getPackFontId());
         assertEquals(MinecraftFont.DEFAULT, segment.getFont(), "built-in fallback font stays DEFAULT");
     }
 
@@ -40,13 +40,13 @@ class SegmentPackFontIdTest {
     void packFontIdRoundTripsThroughJson() {
         ColorSegment segment = ColorSegment.builder()
             .withText("x")
-            .withPackFontId("wynn:chest_tooltip")
+            .withPackFontId("mypack:chest_tooltip")
             .build();
         JsonObject json = segment.toJson();
-        assertEquals("wynn:chest_tooltip", json.get("font").getAsString());
+        assertEquals("mypack:chest_tooltip", json.get("font").getAsString());
 
         TextSegment reparsed = TextSegment.fromJson(json);
-        assertEquals("wynn:chest_tooltip", reparsed.getPackFontId());
+        assertEquals("mypack:chest_tooltip", reparsed.getPackFontId());
     }
 
     @Test
@@ -63,8 +63,8 @@ class SegmentPackFontIdTest {
         assertEquals(MinecraftFont.DEFAULT, MinecraftFont.fromResourceLocationOrNull(null));
         assertEquals(MinecraftFont.DEFAULT, MinecraftFont.fromResourceLocationOrNull(""));
         assertEquals(MinecraftFont.DEFAULT, MinecraftFont.fromResourceLocationOrNull("minecraft:default"));
-        assertNull(MinecraftFont.fromResourceLocationOrNull("wynn:chat"));
-        assertEquals(MinecraftFont.DEFAULT, MinecraftFont.fromResourceLocation("wynn:chat"),
+        assertNull(MinecraftFont.fromResourceLocationOrNull("mypack:chat"));
+        assertEquals(MinecraftFont.DEFAULT, MinecraftFont.fromResourceLocation("mypack:chat"),
             "the non-null overload keeps its historical collapse-to-default contract");
     }
 }

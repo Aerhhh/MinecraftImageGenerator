@@ -439,7 +439,7 @@ class PackFontTest {
 
     @Test
     void fallbackKeepsPackDeclaredAscent() {
-        // MCC's default_offset fonts re-declare ascent to shift text; the fallback must apply the
+        // Some packs' default_offset fonts re-declare ascent to shift text; the fallback must apply the
         // PACK's ascent (here -3), not any vanilla default, so the shift survives.
         PackFont font = PackFont.create("test:offset",
             List.of(bitmap("minecraft:font/ascii.png", 8, -3, List.of("AB", "CD"))),

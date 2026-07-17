@@ -78,7 +78,7 @@ import java.util.regex.Pattern;
  * layer exactly like the vanilla client stitches it - the chest section (texture rows 0 to
  * {@code rows * 18 + 17}) above the bottom/player-inventory section (96 texture rows starting
  * at v = 126) - sampled in the vanilla 256x256-normalized texture space and nearest-neighbor
- * scaled (a fully transparent override, the MCC style, simply paints nothing). Without a pack,
+ * scaled (a fully transparent override, a common pack style, simply paints nothing). Without a pack,
  * or when the pack does not override the texture, the procedural vanilla-style chrome shared
  * with {@link MinecraftInventoryGenerator} is drawn instead, slot outlines included.
  *
@@ -199,7 +199,7 @@ public class MinecraftContainerGenerator implements Generator {
      * negative-advance padding fonts) work exactly as they do in tooltips.
      *
      * @param text   the run's text (required; may be empty)
-     * @param fontId optional resource-pack font id (e.g. {@code wynn:menu}); null uses the
+     * @param fontId optional resource-pack font id (e.g. {@code mypack:menu}); null uses the
      *               default font (which a pack may still override via {@code minecraft:default})
      * @param color  optional text color; null uses the rendering generator's default - the
      *               vanilla container title {@link #DEFAULT_TITLE_COLOR} here, white for HUD
@@ -898,7 +898,7 @@ public class MinecraftContainerGenerator implements Generator {
 
     /**
      * Parses a menu recipe document into a preconfigured {@link Builder} - the transcription
-     * format for Wynncraft/MCC-style menu captures. Pack selection and scale factor are NOT
+     * format for server-style menu captures. Pack selection and scale factor are NOT
      * part of the document; set them on the returned builder.
      *
      * <p>Format (strict; unknown keys anywhere are rejected):
@@ -906,7 +906,7 @@ public class MinecraftContainerGenerator implements Generator {
      * {
      *   "rows": 3,
      *   "title": [
-     *     {"text": "", "font": "wynn:menu"},
+     *     {"text": "", "font": "mypack:menu"},
      *     {"text": "Bank", "color": "#3F3F3F", "bold": true, "italic": false}
      *   ],
      *   "slots": {

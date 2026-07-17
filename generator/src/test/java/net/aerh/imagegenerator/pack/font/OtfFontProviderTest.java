@@ -95,7 +95,7 @@ class OtfFontProviderTest {
 
     @Test
     void ppemIsSizeTimesOversampleRounded() {
-        assertEquals(28, provider(7.0f, 4.0f, 0, 0, Set.of()).ppem(), "MCC hud.ttf: 7 * 4 = 28");
+        assertEquals(28, provider(7.0f, 4.0f, 0, 0, Set.of()).ppem(), "pixel hud font size 7, oversample 4: 7 * 4 = 28");
         assertEquals(32, provider().ppem(), "8 * 4 = 32");
         assertEquals(11, provider(2.75f, 4.0f, 0, 0, Set.of()).ppem(), "round(2.75 * 4) = 11");
     }

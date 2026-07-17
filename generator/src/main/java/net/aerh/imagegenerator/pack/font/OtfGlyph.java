@@ -13,8 +13,8 @@ import java.awt.Graphics2D;
  * offset, never touching the advance.
  *
  * <p>Rasterization is antialiasing-OFF and fractional-metrics-OFF, matching the aliased text path
- * everywhere else; a pixel font authored for integral ppem (MCC's {@code hud.ttf} at
- * {@code 7 * 4 = 28}) reproduces exactly. Non-pixel outlines render blocky at this tier (no
+ * everywhere else; a pixel font authored for integral ppem (a pixel hud font at size 7,
+ * oversample 4, so {@code 7 * 4 = 28} ppem) reproduces exactly. Non-pixel outlines render blocky at this tier (no
  * coverage downsampling) - the documented Tier-1 limitation.
  */
 final class OtfGlyph implements PackGlyph {

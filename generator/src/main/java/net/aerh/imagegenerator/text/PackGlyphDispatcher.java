@@ -44,7 +44,7 @@ public final class PackGlyphDispatcher {
     public interface FontSource {
 
         /**
-         * @param fontId the effective font id (e.g. {@code minecraft:default}, {@code wynn:chat})
+         * @param fontId the effective font id (e.g. {@code minecraft:default}, {@code mypack:chat})
          * @return the resolved pack font, or empty when the pack defines no such font
          * @throws IllegalArgumentException when the font id itself is malformed (treated by the
          *                                  dispatcher as absent, since segment font ids are text

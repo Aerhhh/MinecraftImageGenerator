@@ -5,7 +5,7 @@ package net.aerh.imagegenerator.pack;
  * system properties and default to secure values (on-by-default posture).
  *
  * <p><b>Sizing for large server packs:</b> the defaults comfortably fit vanilla-scale packs, but
- * large server resource packs can exceed them by a wide margin - Wynncraft-class packs are on the
+ * large server resource packs can exceed them by a wide margin - large production server packs are on the
  * order of ~36,000 files, well past the default {@link #maxEntries()} of 20,000. What
  * {@code maxEntries} counts depends on the source type: for ZIP sources it bounds ALL
  * central-directory records (regular files AND directory entries, so a ZIP's effective count is

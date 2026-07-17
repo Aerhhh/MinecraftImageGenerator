@@ -64,7 +64,7 @@ public final class PackRepository {
      * pass the same instance you gave the {@link PackSource} factory ({@link PackSource#directory}
      * / {@link PackSource#zip}) so read-time and decode-time limits agree.
      *
-     * <p>Large server packs (Wynncraft-class packs run to ~36,000 files) exceed the default
+     * <p>Large server packs (large production server packs run to ~36,000 files) exceed the default
      * {@link PackLimits#maxEntries()} and need explicitly raised limits on BOTH the source factory
      * and this call. Note the count semantics differ by source: ZIP sources count every
      * central-directory record including directory entries, directory sources count only regular

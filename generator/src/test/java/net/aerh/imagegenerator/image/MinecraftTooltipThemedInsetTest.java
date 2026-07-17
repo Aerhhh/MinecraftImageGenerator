@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 /**
  * Pins themed tooltip content placement against the resolved style's nine-slice frame borders.
  * A themed frame that declares per-side nine-slice borders insets the content to clear those
- * borders (the Wynncraft-class legendary frame declares a thicker top/bottom border than
+ * borders (a large production server legendary frame declares a thicker top/bottom border than
  * left/right, and vanilla places content relative to those declarations); a stretched frame, or
  * a border thinner than the historical themed padding, keeps the symmetric base inset so existing
  * themed goldens stay byte-identical.

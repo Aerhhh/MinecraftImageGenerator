@@ -32,7 +32,7 @@ class NbtTextComponentLineSegmentTest {
 
     @Test
     void retainsPerSegmentPackFontIdThroughTheTree() {
-        String json = "{\"text\":\"\",\"font\":\"minecraft:language/wynncraft\",\"extra\":["
+        String json = "{\"text\":\"\",\"font\":\"minecraft:language/custom\",\"extra\":["
             + "{\"text\":\"Cascade\",\"color\":\"#55FFFF\"},"
             + "{\"text\":\"\\uDB40\\uDC13\",\"font\":\"minecraft:space\"}"
             + "]}";
@@ -40,7 +40,7 @@ class NbtTextComponentLineSegmentTest {
 
         assertEquals(2, segments.size());
         // The label run inherits the line's language font id; the kern run keeps its own space font.
-        assertEquals("minecraft:language/wynncraft", segments.get(0).getPackFontId());
+        assertEquals("minecraft:language/custom", segments.get(0).getPackFontId());
         assertEquals("Cascade", segments.get(0).getText());
         assertEquals("minecraft:space", segments.get(1).getPackFontId());
     }

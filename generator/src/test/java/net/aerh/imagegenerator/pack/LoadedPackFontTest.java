@@ -294,7 +294,7 @@ class LoadedPackFontTest {
     @Test
     void fontsReferencingTheSameSheetShareOneBuiltProvider() {
         // alias references pixel: without sharing, each resolved font would re-decode the sheet
-        // and duplicate every glyph cell (the Wynncraft N-fonts-one-base blowup).
+        // and duplicate every glyph cell (the N-fonts-one-base blowup real packs exhibit).
         PackFont pixel = pack.resolveFont("testpack:pixel").orElseThrow();
         PackFont alias = pack.resolveFont("testpack:alias").orElseThrow();
         assertSame(pixel.glyph('A').orElseThrow(), alias.glyph('A').orElseThrow(),

@@ -30,7 +30,7 @@ class VanillaFontSheetsTest {
     @Test
     void nonMinecraftNamespaceNeverMatches() {
         assertTrue(VanillaFontSheets.sheet("testpack", "font/ascii.png").isEmpty());
-        assertTrue(VanillaFontSheets.sheet("mcc", "font/ascii.png").isEmpty());
+        assertTrue(VanillaFontSheets.sheet("serverpack", "font/ascii.png").isEmpty());
     }
 
     @Test

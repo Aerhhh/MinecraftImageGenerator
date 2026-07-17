@@ -37,7 +37,7 @@ import java.util.TreeSet;
  * <p>Second deviation, also by design: a bitmap provider whose sheet texture is ABSENT (per
  * {@link TextureLoader#exists}) is handled in two steps. First the loader's bundled vanilla
  * fallback set is consulted ({@link TextureLoader#vanillaFallbackSheet}): a pack that references a
- * vanilla client sheet it does not ship (e.g. {@code minecraft:font/ascii.png}, as MCC's
+ * vanilla client sheet it does not ship (e.g. {@code minecraft:font/ascii.png}, as some packs'
  * {@code minecraft:default} and {@code default_offset} fonts do) renders real bitmap glyphs from
  * the bundled copy, combined with the pack's OWN metrics (so a re-declared ascent still shifts the
  * text). Only when no bundled sheet matches is the provider skipped with a warning instead of

@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * the vanilla 1.21.x client so a pack that references them WITHOUT shipping them still renders real
  * bitmap glyphs.
  *
- * <p>Real server packs (e.g. MCC Island) override {@code minecraft:default} with bitmap providers
+ * <p>Real server packs override {@code minecraft:default} with bitmap providers
  * pointing at these vanilla sheets and rely on the client already having them; a pack shipped to a
  * player carries neither the sheet PNGs nor an explicit copy. Without this fallback those providers
  * are skipped (the {@link PackFont} absent-sheet deviation) and the pack's Latin body text falls
@@ -33,7 +33,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * vanilla assets, not server-pack content, so bundling them is not the pack-redistribution concern.
  *
  * <p>The caller supplies the per-provider metrics from the PACK's own bitmap definition (so a pack
- * that re-declares {@code ascent} - as MCC's {@code default_offset} fonts do to shift text down -
+ * that re-declares {@code ascent} - as some packs' shift-down {@code default_offset} fonts do to shift text down -
  * keeps its shift); this class supplies only the sheet pixels. Decoded sheets are memoized and
  * shared read-only (each glyph copies its own cell, mirroring the pack sheet path), so the tiny
  * PNGs decode at most once per JVM.

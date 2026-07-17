@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Strict parsing coverage for {@link MinecraftContainerGenerator#fromRecipe}: the menu recipe
- * document format Wynncraft/MCC menu captures are transcribed into. Malformed documents must
+ * document format server menu captures are transcribed into. Malformed documents must
  * fail loudly at parse time, never render something silently wrong.
  */
 class MinecraftContainerGeneratorRecipeTest {

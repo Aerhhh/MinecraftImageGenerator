@@ -165,7 +165,7 @@ class PackRepositoryTest {
     void packLargerThanSmallCapLoadsWithExplicitHigherLimitsOnBothSourceAndRegister() {
         // The large-server-pack recipe (see PackLimits javadoc): one raised PackLimits instance
         // passed to BOTH the source factory and register. 6 files over a cap of 5 stands in for
-        // a Wynncraft-scale pack (~36k files) over the 20k default; the wiring is identical.
+        // a large production server pack (~36k files) over the 20k default; the wiring is identical.
         FixturePacks.writeMinimalPack(miniPackDir, 6);
         PackLimits raised = new PackLimits(10, 8L * 1024 * 1024, 1024, 64L * 1024 * 1024);
         PackId id = repository.register("test:bigpack", PackSource.directory(miniPackDir, raised), raised);

@@ -46,7 +46,7 @@ public enum MinecraftFont {
     /**
      * Resolves a font from a Minecraft resource location string, distinguishing unknown ids from
      * the default font: a null or empty location IS the default, but an unrecognized location
-     * (e.g. a resource-pack font like {@code "wynn:chat"}) returns null so callers can keep the
+     * (e.g. a resource-pack font like {@code "mypack:chat"}) returns null so callers can keep the
      * raw id instead of collapsing it to {@link #DEFAULT}.
      *
      * @param resourceLocation The resource location (e.g. {@code "minecraft:alt"}, {@code "alt"})

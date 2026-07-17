@@ -25,7 +25,7 @@ public class ColorSegment {
     protected TextColor color = ChatFormat.GRAY;
     protected @NotNull MinecraftFont font = MinecraftFont.DEFAULT;
     /**
-     * Optional resource-pack font id (any resource location, e.g. {@code "wynn:chat"}); null when
+     * Optional resource-pack font id (any resource location, e.g. {@code "mypack:chat"}); null when
      * the segment uses a built-in {@link MinecraftFont}. When set it takes precedence over
      * {@link #font} for pack glyph lookup; rendering falls back to {@link #font} for codepoints
      * the pack font does not supply (or when no pack is active).
@@ -317,7 +317,7 @@ public class ColorSegment {
         }
 
         /**
-         * Sets a resource-pack font id (any resource location, e.g. {@code "wynn:chat"}). Takes
+         * Sets a resource-pack font id (any resource location, e.g. {@code "mypack:chat"}). Takes
          * precedence over {@link #withFont} for pack glyph lookup when a pack is active; see
          * {@link ColorSegment#packFontId}.
          */

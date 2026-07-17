@@ -69,8 +69,8 @@ class LoadedPackTest {
 
     @Test
     void compositesGeneratedLayersOfOneModel() {
-        // Regression: real packs stack layer0 + layer1 on ONE item/generated model (the MCC
-        // battle_box ball shape); vanilla bakes every contiguous layerN, not just layer0.
+        // Regression: real packs stack layer0 + layer1 on ONE item/generated model (a two-layer
+        // ball shape); vanilla bakes every contiguous layerN, not just layer0.
         BufferedImage sprite = pack.resolveSprite("testpack:item/two_layer").orElseThrow();
         assertEquals(0xFF00FF00, sprite.getRGB(0, 0), "layer1 overlay pixel paints over the base");
         assertEquals(0xFFFF0000, sprite.getRGB(8, 8), "layer0 base shows elsewhere");

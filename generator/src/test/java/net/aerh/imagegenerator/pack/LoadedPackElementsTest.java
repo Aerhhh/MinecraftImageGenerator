@@ -68,7 +68,7 @@ class LoadedPackElementsTest {
         ImageAssertions.assertPixelsEqual(
             raster("testpack:item/flat", CustomModelData.EMPTY).image(),
             raster("testpack:item/tilted", CustomModelData.EMPTY).image(),
-            "2-degree MCC tilt");
+            "2-degree decorative tilt");
     }
 
     @Test

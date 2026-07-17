@@ -464,7 +464,7 @@ public final class FixturePacks {
      *     {@code minecraft:font/ascii.png} (NOT shipped by this pack) with the vanilla 16x16 grid;
      *     resolves real glyphs from the bundled vanilla sheet - 'A' advance 6, 'i' advance 2.</li>
      * <li>{@code minecraft:vanilla_offset}: same as {@code vanilla_ascii} but ascent -3 (vanilla
-     *     ascii ascent is 7), the shape of MCC's {@code default_offset_10} shift-down font.</li>
+     *     ascii ascent is 7), the shape of some packs' {@code default_offset_10} shift-down font.</li>
      * <li>{@code minecraft:vanilla_unmapped}: references {@code minecraft:font/unifont.png}, a
      *     minecraft-namespace sheet NOT in the bundled fallback set; the provider skips (no
      *     fallback) and the font resolves empty.</li>
@@ -528,7 +528,7 @@ public final class FixturePacks {
             // copy (see VanillaFontSheets) with the pack's own metrics.
             fontJson(root, "minecraft", "vanilla_ascii", vanillaAsciiFontJson("minecraft:font/ascii.png", 7));
             // Same bundled sheet, ascent re-declared -3 (vanilla ascii ascent is 7): the shape of
-            // MCC's default_offset_10 font, which shifts text down 10 GUI px purely via ascent.
+            // some packs' default_offset_10 font, which shifts text down 10 GUI px purely via ascent.
             fontJson(root, "minecraft", "vanilla_offset", vanillaAsciiFontJson("minecraft:font/ascii.png", -3));
             // A minecraft-namespace sheet NOT in the bundled vanilla set: no fallback exists, so the
             // provider skips exactly like a non-vanilla absent sheet and the font resolves empty.
@@ -609,7 +609,7 @@ public final class FixturePacks {
      * <p>Contents:
      * <ul>
      * <li>{@code minecraft:textures/gui/container/generic_54.png}: fully transparent 256x256
-     *     (the MCC style - the pack blanks the chrome and draws menus via title glyphs).</li>
+     *     (a common server style - the pack blanks the chrome and draws menus via title glyphs).</li>
      * <li>{@code testpack:menu}: bitmap font with four glyph-art cells plus a space provider:
      *     <ul>
      *     <li>U+E100 "background": 32x32 solid 0xFF336699 cell, height 64, ascent 5 - scale 2,
@@ -744,7 +744,7 @@ public final class FixturePacks {
     }
 
     /**
-     * Writes a pack of ELEMENTS-BASED item models (the Wynncraft/MCC UI-quad shape): flat quads
+     * Writes a pack of ELEMENTS-BASED item models (the server UI-quad shape): flat quads
      * with display.gui transforms, custom_model_data dispatch, tints and oversized_in_gui.
      * Everything is synthetic and generated at test runtime.
      *
@@ -764,7 +764,7 @@ public final class FixturePacks {
      * <li>{@code flat}: full-slot quad ([0,0,0]..[16,16,1]); south face #front (paint), north
      *     face #back (backpaint). Also the parent of the inheritance fixtures.</li>
      * <li>{@code mirrored}: child of the flat model adding display.gui rotation (0,180,0).</li>
-     * <li>{@code tilted}: child adding rotation (0,2,0) - MCC's decorative tilt, identity.</li>
+     * <li>{@code tilted}: child adding rotation (0,2,0) - a pack decorative tilt, identity.</li>
      * <li>{@code badspin}: child adding rotation (30,225,0) - resolve throws by default;
      *     full-gui-rotation renders show the north face as a rotated parallelogram (the
      *     rotated south normal faces away from the viewer).</li>
