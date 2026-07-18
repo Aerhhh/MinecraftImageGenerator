@@ -13,6 +13,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -106,7 +107,32 @@ public class GeneratorCacheKey {
             return abbreviate(parts.toString());
         }
 
+        if (value instanceof Map<?, ?> map) {
+            return abbreviate(mapToString(map));
+        }
+
         return abbreviate(Objects.toString(value));
+    }
+
+    /**
+     * Canonicalizes a map with length-prefixed keys and values instead of relying on
+     * {@code Map.toString()}: the flattened {@code "{k=v, k=v}"} form is ambiguous when a value
+     * itself contains {@code ", <key>="} (e.g. an item spec of {@code "stone, 2=dirt"} versus a
+     * second entry {@code 2=dirt}), which would let two different generator configurations
+     * collide on one cache key. Length prefixes make the encoding injective. Iteration order is
+     * the map's own, so generators must store sorted maps for deterministic keys.
+     */
+    private static String mapToString(Map<?, ?> map) {
+        StringBuilder builder = new StringBuilder("{");
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            String key = normalizeValue(entry.getKey());
+            String value = normalizeValue(entry.getValue());
+            builder.append(key.length()).append(':').append(key)
+                .append('=')
+                .append(value.length()).append(':').append(value)
+                .append(';');
+        }
+        return builder.append('}').toString();
     }
 
     private static String arrayToString(Object array) {

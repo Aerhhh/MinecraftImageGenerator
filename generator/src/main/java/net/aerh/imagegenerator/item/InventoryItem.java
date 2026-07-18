@@ -20,6 +20,12 @@ public class InventoryItem {
     private Integer durabilityPercent;
     private List<BufferedImage> animationFrames;
     private Integer frameDelayMs;
+    /**
+     * Per-frame delays in milliseconds when the frames come from a tick-timed pack texture
+     * animation (frames may hold for different times); null for uniform-delay animations like
+     * the enchant glint, where {@link #frameDelayMs} applies to every frame.
+     */
+    private List<Integer> frameDelaysMs;
 
     public InventoryItem(int slot, int amount, String itemName, String extraContent, Integer durabilityPercent) {
         this(new int[]{slot}, new int[]{amount}, itemName, extraContent, durabilityPercent);

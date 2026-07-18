@@ -24,7 +24,21 @@ public class ColorSegment {
     protected @NotNull String text;
     protected ChatColor color = ChatColor.Legacy.GRAY;
     protected @NotNull MinecraftFont font = MinecraftFont.DEFAULT;
+    /**
+     * Optional resource-pack font id (any resource location, e.g. {@code "mypack:chat"}); null when
+     * the segment uses a built-in {@link MinecraftFont}. When set it takes precedence over
+     * {@link #font} for pack glyph lookup; rendering falls back to {@link #font} for codepoints
+     * the pack font does not supply (or when no pack is active).
+     */
+    protected @Nullable String packFontId;
     protected boolean italic, bold, underlined, obfuscated, strikethrough;
+    /**
+     * Whether this segment draws its drop shadow. Defaults to {@code true} (the vanilla behavior).
+     * Set {@code false} to mirror a {@code shadow_color} component whose alpha byte is zero
+     * (e.g. {@code 16777215} = {@code 0x00FFFFFF}), which disables the drop shadow for that run.
+     * Only the shadow pass is affected; foreground draw and advances are unchanged.
+     */
+    protected boolean shadowEnabled = true;
 
     public ColorSegment(@NotNull String text) {
         this.setText(text);
@@ -180,12 +194,19 @@ public class ColorSegment {
         // uppercase. Named colors are already lowercase, so this is a no-op for them.
         this.getColor().ifPresent(color -> object.addProperty("color", color.toJsonString().toLowerCase(java.util.Locale.ROOT)));
 
-        if (this.font != MinecraftFont.DEFAULT) object.addProperty("font", this.font.getResourceLocation());
+        if (this.packFontId != null) {
+            object.addProperty("font", this.packFontId);
+        } else if (this.font != MinecraftFont.DEFAULT) {
+            object.addProperty("font", this.font.getResourceLocation());
+        }
         if (this.isItalic()) object.addProperty("italic", true);
         if (this.isBold()) object.addProperty("bold", true);
         if (this.isUnderlined()) object.addProperty("underlined", true);
         if (this.isObfuscated()) object.addProperty("obfuscated", true);
         if (this.isStrikethrough()) object.addProperty("strikethrough", true);
+        // A disabled shadow round-trips as the canonical alpha-0 white; enabled shadows (the
+        // default) emit nothing, so segments that never touched shadow_color stay byte-identical.
+        if (!this.shadowEnabled) object.addProperty("shadow_color", 16777215);
 
         return object;
     }
@@ -246,7 +267,9 @@ public class ColorSegment {
         protected String text = "";
         protected ChatColor color = ChatColor.Legacy.GRAY;
         protected MinecraftFont font = MinecraftFont.DEFAULT;
+        protected String packFontId;
         protected boolean italic, bold, underlined, obfuscated, strikethrough;
+        protected boolean shadowEnabled = true;
 
         public Builder isBold() {
             return this.isBold(true);
@@ -303,8 +326,27 @@ public class ColorSegment {
             return this;
         }
 
+        /**
+         * Sets a resource-pack font id (any resource location, e.g. {@code "mypack:chat"}). Takes
+         * precedence over {@link #withFont} for pack glyph lookup when a pack is active; see
+         * {@link ColorSegment#packFontId}.
+         */
+        public Builder withPackFontId(@Nullable String packFontId) {
+            this.packFontId = packFontId;
+            return this;
+        }
+
         public Builder withText(@NotNull String text) {
             this.text = text;
+            return this;
+        }
+
+        /**
+         * Whether this segment draws its drop shadow (default {@code true}); see
+         * {@link ColorSegment#shadowEnabled}.
+         */
+        public Builder withShadowEnabled(boolean shadowEnabled) {
+            this.shadowEnabled = shadowEnabled;
             return this;
         }
 
@@ -313,11 +355,13 @@ public class ColorSegment {
             ColorSegment colorSegment = new ColorSegment(this.text);
             colorSegment.setColor(this.color);
             colorSegment.setFont(this.font);
+            colorSegment.setPackFontId(this.packFontId);
             colorSegment.setObfuscated(this.obfuscated);
             colorSegment.setItalic(this.italic);
             colorSegment.setBold(this.bold);
             colorSegment.setUnderlined(this.underlined);
             colorSegment.setStrikethrough(this.strikethrough);
+            colorSegment.setShadowEnabled(this.shadowEnabled);
             return colorSegment;
         }
     }
