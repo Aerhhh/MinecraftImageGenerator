@@ -14,8 +14,12 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -28,19 +32,25 @@ class PackJsonParser {
     private static final String MINECRAFT_PREFIX = "minecraft:";
 
     public static ItemModelNode parseItemDefinition(byte[] json) {
+        return parseItemDefinitionInfo(json).model();
+    }
+
+    public static ItemDefinition parseItemDefinitionInfo(byte[] json) {
         JsonObject root = parseObject(json);
         if (!root.has("model") || !root.get("model").isJsonObject()) {
             throw new PackLoadException("Item definition is missing required 'model' object");
         }
-        return parseNode(root.getAsJsonObject("model"));
+        return new ItemDefinition(parseNode(root.getAsJsonObject("model")),
+            optionalBoolean(root, "oversized_in_gui"));
     }
 
     private static ItemModelNode parseNode(JsonObject node) {
         String type = normalize(requireString(node, "type"));
         return switch (type) {
-            case "model" -> new ItemModelNode.ModelLeaf(requireString(node, "model"));
+            case "model" -> new ItemModelNode.ModelLeaf(requireString(node, "model"), parseTints(node));
             case "condition" -> new ItemModelNode.ConditionNode(
                 normalize(requireString(node, "property")),
+                optionalIndex(node),
                 parseNode(requireObject(node, "on_true")),
                 parseNode(requireObject(node, "on_false")));
             case "select" -> parseSelect(node);
@@ -50,8 +60,65 @@ class PackJsonParser {
         };
     }
 
+    /** The optional {@code index} field of custom_model_data dispatch nodes, default 0. */
+    private static int optionalIndex(JsonObject node) {
+        return node.has("index") ? requireIntegralInt(node, "index", "Item definition node") : 0;
+    }
+
+    private static List<ItemModelNode.TintSpec> parseTints(JsonObject node) {
+        if (!node.has("tints")) {
+            return List.of();
+        }
+        List<ItemModelNode.TintSpec> tints = new ArrayList<>();
+        for (JsonElement tintElement : requireArray(node, "tints")) {
+            JsonObject tint = asObject(tintElement, "tint source");
+            String type = normalize(requireString(tint, "type", "Tint source"));
+            tints.add(switch (type) {
+                case "constant" -> new ItemModelNode.TintSpec.Constant(requireColor(tint, "value"));
+                case "custom_model_data" -> new ItemModelNode.TintSpec.CustomModelDataTint(
+                    optionalIndex(tint),
+                    tint.has("default") ? requireColor(tint, "default") : GuiModelResolver.WHITE);
+                // The dye default is REQUIRED per the vanilla format; requireColor fails loudly
+                // when it is absent.
+                case "dye" -> new ItemModelNode.TintSpec.Dye(requireColor(tint, "default"));
+                default -> new ItemModelNode.TintSpec.Unsupported(type);
+            });
+        }
+        return List.copyOf(tints);
+    }
+
+    /**
+     * A tint color value: either a packed RGB integer or an {@code [r, g, b]} array of floats in
+     * 0..1 (the two shapes the vanilla format accepts). Returns packed {@code 0xRRGGBB}.
+     */
+    private static int requireColor(JsonObject node, String member) {
+        JsonElement element = node.get(member);
+        if (element != null && element.isJsonPrimitive() && element.getAsJsonPrimitive().isNumber()) {
+            return element.getAsInt() & 0xFFFFFF;
+        }
+        if (element != null && element.isJsonArray()) {
+            JsonArray channels = element.getAsJsonArray();
+            if (channels.size() != 3) {
+                throw new PackLoadException("Tint color '%s' array must have exactly 3 channels", member);
+            }
+            int rgb = 0;
+            for (int i = 0; i < 3; i++) {
+                JsonElement channel = channels.get(i);
+                if (!channel.isJsonPrimitive() || !channel.getAsJsonPrimitive().isNumber()) {
+                    throw new PackLoadException("Tint color '%s' channels must be numbers", member);
+                }
+                float value = channel.getAsFloat();
+                int scaled = Math.clamp(Math.round(value * 255.0f), 0, 255);
+                rgb = (rgb << 8) | scaled;
+            }
+            return rgb;
+        }
+        throw new PackLoadException("Tint color '%s' must be an integer or an [r, g, b] float array", member);
+    }
+
     private static ItemModelNode parseSelect(JsonObject node) {
         String property = normalize(requireString(node, "property"));
+        int index = optionalIndex(node);
         List<ItemModelNode.SelectNode.Case> cases = new ArrayList<>();
         for (JsonElement caseElement : requireArray(node, "cases")) {
             JsonObject caseObject = asObject(caseElement, "select case");
@@ -67,7 +134,7 @@ class PackJsonParser {
             }
             cases.add(new ItemModelNode.SelectNode.Case(Set.copyOf(when), parseNode(requireObject(caseObject, "model"))));
         }
-        return new ItemModelNode.SelectNode(property, List.copyOf(cases), parseFallback(node));
+        return new ItemModelNode.SelectNode(property, index, List.copyOf(cases), parseFallback(node));
     }
 
     private static ItemModelNode parseRangeDispatch(JsonObject node) {
@@ -82,7 +149,9 @@ class PackJsonParser {
                     parseNode(requireObject(entryObject, "model"))));
             }
         }
-        return new ItemModelNode.RangeDispatchNode(property, scale, List.copyOf(entries), parseFallback(node));
+        // normalize defaults TRUE, the vanilla minecraft:damage default (damage fraction).
+        return new ItemModelNode.RangeDispatchNode(property, optionalIndex(node), scale,
+            optionalBoolean(node, "normalize", true), List.copyOf(entries), parseFallback(node));
     }
 
     private static ItemModelNode parseComposite(JsonObject node) {
@@ -113,11 +182,188 @@ class PackJsonParser {
     public static ModelInfo parseModel(byte[] json) {
         JsonObject root = parseObject(json);
         String parent = optionalString(root, "parent");
-        String layer0 = null;
+        Map<String, String> textures = new LinkedHashMap<>();
         if (root.has("textures") && root.get("textures").isJsonObject()) {
-            layer0 = optionalString(root.getAsJsonObject("textures"), "layer0");
+            for (Map.Entry<String, JsonElement> entry : root.getAsJsonObject("textures").entrySet()) {
+                JsonElement value = entry.getValue();
+                if (value == null || value.isJsonNull()) {
+                    continue;
+                }
+                if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) {
+                    // Only layer0 has always been validated (pre-elements behavior); other
+                    // non-string entries are skipped so a model that previously loaded keeps
+                    // loading - a face referencing the skipped key still fails loudly at
+                    // resolve time with an undefined-texture-key error.
+                    if ("layer0".equals(entry.getKey())) {
+                        throw new PackLoadException("Expected string for member '%s'", entry.getKey());
+                    }
+                    continue;
+                }
+                textures.put(entry.getKey(), value.getAsString());
+            }
         }
-        return new ModelInfo(parent, layer0);
+        List<ModelElement> elements = root.has("elements") ? parseElements(root) : null;
+        return new ModelInfo(parent, textures.get("layer0"), Map.copyOf(textures), elements,
+            parseDisplayGui(root), parseGuiLight(root));
+    }
+
+    private static List<ModelElement> parseElements(JsonObject root) {
+        JsonElement elementsElement = root.get("elements");
+        if (!elementsElement.isJsonArray()) {
+            throw new PackLoadException("Model 'elements' must be an array");
+        }
+        List<ModelElement> elements = new ArrayList<>();
+        for (JsonElement element : elementsElement.getAsJsonArray()) {
+            elements.add(parseElement(asObject(element, "model element")));
+        }
+        return List.copyOf(elements);
+    }
+
+    private static ModelElement parseElement(JsonObject element) {
+        float[] from = requireVector3(element, "from", "Model element");
+        float[] to = requireVector3(element, "to", "Model element");
+        for (int i = 0; i < 3; i++) {
+            if (from[i] < -16 || from[i] > 32 || to[i] < -16 || to[i] > 32) {
+                throw new PackLoadException("Model element coordinates must be within -16..32");
+            }
+        }
+        ModelElement.Rotation rotation = null;
+        if (element.has("rotation")) {
+            JsonElement rotationElement = element.get("rotation");
+            if (!rotationElement.isJsonObject()) {
+                throw new PackLoadException("Model element 'rotation' must be an object");
+            }
+            rotation = parseElementRotation(rotationElement.getAsJsonObject());
+        }
+        boolean shade = optionalBoolean(element, "shade", true);
+        Map<ModelElement.Direction, ModelElement.Face> faces = new EnumMap<>(ModelElement.Direction.class);
+        if (element.has("faces")) {
+            JsonElement facesElement = element.get("faces");
+            if (!facesElement.isJsonObject()) {
+                throw new PackLoadException("Model element 'faces' must be an object");
+            }
+            for (Map.Entry<String, JsonElement> faceEntry : facesElement.getAsJsonObject().entrySet()) {
+                ModelElement.Direction direction;
+                try {
+                    direction = ModelElement.Direction.valueOf(faceEntry.getKey().toUpperCase(Locale.ROOT));
+                } catch (IllegalArgumentException e) {
+                    throw new PackLoadException("Unknown model element face '%s'", faceEntry.getKey());
+                }
+                faces.put(direction, parseFace(asObject(faceEntry.getValue(), "element face")));
+            }
+        }
+        return new ModelElement(from[0], from[1], from[2], to[0], to[1], to[2],
+            rotation, shade, Map.copyOf(faces));
+    }
+
+    /**
+     * Parses an element rotation entry with vanilla validation: {@code angle} any finite angle
+     * in degrees (modern vanilla lifted the legacy 22.5-degree-step whitelist in 1.21.6, the
+     * client family whose packs this library targets), {@code axis} one of
+     * {@code x}/{@code y}/{@code z} (lowercase, like vanilla's axis-by-name lookup),
+     * {@code origin} a required 3-vector in model units and {@code rescale} an optional boolean
+     * defaulting to false.
+     */
+    private static ModelElement.Rotation parseElementRotation(JsonObject rotation) {
+        float angle = (float) requireNumber(rotation, "angle", "Element rotation");
+        if (!Float.isFinite(angle)) {
+            throw new PackLoadException(
+                "Element rotation angle must be a finite number, got %s", String.valueOf(angle));
+        }
+        String axisName = requireString(rotation, "axis", "Element rotation");
+        ModelElement.Axis axis = switch (axisName) {
+            case "x" -> ModelElement.Axis.X;
+            case "y" -> ModelElement.Axis.Y;
+            case "z" -> ModelElement.Axis.Z;
+            default -> throw new PackLoadException("Element rotation axis must be 'x', 'y' or 'z', got '%s'", axisName);
+        };
+        float[] origin = requireVector3(rotation, "origin", "Element rotation");
+        return new ModelElement.Rotation(angle, axis, origin[0], origin[1], origin[2],
+            optionalBoolean(rotation, "rescale"));
+    }
+
+    private static ModelElement.Face parseFace(JsonObject face) {
+        ModelElement.FaceUv uv = null;
+        if (face.has("uv")) {
+            float[] values = requireVector(face, "uv", 4, "Element face");
+            uv = new ModelElement.FaceUv(values[0], values[1], values[2], values[3]);
+        }
+        int rotation = 0;
+        if (face.has("rotation")) {
+            rotation = requireIntegralInt(face, "rotation", "Element face");
+            if (rotation != 0 && rotation != 90 && rotation != 180 && rotation != 270) {
+                throw new PackLoadException("Element face rotation must be 0, 90, 180 or 270, got %s",
+                    String.valueOf(rotation));
+            }
+        }
+        int tintIndex = face.has("tintindex") ? requireIntegralInt(face, "tintindex", "Element face") : -1;
+        return new ModelElement.Face(uv, requireString(face, "texture", "Element face"), rotation, tintIndex);
+    }
+
+    /**
+     * The model's own {@code display.gui} entry, or null when the model declares none (the
+     * entry then inherits from the parent chain as a whole, per vanilla).
+     */
+    private static GuiTransform parseDisplayGui(JsonObject root) {
+        if (!root.has("display")) {
+            return null;
+        }
+        JsonElement displayElement = root.get("display");
+        if (!displayElement.isJsonObject()) {
+            throw new PackLoadException("Model 'display' must be an object");
+        }
+        JsonObject display = displayElement.getAsJsonObject();
+        if (!display.has("gui")) {
+            return null;
+        }
+        JsonElement guiElement = display.get("gui");
+        if (!guiElement.isJsonObject()) {
+            throw new PackLoadException("Model 'display.gui' must be an object");
+        }
+        JsonObject gui = guiElement.getAsJsonObject();
+        float[] rotation = optionalVector3(gui, "rotation", 0);
+        float[] translation = optionalVector3(gui, "translation", 0);
+        float[] scale = optionalVector3(gui, "scale", 1);
+        return new GuiTransform(rotation[0], rotation[1], rotation[2],
+            translation[0], translation[1], translation[2],
+            scale[0], scale[1], scale[2]);
+    }
+
+    private static String parseGuiLight(JsonObject root) {
+        String guiLight = optionalString(root, "gui_light");
+        if (guiLight != null && !guiLight.equals("front") && !guiLight.equals("side")) {
+            throw new PackLoadException("Model 'gui_light' must be 'front' or 'side', got '%s'", guiLight);
+        }
+        return guiLight;
+    }
+
+    private static float[] optionalVector3(JsonObject node, String member, float defaultValue) {
+        if (!node.has(member)) {
+            return new float[]{defaultValue, defaultValue, defaultValue};
+        }
+        return requireVector(node, member, 3, "Display transform");
+    }
+
+    private static float[] requireVector3(JsonObject node, String member, String owner) {
+        return requireVector(node, member, 3, owner);
+    }
+
+    private static float[] requireVector(JsonObject node, String member, int length, String owner) {
+        JsonElement element = node.get(member);
+        if (element == null || !element.isJsonArray() || element.getAsJsonArray().size() != length) {
+            throw new PackLoadException("%s member '%s' must be an array of %s numbers",
+                owner, member, String.valueOf(length));
+        }
+        float[] values = new float[length];
+        JsonArray array = element.getAsJsonArray();
+        for (int i = 0; i < length; i++) {
+            JsonElement value = array.get(i);
+            if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()) {
+                throw new PackLoadException("%s member '%s' must contain only numbers", owner, member);
+            }
+            values[i] = value.getAsFloat();
+        }
+        return values;
     }
 
     public static McMeta parseMcmeta(byte[] json) {
@@ -130,21 +376,117 @@ class PackJsonParser {
         return parseAnimationSection(parseObject(json));
     }
 
+    /**
+     * Parses the full vanilla animation model: {@code frametime} (default 1 tick, must be
+     * positive), the frames list with int and {@code {index, time}} entries (every entry is
+     * validated, and a per-frame {@code time} overrides {@code frametime}), the frame-size
+     * overrides and the {@code interpolate} flag. Absent frames list means default order (all
+     * flipbook frames top to bottom).
+     */
     private static AnimationMeta parseAnimationSection(JsonObject root) {
         if (!root.has("animation") || !root.get("animation").isJsonObject()) {
             throw new PackLoadException("Texture mcmeta has no 'animation' section");
+        }
+        JsonObject animation = root.getAsJsonObject("animation");
+        int defaultFrameTime = animation.has("frametime")
+            ? requireIntegralInt(animation, "frametime", "Animation section") : 1;
+        if (defaultFrameTime < 1) {
+            throw new PackLoadException("Animation frametime must be positive, got %s",
+                String.valueOf(defaultFrameTime));
+        }
+        List<AnimationMeta.FrameEntry> frameEntries = null;
+        if (animation.has("frames")) {
+            JsonElement framesElement = animation.get("frames");
+            if (!framesElement.isJsonArray()) {
+                throw new PackLoadException("Animation 'frames' must be an array");
+            }
+            List<AnimationMeta.FrameEntry> entries = new ArrayList<>();
+            for (JsonElement frameElement : framesElement.getAsJsonArray()) {
+                entries.add(parseFrameEntry(frameElement, defaultFrameTime));
+            }
+            frameEntries = List.copyOf(entries);
+        }
+        Integer width = optionalInt(animation, "width");
+        Integer height = optionalInt(animation, "height");
+        return new AnimationMeta(frameEntries, defaultFrameTime, width, height,
+            optionalBoolean(animation, "interpolate"));
+    }
+
+    /**
+     * One frames-list entry: a bare number is a frame index at the default time; an object
+     * requires a numeric {@code index} and may override {@code time} (positive ticks).
+     */
+    private static AnimationMeta.FrameEntry parseFrameEntry(JsonElement entry, int defaultFrameTime) {
+        if (entry.isJsonObject()) {
+            JsonObject frame = entry.getAsJsonObject();
+            JsonElement index = frame.get("index");
+            if (index == null || !index.isJsonPrimitive() || !index.getAsJsonPrimitive().isNumber()) {
+                throw new PackLoadException("Animation frame entry is missing numeric 'index'");
+            }
+            int time = defaultFrameTime;
+            if (frame.has("time")) {
+                time = requireIntegralInt(frame, "time", "Animation frame entry");
+                if (time < 1) {
+                    throw new PackLoadException("Animation frame time must be positive, got %s",
+                        String.valueOf(time));
+                }
+            }
+            return new AnimationMeta.FrameEntry(index.getAsInt(), time);
+        }
+        if (!entry.isJsonPrimitive() || !entry.getAsJsonPrimitive().isNumber()) {
+            throw new PackLoadException("Animation frame entry must be a number or an object with 'index'");
+        }
+        return new AnimationMeta.FrameEntry(entry.getAsInt(), defaultFrameTime);
+    }
+
+    /**
+     * Parses ONLY the first-frame crop metadata a STATIC texture load needs - the frame-size
+     * overrides plus the first frame index - tolerating an otherwise malformed animation section
+     * exactly as the pre-full-model parse did: {@code frametime}, per-frame times and frame
+     * entries past the first are never validated here. This keeps the flag-off first-frame crop
+     * of a pack with a malformed animation mcmeta byte-identical (a first-frame crop, not the raw
+     * flipbook sheet), while the strict {@link #parseAnimationMeta} / {@link #parseMcmeta} path
+     * the animated resolution uses still rejects the same mcmeta loudly and falls back to static.
+     * The gui section is validated strictly (mirroring the historical two-section parse), so a
+     * malformed gui section still fails and yields no crop.
+     *
+     * @return the first-frame metadata, or null when the mcmeta declares no animation section
+     * @throws PackLoadException when the bytes are not a JSON object, the gui section is
+     *                           malformed, or the FIRST frame entry is not a number or an
+     *                           {@code index}-object
+     */
+    static AnimationMeta parseFirstFrameMeta(byte[] json) {
+        JsonObject root = parseObject(json);
+        // Validate the gui section for its throwing side effect only (loadTexture ignores gui
+        // scaling), matching the historical parseMcmeta that parsed both sections.
+        parseGuiSection(root);
+        if (!root.has("animation") || !root.get("animation").isJsonObject()) {
+            return null;
         }
         JsonObject animation = root.getAsJsonObject("animation");
         int firstFrameIndex = 0;
         if (animation.has("frames") && animation.get("frames").isJsonArray()) {
             JsonArray frames = animation.getAsJsonArray("frames");
             if (!frames.isEmpty()) {
-                firstFrameIndex = firstFrameIndex(frames.get(0));
+                firstFrameIndex = leadingFrameIndex(frames.get(0));
             }
         }
-        Integer width = optionalInt(animation, "width");
-        Integer height = optionalInt(animation, "height");
-        return new AnimationMeta(firstFrameIndex, width, height);
+        return new AnimationMeta(firstFrameIndex, optionalInt(animation, "width"), optionalInt(animation, "height"));
+    }
+
+    /** The flipbook index of a frames list's first entry (a bare number or an {@code index}-object). */
+    private static int leadingFrameIndex(JsonElement first) {
+        if (first.isJsonObject()) {
+            JsonElement index = first.getAsJsonObject().get("index");
+            if (index == null || !index.isJsonPrimitive() || !index.getAsJsonPrimitive().isNumber()) {
+                throw new PackLoadException("Animation frame entry is missing numeric 'index'");
+            }
+            return index.getAsInt();
+        }
+        if (!first.isJsonPrimitive() || !first.getAsJsonPrimitive().isNumber()) {
+            throw new PackLoadException("Animation frame entry must be a number or an object with 'index'");
+        }
+        return first.getAsInt();
     }
 
     private static GuiScaling parseGuiSection(JsonObject root) {
@@ -189,7 +531,7 @@ class PackJsonParser {
             throw new PackLoadException("nine_slice gui scaling is missing 'border'");
         }
         if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isNumber()) {
-            int uniform = integralInt(element, "border");
+            int uniform = integralInt(element, "border", "gui scaling");
             return new GuiScaling.NineSlice.Border(uniform, uniform, uniform, uniform);
         }
         if (element.isJsonObject()) {
@@ -212,26 +554,39 @@ class PackJsonParser {
     }
 
     private static int requireScalingInt(JsonObject node, String member) {
-        JsonElement element = node.get(member);
-        if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isNumber()) {
-            throw new PackLoadException("gui scaling is missing numeric member '%s'", member);
-        }
-        return integralInt(element, member);
+        return requireIntegralInt(node, member, "gui scaling");
     }
 
-    private static int integralInt(JsonElement element, String member) {
+    /**
+     * Requires a numeric member with an exactly integral value; {@code owner} names the JSON
+     * shape (e.g. {@code "gui scaling"}, {@code "Font provider"}) for the diagnostic. Shared
+     * across the pack parsers so numeric validation and messages stay consistent.
+     */
+    static int requireIntegralInt(JsonObject node, String member, String owner) {
+        JsonElement element = node.get(member);
+        if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isNumber()) {
+            throw new PackLoadException("%s is missing numeric member '%s'", owner, member);
+        }
+        return integralInt(element, member, owner);
+    }
+
+    private static int integralInt(JsonElement element, String member, String owner) {
         double value = element.getAsDouble();
         int intValue = (int) value;
         if (value != intValue) {
-            throw new PackLoadException("gui scaling member '%s' must be an integer, got %s", member, String.valueOf(value));
+            throw new PackLoadException("%s member '%s' must be an integer, got %s", owner, member, String.valueOf(value));
         }
         return intValue;
     }
 
     private static boolean optionalBoolean(JsonObject node, String member) {
+        return optionalBoolean(node, member, false);
+    }
+
+    private static boolean optionalBoolean(JsonObject node, String member, boolean defaultValue) {
         JsonElement element = node.get(member);
         if (element == null || element.isJsonNull()) {
-            return false;
+            return defaultValue;
         }
         if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isBoolean()) {
             throw new PackLoadException("Expected boolean for member '%s'", member);
@@ -239,40 +594,43 @@ class PackJsonParser {
         return element.getAsBoolean();
     }
 
-    private static int firstFrameIndex(JsonElement first) {
-        if (first.isJsonObject()) {
-            JsonElement index = first.getAsJsonObject().get("index");
-            if (index == null || !index.isJsonPrimitive() || !index.getAsJsonPrimitive().isNumber()) {
-                throw new PackLoadException("Animation frame entry is missing numeric 'index'");
-            }
-            return index.getAsInt();
-        }
-        if (!first.isJsonPrimitive() || !first.getAsJsonPrimitive().isNumber()) {
-            throw new PackLoadException("Animation frame entry must be a number or an object with 'index'");
-        }
-        return first.getAsInt();
-    }
-
     private static ItemModelNode parseFallback(JsonObject node) {
         return node.has("fallback") ? parseNode(requireObject(node, "fallback")) : null;
     }
 
-    private static String normalize(String type) {
+    /**
+     * Strips the optional {@code minecraft:} prefix from a type discriminator. Shared across the
+     * pack parsers (fonts included) so prefix handling never drifts.
+     */
+    static String normalize(String type) {
         return type.startsWith(MINECRAFT_PREFIX) ? type.substring(MINECRAFT_PREFIX.length()) : type;
     }
 
     private static String requireString(JsonObject node, String member) {
+        return requireString(node, member, "Item definition node");
+    }
+
+    /**
+     * Requires a string member; {@code owner} names the JSON shape (e.g.
+     * {@code "Item definition node"}, {@code "Font provider"}) for the diagnostic. Shared across
+     * the pack parsers so string validation and messages stay consistent.
+     */
+    static String requireString(JsonObject node, String member, String owner) {
         JsonElement element = node.get(member);
         if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString()) {
-            throw new PackLoadException("Item definition node is missing string member '%s'", member);
+            throw new PackLoadException("%s is missing string member '%s'", owner, member);
         }
         return element.getAsString();
     }
 
     private static double requireNumber(JsonObject node, String member) {
+        return requireNumber(node, member, "Item definition node");
+    }
+
+    private static double requireNumber(JsonObject node, String member, String owner) {
         JsonElement element = node.get(member);
         if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isNumber()) {
-            throw new PackLoadException("Item definition node is missing numeric member '%s'", member);
+            throw new PackLoadException("%s is missing numeric member '%s'", owner, member);
         }
         return element.getAsDouble();
     }

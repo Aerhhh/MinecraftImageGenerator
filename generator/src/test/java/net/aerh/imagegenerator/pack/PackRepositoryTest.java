@@ -1,5 +1,6 @@
 package net.aerh.imagegenerator.pack;
 
+import net.aerh.imagegenerator.exception.PackLoadException;
 import net.aerh.imagegenerator.exception.PackResolveException;
 import net.aerh.imagegenerator.testsupport.FixturePacks;
 import org.junit.jupiter.api.BeforeEach;
@@ -7,7 +8,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -18,8 +22,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -28,6 +36,12 @@ class PackRepositoryTest {
 
     @TempDir
     Path packDir;
+
+    @TempDir
+    Path miniPackDir;
+
+    @TempDir
+    Path zipDir;
 
     private PackRepository repository;
 
@@ -39,6 +53,21 @@ class PackRepositoryTest {
 
     private PackSource fixtureSource() {
         return PackSource.directory(packDir, PackLimits.fromSystemProperties());
+    }
+
+    /** The default fixture pack zipped up, for zip-backed lifecycle tests. */
+    private Path zipFixturePack() throws IOException {
+        Path zip = zipDir.resolve("fixture-pack.zip");
+        try (OutputStream fileOut = Files.newOutputStream(zip);
+             ZipOutputStream out = new ZipOutputStream(fileOut);
+             Stream<Path> files = Files.walk(packDir)) {
+            for (Path file : files.filter(Files::isRegularFile).toList()) {
+                out.putNextEntry(new ZipEntry(packDir.relativize(file).toString().replace('\\', '/')));
+                out.write(Files.readAllBytes(file));
+                out.closeEntry();
+            }
+        }
+        return zip;
     }
 
     @Test
@@ -120,6 +149,31 @@ class PackRepositoryTest {
     }
 
     @Test
+    void packExceedingSmallEntryCapFailsLoudlyAtRegister() {
+        // 6 asset files against a cap of 5: proves the maxEntries wiring actually bites during
+        // registration (index time), not lazily at resolve.
+        FixturePacks.writeMinimalPack(miniPackDir, 6);
+        PackLimits smallCap = new PackLimits(5, 8L * 1024 * 1024, 1024, 64L * 1024 * 1024);
+        PackSource source = PackSource.directory(miniPackDir, smallCap);
+        PackLoadException exception = assertThrows(PackLoadException.class,
+            () -> repository.register("test:overcap", source, smallCap));
+        assertTrue(exception.getMessage().contains("max entry count"),
+            "the failure must come from the entry-cap guard, not some unrelated register error");
+    }
+
+    @Test
+    void packLargerThanSmallCapLoadsWithExplicitHigherLimitsOnBothSourceAndRegister() {
+        // The large-server-pack recipe (see PackLimits javadoc): one raised PackLimits instance
+        // passed to BOTH the source factory and register. 6 files over a cap of 5 stands in for
+        // a large production server pack (~36k files) over the 20k default; the wiring is identical.
+        FixturePacks.writeMinimalPack(miniPackDir, 6);
+        PackLimits raised = new PackLimits(10, 8L * 1024 * 1024, 1024, 64L * 1024 * 1024);
+        PackId id = repository.register("test:bigpack", PackSource.directory(miniPackDir, raised), raised);
+        assertTrue(repository.resolve(id, "testpack:item/simple").isPresent(),
+            "the pack indexes and resolves under the raised entry cap");
+    }
+
+    @Test
     void duplicateRegistrationClosesTheLosingSource() {
         repository.register("test:pack", fixtureSource());
         AtomicInteger closeCount = new AtomicInteger();
@@ -134,6 +188,139 @@ class PackRepositoryTest {
         PackSource source = new CountingCloseSource(fixtureSource(), closeCount);
         assertThrows(IllegalArgumentException.class, () -> repository.register("minecraft:minecraft", source));
         assertEquals(1, closeCount.get());
+    }
+
+    @Test
+    void unregisterReleasesThePackAndReportsWhetherItExisted() {
+        AtomicInteger closeCount = new AtomicInteger();
+        repository.register("test:pack", new CountingCloseSource(fixtureSource(), closeCount));
+        assertTrue(repository.unregister("test:pack"), "a registered pack unregisters");
+        assertEquals(1, closeCount.get(), "unregister closes the owned source");
+        assertEquals(Set.of(), repository.registeredPacks());
+        assertFalse(repository.unregister("test:pack"), "a second unregister reports absence");
+    }
+
+    @Test
+    void unregisterMalformedIdThrows() {
+        assertThrows(IllegalArgumentException.class, () -> repository.unregister("not-a-pack-id"));
+    }
+
+    @Test
+    void resolveAfterUnregisterThrowsLikeAnyUnregisteredPack() {
+        // Deliberate deviation from the wave 7 spec's "resolve after unregister = empty/vanilla
+        // fallback" wording: an unregistered id throws exactly like a never-registered one.
+        // Returning empty would be indistinguishable from "the pack lacks this item" and would
+        // silently swallow lifecycle bugs in callers holding stale PackIds.
+        PackId id = repository.register("test:pack", fixtureSource());
+        assertTrue(repository.resolve(id, "testpack:item/simple").isPresent());
+        repository.unregister("test:pack");
+        assertThrows(PackResolveException.class, () -> repository.resolve(id, "testpack:item/simple"));
+    }
+
+    @Test
+    void unregisterFreesTheIdForReRegistration() {
+        PackId id = repository.register("test:pack", fixtureSource());
+        repository.unregister("test:pack");
+        PackId reRegistered = repository.register("test:pack", fixtureSource());
+        assertEquals(id, reRegistered);
+        assertTrue(repository.resolve(reRegistered, "testpack:item/simple").isPresent(),
+            "the re-registered pack resolves normally");
+    }
+
+    @Test
+    void concurrentResolveDuringUnregisterNeverThrowsConcurrentModification() throws Exception {
+        // Resolvers hammer the repository while the main thread unregisters and re-registers
+        // the pack. Legal outcomes per resolve: success, or the ordinary unregistered-pack
+        // PackResolveException - anything else (ConcurrentModificationException included)
+        // fails the test.
+        PackId id = repository.register("race:pack", fixtureSource());
+        int threads = 4;
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
+        try {
+            CountDownLatch start = new CountDownLatch(1);
+            List<Future<Integer>> resolvers = new ArrayList<>();
+            for (int i = 0; i < threads; i++) {
+                resolvers.add(executor.submit(() -> {
+                    assertTrue(start.await(10, TimeUnit.SECONDS), "start latch timed out");
+                    int successes = 0;
+                    for (int iteration = 0; iteration < 200; iteration++) {
+                        try {
+                            if (repository.resolve(id, "testpack:item/simple").isPresent()) {
+                                successes++;
+                            }
+                        } catch (PackResolveException expected) {
+                            // The pack is momentarily unregistered - the documented outcome.
+                        }
+                    }
+                    return successes;
+                }));
+            }
+            start.countDown();
+            for (int cycle = 0; cycle < 50; cycle++) {
+                repository.unregister("race:pack");
+                repository.register("race:pack", fixtureSource());
+            }
+            for (Future<Integer> resolver : resolvers) {
+                // get() rethrows any unexpected exception type as an ExecutionException,
+                // failing the test loudly.
+                resolver.get(30, TimeUnit.SECONDS);
+            }
+            assertTrue(repository.resolve(id, "testpack:item/simple").isPresent(),
+                "the final registration is intact after the churn");
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void concurrentResolveDuringUnregisterOfZipPackOnlyThrowsPackResolveException() throws Exception {
+        // The zip-backed variant of the race above, and the one that actually exercises a
+        // closing source: unlike a directory source (whose close() is a no-op), release()
+        // CLOSES the ZipFile, so a resolve that passed requireRegistered can hit "zip file
+        // closed" mid-read. The contract still holds: every resolve either succeeds or throws
+        // PackResolveException - never ZipFile's raw IllegalStateException.
+        Path zip = zipFixturePack();
+        PackLimits limits = PackLimits.fromSystemProperties();
+        PackId id = repository.register("race:zip", PackSource.zip(zip, limits), limits);
+        int threads = 4;
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
+        try {
+            CountDownLatch start = new CountDownLatch(1);
+            List<Future<Integer>> resolvers = new ArrayList<>();
+            for (int i = 0; i < threads; i++) {
+                resolvers.add(executor.submit(() -> {
+                    assertTrue(start.await(10, TimeUnit.SECONDS), "start latch timed out");
+                    int successes = 0;
+                    for (int iteration = 0; iteration < 200; iteration++) {
+                        try {
+                            if (repository.resolve(id, "testpack:item/simple").isPresent()) {
+                                successes++;
+                            }
+                        } catch (PackResolveException expected) {
+                            // Unregistered, or reading the just-closed zip - both documented.
+                        }
+                    }
+                    return successes;
+                }));
+            }
+            start.countDown();
+            for (int cycle = 0; cycle < 50; cycle++) {
+                repository.unregister("race:zip");
+                repository.register("race:zip", PackSource.zip(zip, limits), limits);
+            }
+            for (Future<Integer> resolver : resolvers) {
+                // get() rethrows any unexpected exception type (IllegalStateException included)
+                // as an ExecutionException, failing the test loudly.
+                resolver.get(30, TimeUnit.SECONDS);
+            }
+            assertTrue(repository.resolve(id, "testpack:item/simple").isPresent(),
+                "the final registration is intact after the churn");
+        } finally {
+            executor.shutdownNow();
+            // Release the surviving registration: its ZipFile must close, or Windows keeps the
+            // zip locked and the @TempDir cleanup fails the test from the outside.
+            repository.unregister("race:zip");
+        }
     }
 
     @Test

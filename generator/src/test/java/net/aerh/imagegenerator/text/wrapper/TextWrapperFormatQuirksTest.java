@@ -67,4 +67,18 @@ class TextWrapperFormatQuirksTest {
         assertEquals("&", TextWrapper.stripColorCodes("&&l"),
             "the first symbol is literal; the second starts the style code");
     }
+
+    @Test
+    void privateUseAreaCodepointsCountAsOneVisibleCharacter() {
+        // Pack glyph codepoints (PUA, e.g. U+E000) are single chars in the BMP; the wrapper
+        // counts each as exactly one visible character regardless of the glyph's pixel width.
+        List<String> lines = TextWrapper.wrapString("\uE000\uE001 \uE002\uE003", 2);
+        assertEquals(List.of("\uE000\uE001", "\uE002\uE003"), lines);
+    }
+
+    @Test
+    void privateUseAreaCodepointsSplitLikeRegularCharactersInLongWords() {
+        List<String> lines = TextWrapper.wrapString("\uE000\uE001\uE002", 2);
+        assertEquals(List.of("\uE000\uE001", "\uE002"), lines);
+    }
 }

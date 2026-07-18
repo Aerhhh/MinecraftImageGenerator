@@ -39,6 +39,22 @@ public enum MinecraftFont {
      */
     @NotNull
     public static MinecraftFont fromResourceLocation(@Nullable String resourceLocation) {
+        MinecraftFont font = fromResourceLocationOrNull(resourceLocation);
+        return font != null ? font : DEFAULT;
+    }
+
+    /**
+     * Resolves a font from a Minecraft resource location string, distinguishing unknown ids from
+     * the default font: a null or empty location IS the default, but an unrecognized location
+     * (e.g. a resource-pack font like {@code "mypack:chat"}) returns null so callers can keep the
+     * raw id instead of collapsing it to {@link #DEFAULT}.
+     *
+     * @param resourceLocation The resource location (e.g. {@code "minecraft:alt"}, {@code "alt"})
+     *
+     * @return The matching font, {@link #DEFAULT} for null/empty input, or null if not recognized
+     */
+    @Nullable
+    public static MinecraftFont fromResourceLocationOrNull(@Nullable String resourceLocation) {
         if (resourceLocation == null || resourceLocation.isEmpty()) {
             return DEFAULT;
         }
@@ -57,6 +73,6 @@ public enum MinecraftFont {
             }
         }
 
-        return DEFAULT;
+        return null;
     }
 }

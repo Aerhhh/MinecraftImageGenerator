@@ -1,5 +1,7 @@
 package net.aerh.imagegenerator.pack;
 
+import org.jetbrains.annotations.Nullable;
+
 import java.util.regex.Pattern;
 
 /**
@@ -18,6 +20,19 @@ public record PackId(String namespace, String name) {
         if (name == null || !PART.matcher(name).matches()) {
             throw new IllegalArgumentException("Invalid pack name: " + name);
         }
+    }
+
+    /**
+     * Whether the given pack selection activates pack resolution: any non-null id other than
+     * {@link #VANILLA}. Null and {@code VANILLA} both mean "no pack" - the single activation
+     * rule shared by every generator and parser, so their pack gating can never drift apart.
+     *
+     * @param packId the pack selection, or null for none
+     *
+     * @return true when a real pack is selected
+     */
+    public static boolean isActive(@Nullable PackId packId) {
+        return packId != null && !VANILLA.equals(packId);
     }
 
     /**

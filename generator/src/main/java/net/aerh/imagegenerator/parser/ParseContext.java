@@ -29,7 +29,7 @@ public record ParseContext(@Nullable PackId packId) {
      * @return the parse context
      */
     public static ParseContext of(@Nullable PackId packId) {
-        if (packId == null || PackId.VANILLA.equals(packId)) {
+        if (!PackId.isActive(packId)) {
             return EMPTY;
         }
         return new ParseContext(packId);
