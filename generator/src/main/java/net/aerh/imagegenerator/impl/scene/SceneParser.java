@@ -8,6 +8,7 @@ import net.aerh.imagegenerator.data.Rarity;
 import net.aerh.imagegenerator.impl.MinecraftContainerGenerator;
 import net.aerh.imagegenerator.impl.MinecraftContainerGenerator.TitleRun;
 import net.aerh.imagegenerator.impl.StrictJson;
+import net.aerh.imagegenerator.impl.template.ContentTemplate;
 import net.aerh.imagegenerator.impl.scene.JsonSceneGenerator.AnchorPlacement;
 import net.aerh.imagegenerator.impl.scene.JsonSceneGenerator.ArrangementContent;
 import net.aerh.imagegenerator.impl.scene.JsonSceneGenerator.ArrangementKind;
@@ -21,11 +22,13 @@ import net.aerh.imagegenerator.impl.scene.JsonSceneGenerator.ItemContent;
 import net.aerh.imagegenerator.impl.scene.JsonSceneGenerator.Placement;
 import net.aerh.imagegenerator.impl.scene.JsonSceneGenerator.Region;
 import net.aerh.imagegenerator.impl.scene.JsonSceneGenerator.Scene;
+import net.aerh.imagegenerator.impl.scene.JsonSceneGenerator.TemplateContent;
 import net.aerh.imagegenerator.impl.scene.JsonSceneGenerator.TooltipContent;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -59,6 +62,7 @@ final class SceneParser {
     private static final Set<String> HUD_KEYS = Set.of("lines", "gui_width", "text_shadow");
     private static final Set<String> ARRANGEMENT_KEYS = Set.of("regions", "spacing", "alignment");
     private static final Set<String> GRID_KEYS = Set.of("regions", "spacing", "alignment", "columns", "cell");
+    private static final Set<String> TEMPLATE_KEYS = Set.of("template", "values", "rows");
 
     private SceneParser() {
     }
@@ -227,11 +231,12 @@ final class SceneParser {
             case "item" -> parseItem(object, name);
             case "container" -> parseContainer(object, name);
             case "hud" -> parseHud(object, name);
+            case "template" -> parseTemplate(object, name);
             case "row" -> parseArrangement(ArrangementKind.ROW, object, name, allNames, false);
             case "column" -> parseArrangement(ArrangementKind.COLUMN, object, name, allNames, false);
             case "grid" -> parseArrangement(ArrangementKind.GRID, object, name, allNames, true);
             default -> throw new IllegalArgumentException("Region `" + name + "` has unknown type `" + type
-                + "` (expected tooltip, item, container, hud, row, column, or grid)");
+                + "` (expected tooltip, item, container, hud, template, row, column, or grid)");
         };
     }
 
@@ -367,6 +372,102 @@ final class SceneParser {
         // are then validated by the same parser the recipe title format uses.
         StrictJson.warnUnknownKeys(run, RUN_KEYS, runContext);
         return MinecraftContainerGenerator.parseRunFields(run, runContext);
+    }
+
+    /**
+     * Parses a template region: a full {@link ContentTemplate} document under {@code template},
+     * with optional {@code values} (global placeholder name to string) and {@code rows} (section
+     * name to an ordered list of placeholder-name-to-string maps). The nested document is parsed
+     * through ContentTemplate's own parser - so every one of its rejections applies - and then
+     * filled eagerly, so a fill rejection (an unsupplied required placeholder, a row keyed by an
+     * unknown section) fails at construction. Both the parse and the fill rejections are re-thrown
+     * prefixed with the region, the scene convention.
+     */
+    private static ParsedContent parseTemplate(JsonObject object, String name) {
+        String context = "Template region `" + name + "`";
+        if (!object.has("template")) {
+            throw new IllegalArgumentException(context + " requires `template`");
+        }
+        JsonElement templateElement = object.get("template");
+        if (!templateElement.isJsonObject()) {
+            throw new IllegalArgumentException(context + " `template` must be an object");
+        }
+        // Re-serialize the subtree and hand it to ContentTemplate's own parser, so the template
+        // document keeps its own strict policy verbatim (the scene reader already rejected
+        // duplicate keys anywhere, so this round-trip loses nothing).
+        String templateJson = new Gson().toJson(templateElement);
+        ContentTemplate template;
+        try {
+            template = ContentTemplate.parse(templateJson);
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalArgumentException(context + " " + exception.getMessage(), exception);
+        }
+
+        Map<String, String> values = parseValues(object, context);
+        Map<String, List<Map<String, String>>> rows = parseRows(object, context);
+
+        JsonObject filled;
+        try {
+            filled = template.fill(values, rows);
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalArgumentException(context + " " + exception.getMessage(), exception);
+        }
+        return new ParsedContent(new TemplateContent(filled), TEMPLATE_KEYS);
+    }
+
+    private static Map<String, String> parseValues(JsonObject object, String context) {
+        if (!object.has("values")) {
+            return Map.of();
+        }
+        JsonElement element = object.get("values");
+        if (!element.isJsonObject()) {
+            throw new IllegalArgumentException(context + " `values` must be an object mapping placeholder names to strings");
+        }
+        Map<String, String> values = new LinkedHashMap<>();
+        for (Map.Entry<String, JsonElement> entry : element.getAsJsonObject().entrySet()) {
+            values.put(entry.getKey(), requireStringValue(entry.getValue(), context, "values", entry.getKey()));
+        }
+        return values;
+    }
+
+    private static Map<String, List<Map<String, String>>> parseRows(JsonObject object, String context) {
+        if (!object.has("rows")) {
+            return Map.of();
+        }
+        JsonElement element = object.get("rows");
+        if (!element.isJsonObject()) {
+            throw new IllegalArgumentException(context + " `rows` must be an object mapping section names to row arrays");
+        }
+        Map<String, List<Map<String, String>>> rows = new LinkedHashMap<>();
+        for (Map.Entry<String, JsonElement> sectionEntry : element.getAsJsonObject().entrySet()) {
+            String section = sectionEntry.getKey();
+            JsonElement rowsElement = sectionEntry.getValue();
+            if (!rowsElement.isJsonArray()) {
+                throw new IllegalArgumentException(context + " `rows` section `" + section
+                    + "` must be an array of row objects");
+            }
+            List<Map<String, String>> sectionRows = new ArrayList<>();
+            for (JsonElement rowElement : rowsElement.getAsJsonArray()) {
+                if (!rowElement.isJsonObject()) {
+                    throw new IllegalArgumentException(context + " `rows` section `" + section
+                        + "` row must be an object mapping placeholder names to strings");
+                }
+                Map<String, String> row = new LinkedHashMap<>();
+                for (Map.Entry<String, JsonElement> cell : rowElement.getAsJsonObject().entrySet()) {
+                    row.put(cell.getKey(), requireStringValue(cell.getValue(), context, "rows section `" + section + "`", cell.getKey()));
+                }
+                sectionRows.add(row);
+            }
+            rows.put(section, sectionRows);
+        }
+        return rows;
+    }
+
+    private static String requireStringValue(JsonElement element, String context, String field, String key) {
+        if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString()) {
+            throw new IllegalArgumentException(context + " `" + field + "` value for `" + key + "` must be a string");
+        }
+        return element.getAsString();
     }
 
     private static ParsedContent parseArrangement(ArrangementKind kind, JsonObject object, String name,

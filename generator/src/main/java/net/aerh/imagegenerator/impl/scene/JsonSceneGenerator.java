@@ -289,9 +289,26 @@ class JsonSceneGenerator implements Generator {
      * A region's content: the member generator it produces at render time, with the scene's scale
      * and pack threaded through every builder that accepts them.
      */
-    sealed interface Content permits TooltipContent, ItemContent, ContainerContent, HudContent, ArrangementContent {
+    sealed interface Content permits TooltipContent, ItemContent, ContainerContent, HudContent,
+        ArrangementContent, TemplateContent {
 
         Generator toGenerator(int scale, @Nullable PackId packId, @Nullable PackRepository packRepository);
+    }
+
+    /**
+     * Builds a tooltip generator from a ready NBT/components tree, threading the scene's scale and
+     * pack pair. Both the {@code nbt} tooltip region and the template region cross into the render
+     * pipeline through this one seam, so a template filled with a capture's own values renders
+     * byte-for-byte identically to the equivalent {@code nbt} region.
+     */
+    private static Generator tooltipFromNbt(JsonObject nbt, int scale, @Nullable PackId packId,
+                                            @Nullable PackRepository packRepository) {
+        return new MinecraftTooltipGenerator.Builder()
+            .parseNbtJson(nbt)
+            .withScaleFactor(scale)
+            .withPack(packId)
+            .withPackRepository(packRepository)
+            .build();
     }
 
     /**
@@ -304,26 +321,40 @@ class JsonSceneGenerator implements Generator {
 
         @Override
         public Generator toGenerator(int scale, @Nullable PackId packId, @Nullable PackRepository packRepository) {
-            MinecraftTooltipGenerator.Builder builder = new MinecraftTooltipGenerator.Builder();
             if (nbt != null) {
-                builder.parseNbtJson(nbt);
-            } else {
-                builder.withName(title);
-                if (rarity != null) {
-                    builder.withRarity(Rarity.byName(rarity));
-                }
-                if (lore != null) {
-                    builder.withItemLore(lore);
-                }
-                if (maxLineLength != null) {
-                    builder.withMaxLineLength(maxLineLength);
-                }
+                return tooltipFromNbt(nbt, scale, packId, packRepository);
+            }
+            MinecraftTooltipGenerator.Builder builder = new MinecraftTooltipGenerator.Builder();
+            builder.withName(title);
+            if (rarity != null) {
+                builder.withRarity(Rarity.byName(rarity));
+            }
+            if (lore != null) {
+                builder.withItemLore(lore);
+            }
+            if (maxLineLength != null) {
+                builder.withMaxLineLength(maxLineLength);
             }
             return builder
                 .withScaleFactor(scale)
                 .withPack(packId)
                 .withPackRepository(packRepository)
                 .build();
+        }
+    }
+
+    /**
+     * A template region: the tree a {@link net.aerh.imagegenerator.impl.template.ContentTemplate}
+     * yields when filled with the region's {@code values} and {@code rows}. The parser fills the
+     * template eagerly (so a fill rejection names the region at construction, like every other
+     * region's validation), and the filled tree crosses into the render pipeline through the same
+     * seam an {@code nbt} tooltip region uses.
+     */
+    record TemplateContent(JsonObject nbt) implements Content {
+
+        @Override
+        public Generator toGenerator(int scale, @Nullable PackId packId, @Nullable PackRepository packRepository) {
+            return tooltipFromNbt(nbt, scale, packId, packRepository);
         }
     }
 
