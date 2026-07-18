@@ -6,6 +6,8 @@ import net.aerh.imagegenerator.builder.ClassBuilder;
 import net.aerh.imagegenerator.context.GenerationContext;
 import net.aerh.imagegenerator.exception.GeneratorException;
 import net.aerh.imagegenerator.item.GeneratedObject;
+import net.aerh.imagegenerator.pack.PackId;
+import net.aerh.imagegenerator.pack.PackRepository;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -88,6 +90,40 @@ public class MinecraftSceneGenerator implements Generator {
             throw new IllegalArgumentException("columns must be at least 1, got: " + columns);
         }
         return new Builder(Arrangement.GRID, columns);
+    }
+
+    /**
+     * Builds a generator from a declarative JSON scene document (schema v1): named regions, each
+     * the output of one other generator, placed at explicit GUI-px coordinates or anchored to
+     * another region's edge. The document is parsed and validated eagerly - a malformed scene
+     * throws here, never renders something silently wrong - and the returned generator resolves
+     * the layout (measure, place, compose) each time it renders.
+     *
+     * @param json the scene document
+     *
+     * @return a generator that renders the scene, with no pack selected
+     * @throws IllegalArgumentException on any schema violation, with a message naming the offender
+     */
+    public static Generator fromScene(String json) {
+        return fromScene(json, null, null);
+    }
+
+    /**
+     * Pack-aware {@link #fromScene(String)}: the pair threads into every member builder that
+     * supports it (tooltip, item, container, HUD), so a scene of pack-backed members renders
+     * against the selected pack. The pack id may be null (or {@link PackId#VANILLA}) to render the
+     * built-in vanilla style even while supplying a repository.
+     *
+     * @param json            the scene document
+     * @param packId          the pack backing member renders, or null for none
+     * @param packRepository  the repository member generators resolve against, or null for the
+     *                        global one
+     *
+     * @return a generator that renders the scene against the given pack
+     * @throws IllegalArgumentException on any schema violation, with a message naming the offender
+     */
+    public static Generator fromScene(String json, @Nullable PackId packId, @Nullable PackRepository packRepository) {
+        return new JsonSceneGenerator(json, SceneParser.parse(json), packId, packRepository);
     }
 
     @Override
