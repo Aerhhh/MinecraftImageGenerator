@@ -150,7 +150,10 @@ public final class StrictJson {
     }
 
     /**
-     * Reads a whole-number field, rejecting missing values, non-numbers and fractional values.
+     * Reads a whole-number field, rejecting missing values, non-numbers and fractional values. The
+     * check is on the written literal, not just the value: {@link #readElement} stores numbers as
+     * {@link BigDecimal}, so any fractional notation carries a positive scale and is rejected - 1.5
+     * and 1.0 alike - and `must be an integer` holds for the notation, not only the magnitude.
      *
      * @throws IllegalArgumentException naming the key when the value is absent or not an integer
      */
@@ -159,12 +162,15 @@ public final class StrictJson {
         if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isNumber()) {
             throw new IllegalArgumentException("`" + key + "` must be an integer");
         }
-        double value = element.getAsDouble();
-        int intValue = (int) value;
-        if (intValue != value) {
-            throw new IllegalArgumentException("`" + key + "` must be an integer, got: " + value);
+        BigDecimal value = element.getAsBigDecimal();
+        if (value.scale() > 0) {
+            throw new IllegalArgumentException("`" + key + "` must be an integer, got: " + value.toPlainString());
         }
-        return intValue;
+        try {
+            return value.intValueExact();
+        } catch (ArithmeticException e) {
+            throw new IllegalArgumentException("`" + key + "` must be an integer, got: " + value.toPlainString());
+        }
     }
 
     /**
@@ -192,9 +198,24 @@ public final class StrictJson {
      *                                  boolean
      */
     public static boolean requireBoolean(JsonObject object, String key, String what) {
+        return requireBoolean(object, key, what, false);
+    }
+
+    /**
+     * Reads an optional boolean field with a caller-chosen default: absent means {@code fallback},
+     * present must be a JSON boolean. Formats where a flag defaults to {@code true} (a placeholder
+     * required unless declared otherwise) share the same type checking through this overload.
+     *
+     * @param what     the enclosing element label used in the error message
+     * @param fallback the value returned when the key is absent
+     *
+     * @throws IllegalArgumentException naming the enclosing element and key when present but not a
+     *                                  boolean
+     */
+    public static boolean requireBoolean(JsonObject object, String key, String what, boolean fallback) {
         JsonElement element = object.get(key);
         if (element == null) {
-            return false;
+            return fallback;
         }
         if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isBoolean()) {
             throw new IllegalArgumentException(what + " `" + key + "` must be a boolean");
