@@ -14,7 +14,6 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -290,7 +289,7 @@ public class GeneratorImageBuilder {
         List<GeneratedObject> animated = generatedObjects.stream().filter(GeneratedObject::isAnimated).toList();
         List<List<Integer>> sources = new ArrayList<>(animated.size());
         for (GeneratedObject obj : animated) {
-            sources.add(sourceTicks(obj));
+            sources.add(obj.timelineTicks());
         }
         AnimationTimeline timeline = AnimationTimeline.of(sources);
 
@@ -347,19 +346,5 @@ public class GeneratorImageBuilder {
         List<Integer> delaysMs = timeline.stepDelaysMillis();
         byte[] gifData = AnimatedGifEncoder.encode(compositeFrames, delaysMs);
         return new GeneratedObject(gifData, compositeFrames, delaysMs);
-    }
-
-    /**
-     * One composite timeline source's per-frame tick durations: an object's per-frame delays
-     * converted to ticks, or - for a uniform-delay animation mixed into a per-frame composite -
-     * its single delay repeated once per frame.
-     */
-    private static List<Integer> sourceTicks(GeneratedObject obj) {
-        List<Integer> delaysMs = obj.getFrameDelaysMs();
-        if (delaysMs != null) {
-            return delaysMs.stream().map(AnimationTimeline::millisToTicks).toList();
-        }
-        return Collections.nCopies(obj.getAnimationFrames().size(),
-            AnimationTimeline.millisToTicks(obj.getFrameDelayMs()));
     }
 }

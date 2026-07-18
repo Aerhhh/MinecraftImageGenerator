@@ -453,6 +453,77 @@ Documented edges of the pack renderer, all deliberate:
 - **Animation:** animated pack textures contribute their first frame unless the render opts into `withAnimatedTextures(true)` (see Animated textures); `interpolate` cross-fades per tick (which reaches the cap sooner), and shared timelines cap at 120 steps / 1200 ticks.
 - **Shaders:** shader-driven effects (core shader text animations and the like) are out of scope.
 
+## Scene composition
+
+Every generator produces a `GeneratedObject`, and the scene layer arranges several of them into one image. An all-static scene composes to a PNG; if any member is animated, the whole scene becomes a single GIF on a shared tick timeline, with each member's authored timing intact.
+
+### Row, column, and grid
+
+`MinecraftSceneGenerator` lays members out with no layout spec: `row()` places them left to right, `column()` stacks them, and `grid(columns)` fills a row-major grid where each column is as wide as its widest member and each row as tall as its tallest. Spacing, margin, and in-cell alignment have defaults you can override. Scenes are generators themselves, so they nest - a row of tooltips can be one member of a larger column.
+
+```java
+Generator roster = MinecraftSceneGenerator.grid(3)
+    .add(new MinecraftItemGenerator.Builder().withItem("myserver:item/relic").withPack("myserver:menus").build())
+    .add(new MinecraftItemGenerator.Builder().withItem("myserver:item/star").withPack("myserver:menus").build())
+    .add(new MinecraftItemGenerator.Builder().withItem("myserver:item/blade").withPack("myserver:menus").build())
+    .withSpacing(8)
+    .withAlignment(MinecraftSceneGenerator.Alignment.CENTER)
+    .build();
+```
+
+### JSON scenes
+
+For layouts that need precise placement, `MinecraftSceneGenerator.fromScene(json)` builds a generator from a declarative document (schema v1). Named regions each wrap one other generator and are placed either at explicit GUI-px coordinates (`at`) or anchored to another region's edge (`anchor`). Every region is measured before anything is placed, so an anchor can target a neighbor whose size is not known up front; placement runs in dependency order over those anchors, and `z` controls the draw stack (declaration order breaks ties).
+
+```json
+{
+  "schema_version": 1,
+  "regions": [
+    {"name": "icon", "type": "item", "item": "myserver:item/relic", "at": [0, 0]},
+    {"name": "card", "type": "tooltip", "rarity": "EPIC", "lore": "&7A relic of the deep.",
+     "anchor": {"to": "icon", "edge": "right", "align": "center", "offset": [4, 0]}},
+    {"name": "badge", "type": "item", "item": "myserver:item/star", "z": 10,
+     "anchor": {"to": "icon", "edge": "top", "align": "end"}}
+  ]
+}
+```
+
+Region types are `tooltip`, `item`, `container`, `hud`, and the `row`/`column`/`grid` arrangements (which nest their own `regions`). The document is parsed and validated eagerly, so a malformed scene throws with a message naming the offender rather than rendering something silently wrong; unknown keys anywhere are logged and ignored, so a document written against a newer schema still renders on an older build. Pass a `PackId` and `PackRepository` to `fromScene(json, packId, repository)` to render pack-backed members.
+
+### Content templates
+
+A content template turns a captured item-NBT payload - the same JSON the tooltip generator's `parseNbtJson` accepts - into a reusable shape by marking its variable text with `{placeholder}` tokens and its repeatable rows with `template_repeat`. Authoring a new menu is transcribing a capture and marking it, not writing code.
+
+```java
+ContentTemplate template = ContentTemplate.parse("""
+    {
+      "schema_version": 1,
+      "placeholders": {"owner": {}, "item": {}, "count": {}},
+      "content": {
+        "components": {
+          "minecraft:custom_name": {"text": "{owner}'s Vault"},
+          "minecraft:lore": [
+            {"template_repeat": "entries", "text": "{item} x{count}", "color": "gray"}
+          ]
+        }
+      }
+    }
+    """);
+
+JsonObject nbt = template.fill(
+    Map.of("owner", "Aerh"),
+    Map.of("entries", List.of(
+        Map.of("item", "Diamond", "count", "64"),
+        Map.of("item", "Emerald", "count", "12"))));
+
+GeneratedObject image = new MinecraftTooltipGenerator.Builder()
+    .parseNbtJson(nbt)
+    .build()
+    .render(null);
+```
+
+`fill` layers each row's values over the globals and returns a fresh tree every time, so it feeds straight into `parseNbtJson` and on into the render pipeline. Every content token must be declared and every section name is unique, both checked at parse time, so a template that parses is guaranteed to fill without a structural surprise. The core guarantee: a template filled with the capture's own values reproduces the capture exactly - glyph runs, kern runs, per-segment fonts, and `shadow_color` all stay byte-verbatim, and only the marked tokens and rows change.
+
 ## Features
 
 - **Tooltip rendering** with full Minecraft formatting code support (colors, bold, italic, obfuscation, strikethrough, underline), hex colors, gradients, text wrapping, rarity coloring, and configurable padding and borders
@@ -462,6 +533,7 @@ Documented edges of the pack renderer, all deliberate:
 - **HUD line rendering** of bossbar-anchored text stacks, pack glyph art included
 - **Item rendering** with enchantment glint animations, hover effects, durability bars, and colored overlays
 - **Player head rendering** from player names, texture URLs, base64 data, or hex texture hashes
+- **Scene composition** of several generators into one image via template-free row/column/grid arrangements or a declarative JSON layout with anchored regions, plus a capture-driven content template engine
 - **NBT parsing** that auto-detects multiple Minecraft NBT formats (1.20.5+ components, 1.13-1.20.4 post-flattening, and pre-1.13)
 - **Animation** via animated GIF output with frame-by-frame compositing
 - **Caching** of rendered objects via Caffeine

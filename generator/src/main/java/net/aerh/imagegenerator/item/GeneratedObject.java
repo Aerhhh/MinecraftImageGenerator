@@ -1,9 +1,11 @@
 package net.aerh.imagegenerator.item;
 
 import lombok.Getter;
+import net.aerh.imagegenerator.pack.AnimationTimeline;
 import org.jetbrains.annotations.Nullable;
 
 import java.awt.image.BufferedImage;
+import java.util.Collections;
 import java.util.List;
 
 @Getter
@@ -114,6 +116,24 @@ public class GeneratedObject {
      */
     public boolean isAnimated() {
         return this.outputType == OutputType.GIF;
+    }
+
+    /**
+     * This animation as one shared-timeline source: the per-frame delays converted to ticks, or
+     * - on the uniform-delay paths - the single delay repeated once per frame. This is the shape
+     * {@link AnimationTimeline#of(List)} consumes when compositing multiple objects.
+     *
+     * @return one tick duration per animation frame
+     * @throws IllegalStateException when the object is not animated
+     */
+    public List<Integer> timelineTicks() {
+        if (!isAnimated()) {
+            throw new IllegalStateException("Static objects have no animation timeline");
+        }
+        if (frameDelaysMs != null) {
+            return frameDelaysMs.stream().map(AnimationTimeline::millisToTicks).toList();
+        }
+        return Collections.nCopies(animationFrames.size(), AnimationTimeline.millisToTicks(frameDelayMs));
     }
 
     /**

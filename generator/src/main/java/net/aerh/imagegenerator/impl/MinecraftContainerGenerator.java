@@ -1,14 +1,7 @@
 package net.aerh.imagegenerator.impl;
 
-import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
-import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParseException;
-import com.google.gson.JsonPrimitive;
-import com.google.gson.Strictness;
-import com.google.gson.stream.JsonReader;
-import com.google.gson.stream.JsonToken;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.ToString;
@@ -39,8 +32,6 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
-import java.io.StringReader;
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -942,12 +933,12 @@ public class MinecraftContainerGenerator implements Generator {
      *                                  non-canonical slot index, or a malformed item spec
      */
     public static Builder fromRecipe(String json) {
-        JsonObject root = parseStrictObject(json);
-        requireOnlyKeys(root, RECIPE_KEYS, "menu recipe");
+        JsonObject root = StrictJson.parseObject(json, "menu recipe");
+        StrictJson.requireOnlyKeys(root, RECIPE_KEYS, "menu recipe");
         if (!root.has("rows")) {
             throw new IllegalArgumentException("Menu recipe requires `rows`");
         }
-        int rows = requireInt(root, "rows");
+        int rows = StrictJson.requireInt(root, "rows");
         Builder builder = new Builder().withRows(rows);
 
         if (root.has("title")) {
@@ -994,141 +985,52 @@ public class MinecraftContainerGenerator implements Generator {
         return builder;
     }
 
-    private static JsonObject parseStrictObject(String json) {
-        if (json == null || json.isBlank()) {
-            throw new IllegalArgumentException("Menu recipe JSON must not be blank");
-        }
-        JsonElement element;
-        try {
-            JsonReader reader = new JsonReader(new StringReader(json));
-            reader.setStrictness(Strictness.STRICT);
-            element = readStrictElement(reader);
-            if (reader.peek() != JsonToken.END_DOCUMENT) {
-                throw new IllegalArgumentException(
-                    "Menu recipe must be a single JSON document; found trailing content");
-            }
-        } catch (IOException | JsonParseException e) {
-            throw new IllegalArgumentException("Malformed menu recipe JSON: " + e.getMessage(), e);
-        }
-        if (!element.isJsonObject()) {
-            throw new IllegalArgumentException("Menu recipe must be a JSON object");
-        }
-        return element.getAsJsonObject();
-    }
-
     /**
-     * Recursive descent over the reader instead of {@code JsonParser.parseReader}: Gson's tree
-     * model silently keeps the LAST duplicate object key, which would let a duplicated
-     * {@code rows} or slot entry render a silently wrong menu. Strict parsing means duplicates
-     * fail loudly here, before any per-field validation runs.
+     * Parses one styled title run through the shared strict helpers. Unknown keys are a hard
+     * rejection here (the recipe format's transcription-error policy), unlike the scene format.
      */
-    private static JsonElement readStrictElement(JsonReader reader) throws IOException {
-        JsonToken token = reader.peek();
-        switch (token) {
-            case BEGIN_OBJECT -> {
-                JsonObject object = new JsonObject();
-                reader.beginObject();
-                while (reader.hasNext()) {
-                    String name = reader.nextName();
-                    if (object.has(name)) {
-                        throw new IllegalArgumentException(
-                            "Duplicate key `" + name + "` in menu recipe JSON");
-                    }
-                    object.add(name, readStrictElement(reader));
-                }
-                reader.endObject();
-                return object;
-            }
-            case BEGIN_ARRAY -> {
-                JsonArray array = new JsonArray();
-                reader.beginArray();
-                while (reader.hasNext()) {
-                    array.add(readStrictElement(reader));
-                }
-                reader.endArray();
-                return array;
-            }
-            case STRING -> {
-                return new JsonPrimitive(reader.nextString());
-            }
-            case NUMBER -> {
-                // BigDecimal keeps the exact literal so requireInt's whole-number check still
-                // rejects fractional values like 1.5.
-                return new JsonPrimitive(new BigDecimal(reader.nextString()));
-            }
-            case BOOLEAN -> {
-                return new JsonPrimitive(reader.nextBoolean());
-            }
-            case NULL -> {
-                reader.nextNull();
-                return JsonNull.INSTANCE;
-            }
-            default -> throw new IllegalArgumentException("Unexpected token " + token + " in menu recipe JSON");
-        }
-    }
-
-    private static void requireOnlyKeys(JsonObject object, Set<String> allowed, String what) {
-        for (String key : object.keySet()) {
-            if (!allowed.contains(key)) {
-                throw new IllegalArgumentException(
-                    "Unknown " + what + " key `" + key + "` (allowed: " + String.join(", ", allowed.stream().sorted().toList()) + ")");
-            }
-        }
-    }
-
-    private static int requireInt(JsonObject object, String key) {
-        JsonElement element = object.get(key);
-        if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isNumber()) {
-            throw new IllegalArgumentException("`" + key + "` must be an integer");
-        }
-        double value = element.getAsDouble();
-        int intValue = (int) value;
-        if (intValue != value) {
-            throw new IllegalArgumentException("`" + key + "` must be an integer, got: " + value);
-        }
-        return intValue;
-    }
-
     private static TitleRun parseTitleRun(JsonElement element) {
         if (!element.isJsonObject()) {
             throw new IllegalArgumentException("Each title run must be an object, got: " + element);
         }
         JsonObject run = element.getAsJsonObject();
-        requireOnlyKeys(run, TITLE_RUN_KEYS, "title run");
-        String text = requireString(run, "text");
-        String fontId = run.has("font") ? requireString(run, "font") : null;
+        StrictJson.requireOnlyKeys(run, TITLE_RUN_KEYS, "title run");
+        return parseRunFields(run, "Title run");
+    }
+
+    /**
+     * Validates one styled run's fields and builds the {@link TitleRun}, the field-level rules
+     * shared by this menu recipe title format and the declarative scene format's hud lines:
+     * required {@code text}, optional resource-location {@code font}, optional strict
+     * {@code #RRGGBB} {@code color}, and boolean {@code bold} / {@code italic}. Callers apply
+     * their own unknown-key policy first - a hard rejection in the recipe format, tolerant in the
+     * scene format - so only that policy differs between the two, never a run's field validation.
+     *
+     * @param run  the already object-typed run
+     * @param what the enclosing-element label used in the field error messages
+     *
+     * @return the built run
+     * @throws IllegalArgumentException on a missing or mistyped field, a {@code font} that is not
+     *                                  a resource location, or a {@code color} that is not strict
+     *                                  {@code #RRGGBB}, each message naming {@code what}
+     */
+    public static TitleRun parseRunFields(JsonObject run, String what) {
+        String text = StrictJson.requireString(run, "text", what);
+        String fontId = run.has("font") ? StrictJson.requireString(run, "font", what) : null;
         if (fontId != null && !FONT_ID.matcher(fontId).matches()) {
-            throw new IllegalArgumentException("Title run font must be a resource location, got: " + fontId);
+            throw new IllegalArgumentException(what + " `font` must be a resource location, got: " + fontId);
         }
         TextColor color = null;
         if (run.has("color")) {
-            String colorValue = requireString(run, "color");
+            String colorValue = StrictJson.requireString(run, "color", what);
             color = RgbColor.tryParse(colorValue);
             if (color == null) {
-                throw new IllegalArgumentException("Title run color must be strict #RRGGBB, got: " + colorValue);
+                throw new IllegalArgumentException(what + " `color` must be strict #RRGGBB, got: " + colorValue);
             }
         }
-        return new TitleRun(text, fontId, color, requireBoolean(run, "bold"), requireBoolean(run, "italic"));
-    }
-
-    private static String requireString(JsonObject object, String key) {
-        JsonElement element = object.get(key);
-        if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString()) {
-            throw new IllegalArgumentException("Title run `" + key + "` must be a string");
-        }
-        return element.getAsString();
-    }
-
-    /** Absent means false; present must be a JSON boolean. */
-    private static boolean requireBoolean(JsonObject object, String key) {
-        JsonElement element = object.get(key);
-        if (element == null) {
-            return false;
-        }
-        if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isBoolean()) {
-            throw new IllegalArgumentException("Title run `" + key + "` must be a boolean");
-        }
-        return element.getAsBoolean();
+        return new TitleRun(text, fontId, color,
+            StrictJson.requireBoolean(run, "bold", what),
+            StrictJson.requireBoolean(run, "italic", what));
     }
 
     /**
