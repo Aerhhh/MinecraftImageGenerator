@@ -115,6 +115,77 @@ class PackAnimationTest {
     }
 
     @Test
+    void interpolationExpandsEachKeyframeIntoPerTickCrossFades() {
+        // Two keyframes red -> blue, each held 4 ticks. Interpolation emits one position per tick,
+        // cross-fading the current keyframe toward the next by subTick/time (0, 1/4, 2/4, 3/4).
+        PackAnimation animation = PackAnimation.resolve(flipbook(), meta("""
+            {"animation":{"frametime":4,"frames":[0,2],"interpolate":true}}""")).orElseThrow();
+
+        assertEquals(2, animation.frames().size(), "the keyframe view stays two frames");
+        assertEquals(List.of(1, 1, 1, 1, 1, 1, 1, 1), animation.frameTicks(),
+            "each 4-tick keyframe expands into four one-tick positions");
+        assertEquals(8, animation.cycleTicks());
+
+        // Red -> blue across the first keyframe: R falls 255 -> 63, B rises 0 -> 191 (vanilla's
+        // truncating mix), alpha stays opaque.
+        assertEquals(0xFFFF0000, animation.frameImage(0).getRGB(8, 8), "tick 0 is the pure keyframe");
+        assertEquals(0xFFBF003F, animation.frameImage(1).getRGB(8, 8), "25%");
+        assertEquals(0xFF7F007F, animation.frameImage(2).getRGB(8, 8), "50%");
+        assertEquals(0xFF3F00BF, animation.frameImage(3).getRGB(8, 8), "75%");
+        // Blue -> red across the second keyframe (wraps to keyframe 0).
+        assertEquals(0xFF0000FF, animation.frameImage(4).getRGB(8, 8), "second keyframe starts pure");
+        assertEquals(0xFF3F00BF, animation.frameImage(5).getRGB(8, 8), "25% back toward red");
+        assertEquals(0xFF7F007F, animation.frameImage(6).getRGB(8, 8), "50%");
+        assertEquals(0xFFBF003F, animation.frameImage(7).getRGB(8, 8), "75%");
+
+        assertSame(animation.frameImage(1), animation.frameImage(1), "a blended position memoizes");
+    }
+
+    @Test
+    void interpolationDividesEachDeltaByItsOwnKeyframeTime() {
+        // A hold (frame 0 held 4 ticks) then a short frame (frame 2 held 2 ticks). Each keyframe's
+        // cross-fade divides by ITS OWN time, so the hold steps in quarters and the short frame in
+        // halves - the blend is correct at the hold boundary.
+        PackAnimation animation = PackAnimation.resolve(flipbook(), meta("""
+            {"animation":{"frames":[{"index":0,"time":4},{"index":2,"time":2}],"interpolate":true}}""")).orElseThrow();
+
+        assertEquals(List.of(1, 1, 1, 1, 1, 1), animation.frameTicks());
+        assertEquals(6, animation.cycleTicks());
+        assertEquals(0xFF3F00BF, animation.frameImage(3).getRGB(8, 8), "last hold tick is 75% toward blue");
+        assertEquals(0xFF0000FF, animation.frameImage(4).getRGB(8, 8), "the short frame starts pure blue");
+        assertEquals(0xFF7F007F, animation.frameImage(5).getRGB(8, 8), "its one sub-tick is 50% back toward red");
+    }
+
+    @Test
+    void nonInterpolatedAnimationsKeepNearestFramePlayback() {
+        // Flag-off byte-identity: the same sheet without interpolate plays hard keyframe steps, one
+        // position per keyframe, cropping the raw frames exactly as before.
+        PackAnimation animation = PackAnimation.resolve(flipbook(), meta("""
+            {"animation":{"frametime":4,"frames":[0,2]}}""")).orElseThrow();
+
+        assertFalse(animation.interpolate());
+        assertEquals(List.of(4, 4), animation.frameTicks(), "no per-tick expansion");
+        assertEquals(8, animation.cycleTicks());
+        assertEquals(0xFFFF0000, animation.frameImage(0).getRGB(8, 8));
+        assertEquals(0xFF0000FF, animation.frameImage(1).getRGB(8, 8));
+        assertSame(animation.frameImage(0), animation.frameImage(0), "raw crops memoize per index");
+    }
+
+    @Test
+    void interpolationCapsPerTickExpansionAtTheTimelineCycleCap() {
+        // Two keyframes each held far past the timeline's cycle cap: per-tick expansion stops at
+        // the cap instead of allocating millions of positions (the downstream timeline truncates
+        // anyway), and the reported cycle matches the truncated position count.
+        int overCap = AnimationTimeline.MAX_CYCLE_TICKS * 2;
+        PackAnimation animation = PackAnimation.resolve(flipbook(), meta(
+            "{\"animation\":{\"frames\":[{\"index\":0,\"time\":" + overCap
+                + "},{\"index\":2,\"time\":" + overCap + "}],\"interpolate\":true}}")).orElseThrow();
+
+        assertEquals(AnimationTimeline.MAX_CYCLE_TICKS, animation.frameTicks().size());
+        assertEquals(AnimationTimeline.MAX_CYCLE_TICKS, animation.cycleTicks());
+    }
+
+    @Test
     void frameSizeOverridesChangeTheCropAndCount() {
         PackAnimation animation = PackAnimation.resolve(flipbook(), meta("""
             {"animation":{"width":16,"height":24}}""")).orElseThrow();

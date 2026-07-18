@@ -8,8 +8,8 @@ import java.util.List;
  * The animation section of a texture {@code .mcmeta} file, parsed to the full vanilla model:
  * the default per-frame time ({@code frametime}, ticks), the explicit frames list (int entries
  * and {@code {index, time}} objects, where a per-frame time overrides the default), the
- * optional frame-size overrides and the {@code interpolate} flag (parsed and carried; rendering
- * treats animations as nearest-frame, a documented approximation).
+ * optional frame-size overrides and the {@code interpolate} flag (which {@link PackAnimation}
+ * honors as a per-tick cross-fade between keyframes, like the vanilla client).
  *
  * @param frames               the explicit frame sequence, or null when the mcmeta declares no
  *                             frames list - the default order is then every frame of the
@@ -19,7 +19,8 @@ import java.util.List;
  * @param frameHeight          explicit frame height, or null (defaults to the frame width - the
  *                             square-frames vertical-flipbook convention shared with
  *                             {@link TextureDecoder#firstFrame})
- * @param interpolate          the parsed {@code interpolate} flag; rendering ignores it
+ * @param interpolate          the parsed {@code interpolate} flag; drives {@link PackAnimation}'s
+ *                             per-tick keyframe cross-fade
  */
 record AnimationMeta(@Nullable List<FrameEntry> frames, int defaultFrameTimeTicks,
                      @Nullable Integer frameWidth, @Nullable Integer frameHeight, boolean interpolate) {

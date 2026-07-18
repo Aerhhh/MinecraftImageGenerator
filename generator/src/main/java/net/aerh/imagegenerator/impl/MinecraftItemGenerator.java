@@ -357,8 +357,9 @@ public class MinecraftItemGenerator implements Generator {
          * delays (1 tick = 50 ms; timelines cap per
          * {@link net.aerh.imagegenerator.pack.AnimationTimeline}). Items without animated
          * textures render the static image exactly as before. The {@code interpolate} flag is
-         * honored as nearest-frame (no cross-fade), and the enchant glint is not applied while
-         * animated textures drive the output.
+         * honored as a per-tick keyframe cross-fade (see
+         * {@link net.aerh.imagegenerator.pack.PackAnimation}), and the enchant glint is not applied
+         * while animated textures drive the output.
          */
         public MinecraftItemGenerator.Builder withAnimatedTextures(boolean animatedTextures) {
             this.animatedTextures = animatedTextures;
