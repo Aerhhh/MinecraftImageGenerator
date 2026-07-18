@@ -5,7 +5,7 @@ import net.aerh.imagegenerator.data.ParseType;
 import net.aerh.imagegenerator.data.Stat;
 import net.aerh.imagegenerator.parser.ParseContext;
 import net.aerh.imagegenerator.parser.StringParser;
-import net.aerh.imagegenerator.text.ChatFormat;
+import net.aerh.imagegenerator.text.LegacyCode;
 
 import java.util.regex.Matcher;
 
@@ -46,7 +46,7 @@ public class StatParser implements StringParser {
             String formatted = ParseTypeFormatter.format(stat, parseType, extraData, context);
 
             if (!formatted.startsWith("[")) {
-                formatted += String.valueOf(ChatFormat.SECTION_SYMBOL) + ChatFormat.RESET.getCode();
+                formatted += String.valueOf(LegacyCode.SECTION_SYMBOL) + LegacyCode.RESET.getCode();
             }
 
             matcher.appendReplacement(result, Matcher.quoteReplacement(formatted));

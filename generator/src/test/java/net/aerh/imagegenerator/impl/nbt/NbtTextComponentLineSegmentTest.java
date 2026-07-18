@@ -3,7 +3,7 @@ package net.aerh.imagegenerator.impl.nbt;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.aerh.imagegenerator.text.MinecraftFont;
-import net.aerh.imagegenerator.text.RgbColor;
+import lib.minecraft.text.ChatColor;
 import net.aerh.imagegenerator.text.segment.ColorSegment;
 import net.aerh.imagegenerator.text.segment.LineSegment;
 import org.junit.jupiter.api.Test;
@@ -85,9 +85,9 @@ class NbtTextComponentLineSegmentTest {
         List<ColorSegment> segments = segments(json);
 
         assertEquals(3, segments.size());
-        assertEquals(new RgbColor(0xFF00AA), segments.get(0).getColor().orElseThrow());
+        assertEquals(ChatColor.of(0xFF00AA), segments.get(0).getColor().orElseThrow());
         // Sibling B's gold color must not leak into C, which inherits the parent's hex color.
-        assertEquals(new RgbColor(0xFF00AA), segments.get(2).getColor().orElseThrow());
+        assertEquals(ChatColor.of(0xFF00AA), segments.get(2).getColor().orElseThrow());
         for (ColorSegment segment : segments) {
             assertEquals("minecraft:space", segment.getPackFontId(), "font inherited from parent");
             assertFalse(segment.isShadowEnabled(), "shadow state inherited from parent");

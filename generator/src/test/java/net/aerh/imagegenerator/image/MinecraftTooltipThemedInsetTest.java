@@ -3,7 +3,7 @@ package net.aerh.imagegenerator.image;
 import net.aerh.imagegenerator.pack.GuiScaling;
 import net.aerh.imagegenerator.pack.GuiSprite;
 import net.aerh.imagegenerator.pack.TooltipSprites;
-import net.aerh.imagegenerator.text.ChatFormat;
+import lib.minecraft.text.ChatColor;
 import net.aerh.imagegenerator.text.segment.ColorSegment;
 import org.junit.jupiter.api.Test;
 
@@ -56,7 +56,7 @@ class MinecraftTooltipThemedInsetTest {
         return MinecraftTooltip.builder()
             .setRenderBorder(true)
             .withThemeSprites(sprites(frameScaling, frameW, frameH))
-            .withSegments(ColorSegment.builder().withText("Themed").withColor(ChatFormat.WHITE).build())
+            .withSegments(ColorSegment.builder().withText("Themed").withColor(ChatColor.Legacy.WHITE).build())
             .build()
             .render()
             .getImage();

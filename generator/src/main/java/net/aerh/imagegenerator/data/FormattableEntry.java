@@ -1,7 +1,7 @@
 package net.aerh.imagegenerator.data;
 
+import lib.minecraft.text.ChatColor;
 import net.aerh.imagegenerator.pack.PackId;
-import net.aerh.imagegenerator.text.ChatFormat;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -18,9 +18,9 @@ public interface FormattableEntry {
 
     String getDisplay();
 
-    ChatFormat getColor();
+    ChatColor.Legacy getColor();
 
-    ChatFormat getSecondaryColor();
+    ChatColor.Legacy getSecondaryColor();
 
     String getParseType();
 

@@ -28,7 +28,6 @@ import net.aerh.imagegenerator.parser.ParseContext;
 import net.aerh.imagegenerator.text.PackGlyphDispatcher;
 import net.aerh.imagegenerator.text.TextColorRemap;
 import net.aerh.imagegenerator.parser.text.RarityFooterParser;
-import net.aerh.imagegenerator.text.ChatFormat;
 import net.aerh.imagegenerator.text.segment.LineSegment;
 import net.aerh.imagegenerator.text.wrapper.TextWrapper;
 import org.jetbrains.annotations.NotNull;

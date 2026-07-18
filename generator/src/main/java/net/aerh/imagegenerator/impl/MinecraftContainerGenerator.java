@@ -22,8 +22,8 @@ import net.aerh.imagegenerator.pack.PackRepository;
 import net.aerh.imagegenerator.parser.inventory.InventoryStringParser;
 import net.aerh.imagegenerator.util.AnimatedGifEncoder;
 import net.aerh.imagegenerator.text.PackGlyphDispatcher;
-import net.aerh.imagegenerator.text.RgbColor;
-import net.aerh.imagegenerator.text.TextColor;
+import lib.minecraft.text.ChatColor;
+import net.aerh.imagegenerator.text.Colors;
 import net.aerh.imagegenerator.text.segment.ColorSegment;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -103,7 +103,7 @@ public class MinecraftContainerGenerator implements Generator {
     /** Columns of the generic chest grid. */
     public static final int COLUMNS = 9;
     /** Vanilla default container title color. */
-    public static final TextColor DEFAULT_TITLE_COLOR = new RgbColor(0x404040);
+    public static final ChatColor DEFAULT_TITLE_COLOR = ChatColor.of(0x404040);
 
     private static final int MIN_ROWS = 1;
     private static final int MAX_ROWS = 6;
@@ -198,7 +198,7 @@ public class MinecraftContainerGenerator implements Generator {
      * @param bold   whether the run renders bold
      * @param italic whether the run renders italic
      */
-    public record TitleRun(String text, @Nullable String fontId, @Nullable TextColor color,
+    public record TitleRun(String text, @Nullable String fontId, @Nullable ChatColor color,
                            boolean bold, boolean italic) {
 
         public TitleRun {
@@ -221,7 +221,7 @@ public class MinecraftContainerGenerator implements Generator {
          *
          * @param defaultColor the color runs without an explicit {@link #color()} render in
          */
-        ColorSegment toSegment(TextColor defaultColor) {
+        ColorSegment toSegment(ChatColor defaultColor) {
             return ColorSegment.builder()
                 .withText(text)
                 .withColor(color != null ? color : defaultColor)
@@ -1020,10 +1020,10 @@ public class MinecraftContainerGenerator implements Generator {
         if (fontId != null && !FONT_ID.matcher(fontId).matches()) {
             throw new IllegalArgumentException(what + " `font` must be a resource location, got: " + fontId);
         }
-        TextColor color = null;
+        ChatColor color = null;
         if (run.has("color")) {
             String colorValue = StrictJson.requireString(run, "color", what);
-            color = RgbColor.tryParse(colorValue);
+            color = Colors.tryParseHex(colorValue);
             if (color == null) {
                 throw new IllegalArgumentException(what + " `color` must be strict #RRGGBB, got: " + colorValue);
             }

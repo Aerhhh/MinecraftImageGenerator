@@ -87,7 +87,7 @@ class CodeClassifierTest {
 
     @Test
     void skipLengthsMatchCodeWidths() {
-        assertEquals(RgbColor.HEX_CODE_LENGTH, CodeClassifier.skipLength(CodeType.HEX_COLOR));
+        assertEquals(Colors.HEX_CODE_LENGTH, CodeClassifier.skipLength(CodeType.HEX_COLOR));
         assertEquals(1, CodeClassifier.skipLength(CodeType.NAMED_COLOR));
         assertEquals(1, CodeClassifier.skipLength(CodeType.STYLE));
         assertEquals(1, CodeClassifier.skipLength(CodeType.FONT));
@@ -110,12 +110,12 @@ class CodeClassifierTest {
     }
 
     @Test
-    void alphabetCoversEveryChatFormatConstant() {
-        // Every ChatFormat code must classify as something other than NONE so that a new
+    void alphabetCoversEveryLegacyCodeConstant() {
+        // Every LegacyCode code must classify as something other than NONE so that a new
         // enum constant cannot silently fall outside the shared grammar.
-        for (ChatFormat format : ChatFormat.VALUES) {
-            assertTrue(CodeClassifier.classify("&" + format.getCode(), 0) != CodeType.NONE,
-                "ChatFormat." + format.name() + " must be part of the code grammar");
+        for (LegacyCode code : LegacyCode.VALUES) {
+            assertTrue(CodeClassifier.classify("&" + code.getCode(), 0) != CodeType.NONE,
+                "LegacyCode." + code.name() + " must be part of the code grammar");
         }
     }
 }

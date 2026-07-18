@@ -10,7 +10,7 @@ import net.aerh.imagegenerator.pack.PackRepository;
 import net.aerh.imagegenerator.pack.PackSource;
 import net.aerh.imagegenerator.testsupport.FixturePacks;
 import net.aerh.imagegenerator.testsupport.ImageAssertions;
-import net.aerh.imagegenerator.text.RgbColor;
+import lib.minecraft.text.ChatColor;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -77,7 +77,7 @@ class MinecraftContainerGeneratorTest {
      * #404040 would darken it; see {@link #defaultTitleColorTintsGlyphArt}).
      */
     private static MinecraftContainerGenerator.TitleRun whiteRun(String text) {
-        return new MinecraftContainerGenerator.TitleRun(text, MENU_FONT, new RgbColor(0xFFFFFF), false, false);
+        return new MinecraftContainerGenerator.TitleRun(text, MENU_FONT, ChatColor.of(0xFFFFFF), false, false);
     }
 
     // ---------------------------------------------------------------- geometry
@@ -239,7 +239,7 @@ class MinecraftContainerGeneratorTest {
         BufferedImage image = packBuilder(repository)
             .withRows(1)
             .withTitle(new MinecraftContainerGenerator.TitleRun(
-                GLYPH_DEEP, MENU_FONT, new RgbColor(0xFFFFFF), false, true))
+                GLYPH_DEEP, MENU_FONT, ChatColor.of(0xFFFFFF), false, true))
             .build().render(null).getImage();
 
         // The cell top sits 7 - 5 = 2 GUI px below the line top: first-row shear = +0.5 GUI px,
@@ -266,7 +266,7 @@ class MinecraftContainerGeneratorTest {
         BufferedImage image = packBuilder(repository)
             .withRows(1)
             .withTitle(new MinecraftContainerGenerator.TitleRun(
-                PAD_PLUS_120 + PAD_PLUS_120 + GLYPH_TALL, MENU_FONT, new RgbColor(0xFFFFFF), false, true))
+                PAD_PLUS_120 + PAD_PLUS_120 + GLYPH_TALL, MENU_FONT, ChatColor.of(0xFFFFFF), false, true))
             .build().render(null).getImage();
 
         // The cell top sits 7 - 30 = 23 GUI px ABOVE the line top: first-row shear = +6.75 GUI
@@ -348,7 +348,7 @@ class MinecraftContainerGeneratorTest {
         BufferedImage image = packBuilder(repository)
             .withRows(1)
             .withTitle(new MinecraftContainerGenerator.TitleRun(
-                GLYPH_BACKGROUND, MENU_FONT, new RgbColor(0x00FF00), false, false))
+                GLYPH_BACKGROUND, MENU_FONT, ChatColor.of(0x00FF00), false, false))
             .build().render(null).getImage();
 
         // White glyph art tinted multiplicatively by pure green keeps only the green channel:

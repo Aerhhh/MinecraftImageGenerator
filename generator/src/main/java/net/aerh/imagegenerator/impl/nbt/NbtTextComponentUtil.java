@@ -6,9 +6,9 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSyntaxException;
-import net.aerh.imagegenerator.text.ChatFormat;
+import lib.minecraft.text.ChatColor;
+import net.aerh.imagegenerator.text.LegacyCode;
 import net.aerh.imagegenerator.text.MinecraftFont;
-import net.aerh.imagegenerator.text.TextColor;
 import net.aerh.imagegenerator.text.segment.ColorSegment;
 import net.aerh.imagegenerator.text.segment.LineSegment;
 import org.jetbrains.annotations.Nullable;
@@ -236,9 +236,9 @@ public final class NbtTextComponentUtil {
         String color = inherited.colorCode();
         if (component.has("color")) {
             // Named colors and vanilla 1.16+ hex colors; unrecognized values inherit the parent's color.
-            TextColor textColor = TextColor.fromJsonString(component.get("color").getAsString());
+            ChatColor textColor = ChatColor.fromJsonString(component.get("color").getAsString());
             if (textColor != null) {
-                color = "&" + textColor.getLegacyCode();
+                color = "&" + legacyCodeOf(textColor);
             }
         }
 
@@ -278,14 +278,14 @@ public final class NbtTextComponentUtil {
         if (to.colorCode() != null) {
             result.append(to.colorCode());
         } else if (from.needsFormattingReset(to)) {
-            result.append("&").append(ChatFormat.RESET.getCode());
+            result.append("&").append(LegacyCode.RESET.getCode());
         }
 
-        if (to.bold()) result.append("&").append(ChatFormat.BOLD.getCode());
-        if (to.italic()) result.append("&").append(ChatFormat.ITALIC.getCode());
-        if (to.underlined()) result.append("&").append(ChatFormat.UNDERLINE.getCode());
-        if (to.strikethrough()) result.append("&").append(ChatFormat.STRIKETHROUGH.getCode());
-        if (to.obfuscated()) result.append("&").append(ChatFormat.OBFUSCATED.getCode());
+        if (to.bold()) result.append("&").append(LegacyCode.BOLD.getCode());
+        if (to.italic()) result.append("&").append(LegacyCode.ITALIC.getCode());
+        if (to.underlined()) result.append("&").append(LegacyCode.UNDERLINE.getCode());
+        if (to.strikethrough()) result.append("&").append(LegacyCode.STRIKETHROUGH.getCode());
+        if (to.obfuscated()) result.append("&").append(LegacyCode.OBFUSCATED.getCode());
     }
 
     /**
@@ -348,7 +348,7 @@ public final class NbtTextComponentUtil {
      * until one is declared, matching the segment default), a font (a built-in {@link MinecraftFont}
      * or a raw pack font id), the five formatting flags and whether the run draws its drop shadow.
      */
-    private record ComponentStyle(@Nullable TextColor color, MinecraftFont font, @Nullable String packFontId,
+    private record ComponentStyle(@Nullable ChatColor color, MinecraftFont font, @Nullable String packFontId,
                                   boolean bold, boolean italic, boolean underlined, boolean strikethrough,
                                   boolean obfuscated, boolean shadowEnabled) {
 
@@ -356,9 +356,9 @@ public final class NbtTextComponentUtil {
             new ComponentStyle(null, MinecraftFont.DEFAULT, null, false, false, false, false, false, true);
 
         ComponentStyle resolve(JsonObject component) {
-            TextColor resolvedColor = color;
+            ChatColor resolvedColor = color;
             if (component.has("color")) {
-                TextColor declared = TextColor.fromJsonString(component.get("color").getAsString());
+                ChatColor declared = ChatColor.fromJsonString(component.get("color").getAsString());
                 if (declared != null) {
                     resolvedColor = declared;
                 }
@@ -468,7 +468,17 @@ public final class NbtTextComponentUtil {
             }
         }
 
-        return rawValue.replace(ChatFormat.SECTION_SYMBOL, ChatFormat.AMPERSAND_SYMBOL);
+        return rawValue.replace(LegacyCode.SECTION_SYMBOL, LegacyCode.AMPERSAND_SYMBOL);
+    }
+
+    /**
+     * The in-band legacy code for a resolved color: the single-character code for a named
+     * {@link ChatColor.Legacy} color, or the lowercase {@code #rrggbb} hex literal for a custom color.
+     */
+    private static String legacyCodeOf(ChatColor color) {
+        return color.code()
+            .map(String::valueOf)
+            .orElseGet(() -> String.format("#%06x", color.rgb() & 0xFFFFFF));
     }
 
 }

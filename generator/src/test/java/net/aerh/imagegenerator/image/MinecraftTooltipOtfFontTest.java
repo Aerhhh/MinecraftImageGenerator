@@ -7,7 +7,7 @@ import net.aerh.imagegenerator.pack.PackSource;
 import net.aerh.imagegenerator.testsupport.FixturePacks;
 import net.aerh.imagegenerator.testsupport.MinimalTrueTypeFont;
 import net.aerh.imagegenerator.testsupport.MinimalTrueTypeFont.Glyph;
-import net.aerh.imagegenerator.text.ChatFormat;
+import lib.minecraft.text.ChatColor;
 import net.aerh.imagegenerator.text.segment.ColorSegment;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -67,7 +67,7 @@ class MinecraftTooltipOtfFontTest {
     }
 
     private static ColorSegment.Builder segment(String text) {
-        return ColorSegment.builder().withText(text).withColor(ChatFormat.WHITE).withPackFontId("testpack:otf");
+        return ColorSegment.builder().withText(text).withColor(ChatColor.Legacy.WHITE).withPackFontId("testpack:otf");
     }
 
     private BufferedImage render(ColorSegment segment) {
@@ -139,13 +139,13 @@ class MinecraftTooltipOtfFontTest {
     void codepointsTheTtfCannotDisplayFallBackToBuiltInIdentically() {
         // 'Z' is not in the ttf, so minecraft:default resolves but supplies no glyph: the codepoint
         // must render exactly like the no-pack path (byte-identical).
-        ColorSegment plain = ColorSegment.builder().withText("Zz").withColor(ChatFormat.WHITE).build();
+        ColorSegment plain = ColorSegment.builder().withText("Zz").withColor(ChatColor.Legacy.WHITE).build();
         BufferedImage withPack = render(plain);
         BufferedImage withoutPack = MinecraftTooltip.builder()
             .setRenderBorder(false)
             .withAlpha(0)
             .hasFirstLinePadding(false)
-            .withSegments(ColorSegment.builder().withText("Zz").withColor(ChatFormat.WHITE).build())
+            .withSegments(ColorSegment.builder().withText("Zz").withColor(ChatColor.Legacy.WHITE).build())
             .build().render().getImage();
         assertEquals(withoutPack.getWidth(), withPack.getWidth(), "width");
         assertEquals(withoutPack.getHeight(), withPack.getHeight(), "height");

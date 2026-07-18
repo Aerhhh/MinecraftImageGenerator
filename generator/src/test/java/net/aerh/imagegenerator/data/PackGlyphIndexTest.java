@@ -1,6 +1,6 @@
 package net.aerh.imagegenerator.data;
 
-import net.aerh.imagegenerator.text.ChatFormat;
+import lib.minecraft.text.ChatColor;
 import org.junit.jupiter.api.Test;
 
 import java.awt.Color;
@@ -19,11 +19,11 @@ class PackGlyphIndexTest {
     }
 
     private static Stat stat(String name, Map<String, String> overrides) {
-        return new Stat("\u2741", name, "Test", "\u2741 Test", ChatFormat.RED, null, "NORMAL", null, overrides);
+        return new Stat("\u2741", name, "Test", "\u2741 Test", ChatColor.Legacy.RED, null, "NORMAL", null, overrides);
     }
 
     private static Flavor flavor(String name, Map<String, String> overrides) {
-        return new Flavor("\u0f15", name, "Test", "\u0f15 Test", ChatFormat.DARK_GREEN, null, "NORMAL", overrides);
+        return new Flavor("\u0f15", name, "Test", "\u0f15 Test", ChatColor.Legacy.DARK_GREEN, null, "NORMAL", overrides);
     }
 
     private static Gemstone gemstone(String name, Map<String, String> overrides) {

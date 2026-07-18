@@ -11,7 +11,7 @@ import java.util.regex.Pattern;
  * marker. {@code GradientParser} and {@code TextWrapper} both lex through this class so the
  * grammar cannot drift between them.
  * <p>
- * The code alphabet is derived from {@link ChatFormat}, so a new enum constant is picked up
+ * The code alphabet is derived from {@link LegacyCode}, so a new enum constant is picked up
  * here automatically.
  * <p>
  * Consumers deliberately differ in what they do with a classification:
@@ -43,13 +43,13 @@ public final class CodeClassifier {
         StringBuilder styles = new StringBuilder();
         StringBuilder fonts = new StringBuilder();
 
-        for (ChatFormat format : ChatFormat.VALUES) {
-            if (format.isColor()) {
-                colors.append(format.getCode());
-            } else if (format.isFont()) {
-                fonts.append(format.getCode());
-            } else if (format.isFormat()) {
-                styles.append(format.getCode());
+        for (LegacyCode code : LegacyCode.VALUES) {
+            if (code.isColor()) {
+                colors.append(code.getCode());
+            } else if (code.isFont()) {
+                fonts.append(code.getCode());
+            } else if (code.isStyle()) {
+                styles.append(code.getCode());
             }
         }
 
@@ -68,7 +68,7 @@ public final class CodeClassifier {
 
     /** Whether {@code c} is one of the two characters that can introduce an in-band code. */
     public static boolean isCodeSymbol(char c) {
-        return c == ChatFormat.AMPERSAND_SYMBOL || c == ChatFormat.SECTION_SYMBOL;
+        return c == LegacyCode.AMPERSAND_SYMBOL || c == LegacyCode.SECTION_SYMBOL;
     }
 
     /**
@@ -89,7 +89,7 @@ public final class CodeClassifier {
 
         char peek = Character.toLowerCase(text.charAt(i + 1));
 
-        if (peek == '#' && RgbColor.tryParseAt(text, i + 1) != null) {
+        if (peek == '#' && Colors.tryParseHexAt(text, i + 1) != null) {
             return CodeType.HEX_COLOR;
         }
         if (COLOR_CODES.indexOf(peek) != -1) {
@@ -101,7 +101,7 @@ public final class CodeClassifier {
         if (FONT_CODES.indexOf(peek) != -1) {
             return CodeType.FONT;
         }
-        if (peek == ChatFormat.RESET.getCode()) {
+        if (peek == LegacyCode.RESET.getCode()) {
             return CodeType.RESET;
         }
 
@@ -110,7 +110,7 @@ public final class CodeClassifier {
 
     /**
      * Number of extra characters (after the code symbol itself) a code of {@code type}
-     * occupies: {@link RgbColor#HEX_CODE_LENGTH} for hex colors, one for every other code,
+     * occupies: {@link Colors#HEX_CODE_LENGTH} for hex colors, one for every other code,
      * zero for {@link CodeType#NONE}.
      *
      * @param type the classified code type
@@ -122,7 +122,7 @@ public final class CodeClassifier {
             return 0;
         }
 
-        return type == CodeType.HEX_COLOR ? RgbColor.HEX_CODE_LENGTH : 1;
+        return type == CodeType.HEX_COLOR ? Colors.HEX_CODE_LENGTH : 1;
     }
 
     /**

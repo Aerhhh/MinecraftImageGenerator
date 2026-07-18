@@ -1,6 +1,6 @@
 package net.aerh.imagegenerator.text.wrapper;
 
-import net.aerh.imagegenerator.text.ChatFormat;
+import net.aerh.imagegenerator.text.LegacyCode;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -28,7 +28,7 @@ class TextWrapperHexTest {
 
     @Test
     void stripColorStripsSectionSymbolHex() {
-        assertEquals("Hellox", ChatFormat.stripColor("§#ff00aaHello§cx"));
+        assertEquals("Hellox", LegacyCode.stripColor("§#ff00aaHello§cx"));
     }
 
     @Test

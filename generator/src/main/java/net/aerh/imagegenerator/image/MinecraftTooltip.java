@@ -11,9 +11,8 @@ import net.aerh.imagegenerator.pack.GuiScaling;
 import net.aerh.imagegenerator.pack.GuiSpriteRenderer;
 import net.aerh.imagegenerator.pack.PackAnimation;
 import net.aerh.imagegenerator.pack.TooltipSprites;
-import net.aerh.imagegenerator.text.ChatFormat;
+import lib.minecraft.text.ChatColor;
 import net.aerh.imagegenerator.text.PackGlyphDispatcher;
-import net.aerh.imagegenerator.text.TextColor;
 import net.aerh.imagegenerator.text.TextColorRemap;
 import net.aerh.imagegenerator.text.MinecraftFont;
 import net.aerh.imagegenerator.text.segment.ColorSegment;
@@ -137,7 +136,7 @@ public class MinecraftTooltip {
     @Getter
     private List<Integer> frameDelaysMs;
 
-    private transient TextColor currentColor;
+    private transient ChatColor currentColor;
     private transient Font currentFont;
     /**
      * Text cursor in canvas pixels. A double so fractional and negative pack glyph advances
@@ -194,7 +193,7 @@ public class MinecraftTooltip {
      * Construct a new {@link MinecraftTooltip} instance.
      *
      * @param lines               A list of {@link LineSegment} objects representing the lines of text.
-     * @param defaultColor        The default {@link TextColor} to use for the text.
+     * @param defaultColor        The default {@link ChatColor} to use for the text.
      * @param alpha               The alpha value for the tooltip background. Range: 0-255.
      * @param padding             The padding value for the tooltip. Range: 0-255.
      * @param firstLinePadding    Whether to apply padding to the first line.
@@ -210,7 +209,7 @@ public class MinecraftTooltip {
      * @param textColorRemap      Shader-equivalent text color replacement table, or null.
      * @param packFontSource      Resolver for pack font ids, or null when no pack is active.
      */
-    private MinecraftTooltip(List<LineSegment> lines, TextColor defaultColor, int alpha, int padding, boolean firstLinePadding, boolean renderBorder, boolean centeredText, int frameDelayMs, int animationFrameCount, int scaleFactor, boolean aprilFools, boolean textShadow, TooltipSprites themeSprites, AnimatedTooltipSprites animatedThemeSprites, TextColorRemap textColorRemap, PackGlyphDispatcher.FontSource packFontSource) {
+    private MinecraftTooltip(List<LineSegment> lines, ChatColor defaultColor, int alpha, int padding, boolean firstLinePadding, boolean renderBorder, boolean centeredText, int frameDelayMs, int animationFrameCount, int scaleFactor, boolean aprilFools, boolean textShadow, TooltipSprites themeSprites, AnimatedTooltipSprites animatedThemeSprites, TextColorRemap textColorRemap, PackGlyphDispatcher.FontSource packFontSource) {
         this.lines = lines;
         this.currentColor = defaultColor;
         this.alpha = alpha;
@@ -749,7 +748,7 @@ public class MinecraftTooltip {
     private void drawString(Graphics2D graphics, @NotNull ColorSegment colorSegment, int frameIndex) {
         Font baseFont = MinecraftFonts.getFont(colorSegment.getFont(), colorSegment.isBold(), colorSegment.isItalic());
         this.currentFont = scaleFactor > 1 ? baseFont.deriveFont(baseFont.getSize2D() * scaleFactor) : baseFont;
-        this.currentColor = colorSegment.getColor().orElse(ChatFormat.GRAY);
+        this.currentColor = colorSegment.getColor().orElse(ChatColor.Legacy.GRAY);
         graphics.setFont(this.currentFont);
         FontMetrics metrics = graphics.getFontMetrics(this.currentFont);
 
@@ -1054,14 +1053,14 @@ public class MinecraftTooltip {
 
     /** Single source for drawn text color, with the shader-equivalent remap applied when present. */
     private Color foregroundColor() {
-        Color color = this.currentColor.getColor();
+        Color color = this.currentColor.color();
         return this.textColorRemap != null ? this.textColorRemap.foreground(color) : color;
     }
 
     /** Single source for drawn shadow color; remapped shadows derive from the remapped foreground. */
     private Color shadowColor() {
-        Color shadow = this.currentColor.getBackgroundColor();
-        return this.textColorRemap != null ? this.textColorRemap.shadow(this.currentColor.getColor(), shadow) : shadow;
+        Color shadow = this.currentColor.backgroundColor();
+        return this.textColorRemap != null ? this.textColorRemap.shadow(this.currentColor.color(), shadow) : shadow;
     }
 
     /**
@@ -1251,7 +1250,7 @@ public class MinecraftTooltip {
     public static class Builder implements ClassBuilder<MinecraftTooltip> {
         @Getter
         private final List<LineSegment> lines = new ArrayList<>();
-        private TextColor defaultColor = ChatFormat.GRAY;
+        private ChatColor defaultColor = ChatColor.Legacy.GRAY;
         private int alpha = DEFAULT_ALPHA;
         private int padding = 0;
         private boolean firstLinePadding = true;
@@ -1297,7 +1296,7 @@ public class MinecraftTooltip {
             return this;
         }
 
-        public Builder withDefaultColor(@NotNull TextColor color) {
+        public Builder withDefaultColor(@NotNull ChatColor color) {
             this.defaultColor = color;
             return this;
         }

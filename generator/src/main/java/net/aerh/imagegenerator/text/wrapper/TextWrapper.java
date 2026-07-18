@@ -11,7 +11,7 @@ import net.aerh.imagegenerator.parser.text.IconParser;
 import net.aerh.imagegenerator.parser.text.StatParser;
 import net.aerh.imagegenerator.text.CodeClassifier;
 import net.aerh.imagegenerator.text.CodeClassifier.CodeType;
-import net.aerh.imagegenerator.text.RgbColor;
+import net.aerh.imagegenerator.text.Colors;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -65,7 +65,7 @@ public class TextWrapper {
 
                 switch (type) {
                     case HEX_COLOR -> {
-                        lastColor = segment.substring(i, i + 1 + RgbColor.HEX_CODE_LENGTH);
+                        lastColor = segment.substring(i, i + 1 + Colors.HEX_CODE_LENGTH);
                         formatting.setLength(0); // Hex colors reset formatting like any color
                         log.debug("Found hex color code: '{}'", lastColor);
                     }

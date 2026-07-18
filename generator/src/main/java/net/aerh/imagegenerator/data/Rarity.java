@@ -5,7 +5,9 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import net.aerh.imagegenerator.text.ChatFormat;
+import lib.minecraft.text.ChatColor;
+import lib.minecraft.text.ChatFormat;
+import net.aerh.imagegenerator.text.LegacyCode;
 import net.hypixel.nerdbot.marmalade.registry.DataRegistry;
 
 import java.io.IOException;
@@ -52,7 +54,7 @@ public class Rarity {
 
     private final String name;
     private final String display;
-    private final ChatFormat color;
+    private final ChatColor.Legacy color;
 
     /**
      * Looks a rarity up by its {@code name} field ({@code very_special}, {@code none}, ...),
@@ -78,10 +80,10 @@ public class Rarity {
     }
 
     public String getColorCode() {
-        return String.valueOf(ChatFormat.AMPERSAND_SYMBOL) + color.getCode();
+        return String.valueOf(LegacyCode.AMPERSAND_SYMBOL) + color.codeChar();
     }
 
     public String getFormattedDisplay() {
-        return getColorCode() + ChatFormat.AMPERSAND_SYMBOL + ChatFormat.BOLD.getCode() + display;
+        return getColorCode() + LegacyCode.AMPERSAND_SYMBOL + ChatFormat.BOLD.getCode() + display;
     }
 }

@@ -5,7 +5,7 @@ import net.aerh.imagegenerator.pack.PackLimits;
 import net.aerh.imagegenerator.pack.PackRepository;
 import net.aerh.imagegenerator.pack.PackSource;
 import net.aerh.imagegenerator.testsupport.FixturePacks;
-import net.aerh.imagegenerator.text.ChatFormat;
+import lib.minecraft.text.ChatColor;
 import net.aerh.imagegenerator.text.MinecraftFont;
 import net.aerh.imagegenerator.text.TextColorRemap;
 import net.aerh.imagegenerator.text.segment.ColorSegment;
@@ -81,7 +81,7 @@ class MinecraftTooltipPackFontTest {
     }
 
     private static ColorSegment.Builder whiteSegment(String text) {
-        return ColorSegment.builder().withText(text).withColor(ChatFormat.WHITE).withPackFontId("testpack:glyphs");
+        return ColorSegment.builder().withText(text).withColor(ChatColor.Legacy.WHITE).withPackFontId("testpack:glyphs");
     }
 
     private BufferedImage render(ColorSegment segment) {
@@ -279,7 +279,7 @@ class MinecraftTooltipPackFontTest {
         // No packFontId on the segment: the effective font id is minecraft:default, which the
         // fixture overrides with a reference to testpack:glyphs.
         ColorSegment segment = ColorSegment.builder()
-            .withText(GLYPH_RED).withColor(ChatFormat.WHITE).build();
+            .withText(GLYPH_RED).withColor(ChatColor.Legacy.WHITE).build();
         BufferedImage image = render(segment);
         assertRect(image, START, START + 5, GLYPH_TOP, GLYPH_BOTTOM, RED, "default-font pack glyph");
     }
@@ -310,14 +310,14 @@ class MinecraftTooltipPackFontTest {
 
     @Test
     void packGlyphShadowUsesThePipelineShadowColor() {
-        // Gold's legacy shadow color is 0x2A2A00, not the true quartered 0x3F2A00. The glyph's
-        // shadow pass must tint with the same pipeline shadow color built-in runs use, so one
-        // gold segment never shows two shadow hues.
+        // Gold's shadow is the true quartered 0x3F2A00 (the 1.13+ formula the ChatColor model
+        // uses). The glyph's shadow pass must tint with the same pipeline shadow color built-in
+        // runs use, so one gold segment never shows two shadow hues.
         BufferedImage image = render(ColorSegment.builder()
-            .withText(GLYPH_RED).withColor(ChatFormat.GOLD).withPackFontId("testpack:glyphs").build());
+            .withText(GLYPH_RED).withColor(ChatColor.Legacy.GOLD).withPackFontId("testpack:glyphs").build());
 
         assertEquals(RED, image.getRGB(START, GLYPH_TOP), "gold tint keeps the red texture's red channel");
-        assertEquals(0xFF2A0000, image.getRGB(16, 20), "shadow tints with GOLD's background color");
+        assertEquals(0xFF3F0000, image.getRGB(16, 20), "shadow tints with GOLD's background color");
     }
 
     @Test

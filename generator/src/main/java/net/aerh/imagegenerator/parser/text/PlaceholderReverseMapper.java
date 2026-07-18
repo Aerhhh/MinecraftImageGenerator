@@ -7,7 +7,8 @@ import net.aerh.imagegenerator.data.PackGlyphIndex;
 import net.aerh.imagegenerator.data.ParseType;
 import net.aerh.imagegenerator.data.Stat;
 import net.aerh.imagegenerator.parser.Parser;
-import net.aerh.imagegenerator.text.ChatFormat;
+import lib.minecraft.text.ChatColor;
+import net.aerh.imagegenerator.text.LegacyCode;
 import net.aerh.imagegenerator.text.wrapper.TextWrapper;
 import org.jetbrains.annotations.Nullable;
 
@@ -66,7 +67,7 @@ public class PlaceholderReverseMapper {
             return input;
         }
 
-        String normalized = TextWrapper.normalizeNewlines(input.replace(ChatFormat.SECTION_SYMBOL, ChatFormat.AMPERSAND_SYMBOL));
+        String normalized = TextWrapper.normalizeNewlines(input.replace(LegacyCode.SECTION_SYMBOL, LegacyCode.AMPERSAND_SYMBOL));
         String[] lines = normalized.split("\n", -1);
         List<String> mapped = new ArrayList<>(lines.length);
 
@@ -279,11 +280,11 @@ public class PlaceholderReverseMapper {
                 }
 
                 String alternation = iconAlternatives.stream()
-                    .map(alternative -> Pattern.quote(alternative.replace(ChatFormat.SECTION_SYMBOL, ChatFormat.AMPERSAND_SYMBOL)))
+                    .map(alternative -> Pattern.quote(alternative.replace(LegacyCode.SECTION_SYMBOL, LegacyCode.AMPERSAND_SYMBOL)))
                     .collect(Collectors.joining("|"));
                 // The tier format is literal text (brackets included), so every segment around
                 // the icon placeholder must be regex-quoted.
-                String regex = Arrays.stream(format.replace(ChatFormat.SECTION_SYMBOL, ChatFormat.AMPERSAND_SYMBOL).split("%s", -1))
+                String regex = Arrays.stream(format.replace(LegacyCode.SECTION_SYMBOL, LegacyCode.AMPERSAND_SYMBOL).split("%s", -1))
                     .map(segment -> segment.isEmpty() ? "" : Pattern.quote(segment))
                     .collect(Collectors.joining("(?:" + alternation + ")"));
 
@@ -352,10 +353,10 @@ public class PlaceholderReverseMapper {
 
     private String resolveFlavorToken(Flavor flavor, String token) {
         if ("ampersand".equalsIgnoreCase(token)) {
-            return String.valueOf(ChatFormat.AMPERSAND_SYMBOL);
+            return String.valueOf(LegacyCode.AMPERSAND_SYMBOL);
         }
 
-        ChatFormat chatFormat = ChatFormat.of(token.toUpperCase());
+        LegacyCode chatFormat = LegacyCode.of(token.toUpperCase());
         if (chatFormat != null) {
             return String.valueOf(chatFormat.getCode());
         }
@@ -364,8 +365,8 @@ public class PlaceholderReverseMapper {
             String methodName = "get" + Character.toUpperCase(token.charAt(0)) + token.substring(1);
             Method method = Flavor.class.getMethod(methodName);
             Object value = method.invoke(flavor);
-            if (value instanceof ChatFormat) {
-                return String.valueOf(((ChatFormat) value).getCode());
+            if (value instanceof ChatColor.Legacy) {
+                return String.valueOf(((ChatColor.Legacy) value).codeChar());
             }
             if (value != null) {
                 return value.toString();
@@ -399,10 +400,10 @@ public class PlaceholderReverseMapper {
 
     private String resolveStatToken(Stat stat, String token) {
         if ("ampersand".equalsIgnoreCase(token)) {
-            return String.valueOf(ChatFormat.AMPERSAND_SYMBOL);
+            return String.valueOf(LegacyCode.AMPERSAND_SYMBOL);
         }
 
-        ChatFormat chatFormat = ChatFormat.of(token.toUpperCase());
+        LegacyCode chatFormat = LegacyCode.of(token.toUpperCase());
         if (chatFormat != null) {
             return String.valueOf(chatFormat.getCode());
         }
@@ -411,8 +412,8 @@ public class PlaceholderReverseMapper {
             String methodName = "get" + Character.toUpperCase(token.charAt(0)) + token.substring(1);
             Method method = Stat.class.getMethod(methodName);
             Object value = method.invoke(stat);
-            if (value instanceof ChatFormat cf) {
-                return String.valueOf(cf.getCode());
+            if (value instanceof ChatColor.Legacy cf) {
+                return String.valueOf(cf.codeChar());
             }
             if (value != null) {
                 return value.toString();

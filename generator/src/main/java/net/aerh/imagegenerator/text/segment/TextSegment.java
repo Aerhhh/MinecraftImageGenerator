@@ -4,11 +4,11 @@ package net.aerh.imagegenerator.text.segment;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import lombok.Setter;
+import lib.minecraft.text.ChatColor;
 import net.aerh.imagegenerator.builder.ClassBuilder;
 import net.aerh.imagegenerator.impl.nbt.NbtTextComponentUtil;
-import net.aerh.imagegenerator.text.ChatFormat;
+import net.aerh.imagegenerator.text.LegacyCode;
 import net.aerh.imagegenerator.text.MinecraftFont;
-import net.aerh.imagegenerator.text.TextColor;
 import net.aerh.imagegenerator.text.event.ClickEvent;
 import net.aerh.imagegenerator.text.event.HoverEvent;
 import org.jetbrains.annotations.NotNull;
@@ -40,7 +40,7 @@ public final class TextSegment extends ColorSegment {
             if (jsonObject.has("color")) {
                 // Named colors and vanilla 1.16+ hex colors; unknown values keep the default
                 // (matching how the NBT pipeline treats unrecognized colors) instead of throwing.
-                TextColor color = TextColor.fromJsonString(jsonObject.get("color").getAsString());
+                ChatColor color = ChatColor.fromJsonString(jsonObject.get("color").getAsString());
                 if (color != null) {
                     textSegment.setColor(color);
                 }
@@ -79,10 +79,10 @@ public final class TextSegment extends ColorSegment {
     /**
      * This function takes in a legacy text string and converts it into a {@link TextSegment}.
      * <p>
-     * Legacy text strings use the {@link ChatFormat#SECTION_SYMBOL}. Many keyboards do not have this symbol however,
+     * Legacy text strings use the {@link LegacyCode#SECTION_SYMBOL}. Many keyboards do not have this symbol however,
      * which is probably why it was chosen. To get around this, it is common practice to substitute
      * the symbol for another, then translate it later. Often '&' is used, but this can differ from person
-     * to person. In case the string does not have a {@link ChatFormat#SECTION_SYMBOL}, the method also checks for the
+     * to person. In case the string does not have a {@link LegacyCode#SECTION_SYMBOL}, the method also checks for the
      * {@param characterSubstitute}
      *
      * @param legacyText       The text to make into an object
@@ -128,7 +128,7 @@ public final class TextSegment extends ColorSegment {
     public static class Builder implements ClassBuilder<TextSegment> {
 
         protected String text = "";
-        protected TextColor color;
+        protected ChatColor color;
         protected boolean italic, bold, underlined, obfuscated, strikethrough;
         private ClickEvent clickEvent;
         private HoverEvent hoverEvent;
@@ -178,7 +178,7 @@ public final class TextSegment extends ColorSegment {
             return this;
         }
 
-        public Builder withColor(@NotNull TextColor color) {
+        public Builder withColor(@NotNull ChatColor color) {
             this.color = color;
             return this;
         }

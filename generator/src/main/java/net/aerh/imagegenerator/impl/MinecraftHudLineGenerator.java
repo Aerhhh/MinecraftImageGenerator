@@ -13,8 +13,7 @@ import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.pack.PackId;
 import net.aerh.imagegenerator.pack.PackRepository;
 import net.aerh.imagegenerator.text.PackGlyphDispatcher;
-import net.aerh.imagegenerator.text.RgbColor;
-import net.aerh.imagegenerator.text.TextColor;
+import lib.minecraft.text.ChatColor;
 import net.aerh.imagegenerator.text.segment.ColorSegment;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -72,7 +71,7 @@ public class MinecraftHudLineGenerator implements Generator {
     /** Vertical pitch between stacked bossbar anchors in GUI px. */
     public static final int LINE_PITCH = 19;
     /** Vanilla bossbar names draw in plain white (with shadow). */
-    public static final TextColor DEFAULT_TEXT_COLOR = new RgbColor(0xFFFFFF);
+    public static final ChatColor DEFAULT_TEXT_COLOR = ChatColor.of(0xFFFFFF);
 
     /** Lines of the stack, outermost list per line, inner list the line's styled runs. */
     private final List<List<TitleRun>> lines;

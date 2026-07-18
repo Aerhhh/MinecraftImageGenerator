@@ -8,7 +8,7 @@ import net.aerh.imagegenerator.pack.PackRepository;
 import net.aerh.imagegenerator.pack.PackSource;
 import net.aerh.imagegenerator.testsupport.FixturePacks;
 import net.aerh.imagegenerator.testsupport.ImageAssertions;
-import net.aerh.imagegenerator.text.RgbColor;
+import lib.minecraft.text.ChatColor;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -66,7 +66,7 @@ class MinecraftHudLineGeneratorTest {
 
     /** A glyph run in explicit white, preserving the fixture art exactly (multiplicative tint). */
     private static TitleRun whiteRun(String text) {
-        return new TitleRun(text, MENU_FONT, new RgbColor(0xFFFFFF), false, false);
+        return new TitleRun(text, MENU_FONT, ChatColor.of(0xFFFFFF), false, false);
     }
 
     // ------------------------------------------------------------- placement
@@ -257,11 +257,11 @@ class MinecraftHudLineGeneratorTest {
         PackRepository repository = registerContainerPack();
         BufferedImage first = packBuilder(repository)
             .withLine(whiteRun(GLYPH_ANCHOR), TitleRun.of(" Boss"))
-            .withLine(new TitleRun("Phase 2", null, new RgbColor(0xFFAA00), true, false))
+            .withLine(new TitleRun("Phase 2", null, ChatColor.of(0xFFAA00), true, false))
             .build().render(null).getImage();
         BufferedImage second = packBuilder(repository)
             .withLine(whiteRun(GLYPH_ANCHOR), TitleRun.of(" Boss"))
-            .withLine(new TitleRun("Phase 2", null, new RgbColor(0xFFAA00), true, false))
+            .withLine(new TitleRun("Phase 2", null, ChatColor.of(0xFFAA00), true, false))
             .build().render(null).getImage();
 
         ImageAssertions.assertPixelsEqual(first, second, "deterministic render");
