@@ -52,11 +52,16 @@ public final class GeneratorCache {
         int animatedCount = 0;
 
         if (CACHE != null) {
-            for (GeneratedObject object : CACHE.values()) {
-                if (object != null) {
-                    objectCount++;
-                    if (object.isAnimated()) {
-                        animatedCount++;
+            // Collections.synchronizedMap requires manual synchronization when iterating a view,
+            // and the backing access-order LinkedHashMap treats a concurrent get() as a structural
+            // change, so an unsynchronized iteration here can throw ConcurrentModificationException.
+            synchronized (CACHE) {
+                for (GeneratedObject object : CACHE.values()) {
+                    if (object != null) {
+                        objectCount++;
+                        if (object.isAnimated()) {
+                            animatedCount++;
+                        }
                     }
                 }
             }
