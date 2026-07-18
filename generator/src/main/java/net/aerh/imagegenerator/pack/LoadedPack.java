@@ -80,16 +80,8 @@ final class LoadedPack {
      * first missing index.
      */
     private static final int MAX_GENERATED_LAYERS = 5;
-    /**
-     * The vanilla flat-item template parents that real packs legitimately leave dangling: a
-     * model chain ending at one of these OUTSIDE the pack terminates with builtin flat-layer
-     * semantics (the {@code item/generated}/{@code item/handheld} templates carry no elements,
-     * textures or GUI-relevant transforms of their own) instead of failing. Any other parent
-     * missing from a pack-claimed namespace still fails loudly - it was meant to supply
-     * something.
-     */
-    private static final Set<String> BUILTIN_FLAT_PARENTS =
-        Set.of("minecraft:item/generated", "minecraft:item/handheld");
+    /** The {@code item/} path prefix every concrete vanilla item template shares. */
+    private static final String VANILLA_ITEM_PATH_PREFIX = "item/";
     /**
      * Pack ids whose textures use alpha 252 as an "opaque full-bright" emissive marker (a
      * Hypixel SkyBlock shader convention). Only these packs get the alpha normalized to fully
@@ -664,12 +656,14 @@ final class LoadedPack {
      *
      * <p>Elements chains stop at parents outside the pack (vanilla model assets are
      * unavailable); their textures and display transforms are treated as absent. Chains ending
-     * at the builtin flat templates {@code minecraft:item/generated} or
-     * {@code minecraft:item/handheld} terminate the same way even when the pack claims the
-     * {@code minecraft} namespace without shipping those models - the vanilla flat-item shape
-     * real packs rely on. A missing IN-pack parent of any other name, a cyclic chain, or a
-     * chain deeper than the layer0 path allows fails loudly instead of silently dropping
-     * inherited transforms.
+     * at any vanilla item template {@code minecraft:item/*} the pack does not ship - the builtin
+     * {@code item/generated} and {@code item/handheld} or a concrete model like
+     * {@code item/wooden_pickaxe} - terminate with flat generated-family semantics even when the
+     * pack claims the {@code minecraft} namespace without shipping those models (the template's
+     * own layer0 is contributed from the pack's copy of the identically named texture, or
+     * warn-skipped when absent). A missing IN-pack parent of any other name (a
+     * {@code minecraft:block/*} template included), a cyclic chain, or a chain deeper than the
+     * layer0 path allows fails loudly instead of silently dropping inherited transforms.
      *
      * @return empty when the ref is bare, in a foreign namespace, or unknown - callers fall back
      *     to vanilla
@@ -965,7 +959,7 @@ final class LoadedPack {
      * {@code layerN} value of the form {@code #key} follows the merged map exactly like element
      * face references (vanilla resolves references for generated layers too); an indirection to
      * an undefined key fails loudly. A chain with no layer0 at all raises the same per-shape
-     * errors as {@link #resolveLayer0} - a builtin-template end, an outside-pack end, a
+     * errors as {@link #resolveLayer0} - a vanilla-item-template end, an outside-pack end, a
      * parentless model and a broken parent ref each keep their dedicated message.
      */
     private List<String> resolveGeneratedLayerPaths(String modelRefValue) {
@@ -1034,14 +1028,52 @@ final class LoadedPack {
     }
 
     /**
+     * Whether an unresolved model reference is a concrete vanilla item template - a
+     * {@code minecraft:item/*} model the pack does not ship. Every vanilla item model is itself a
+     * flat generated/handheld-family model whose own layer0 is the identically named texture, so a
+     * chain reaching one terminates with flat-sprite semantics rather than failing: a child that
+     * parents {@code minecraft:item/wooden_pickaxe} and supplies its own layer0 renders exactly
+     * like a child of {@code item/generated}. Block-model parents ({@code minecraft:block/*}) and
+     * every non-{@code minecraft} namespace still fail loud - they were meant to supply real
+     * geometry or live in an unavailable namespace.
+     */
+    private static boolean isVanillaItemTerminal(ResourceRef ref) {
+        return "minecraft".equals(ref.namespace()) && ref.path().startsWith(VANILLA_ITEM_PATH_PREFIX);
+    }
+
+    /**
+     * Contributes a vanilla item template's own {@code layer0} to the merged texture map when the
+     * chain reaches the template without a child-supplied layer0. A vanilla item model declares
+     * {@code layer0} as the identically named texture ({@code minecraft:item/<name>}); it is added
+     * only when the pack actually ships that texture (real packs override the vanilla textures they
+     * reskin). An absent texture is warn-skipped so the layer simply drops rather than exploding
+     * the later decode - the bundled-vanilla-atlas fallback the client would consult is not shipped
+     * here. A child that already declared {@code layer0} keeps it (child-most wins), so this never
+     * overrides pack art.
+     */
+    private void contributeVanillaTerminalLayer0(ResourceRef terminal, Map<String, String> textures) {
+        if (textures.containsKey("layer0")) {
+            return;
+        }
+        if (source.exists(terminal.texturePath())) {
+            textures.put("layer0", terminal.toString());
+        } else {
+            log.warn("Pack {}: vanilla item template `{}` supplies layer0 `{}`, but the pack ships no such "
+                + "texture; skipping the layer", id, terminal, terminal.texturePath());
+        }
+    }
+
+    /**
      * Walks a model's parent chain. Chains stop silently at the first parent OUTSIDE the pack
      * (vanilla model assets are unavailable; its textures and transforms are treated as absent,
-     * documented behavior) and at the {@link #BUILTIN_FLAT_PARENTS} even when the pack claims
-     * the {@code minecraft} namespace - real packs end chains at {@code item/generated} or
-     * {@code item/handheld} without shipping those templates. A missing IN-pack model of any
-     * other name or a chain exceeding {@link #MAX_PARENT_DEPTH} (cycles included) fails loudly
-     * with the same errors {@link #resolveLayer0} raises for the identical breakage - a broken
-     * parent ref must never silently drop the transforms or textures it was meant to supply.
+     * documented behavior) and at any {@link #isVanillaItemTerminal vanilla item template} the
+     * pack does not ship even when it claims the {@code minecraft} namespace - real packs end
+     * chains at {@code item/generated}, {@code item/handheld} or a concrete vanilla item model
+     * (e.g. {@code item/wooden_pickaxe}) without shipping those templates. A missing IN-pack
+     * model of any other name (a {@code minecraft:block/*} template included), or a chain
+     * exceeding {@link #MAX_PARENT_DEPTH} (cycles included), fails loudly with the same errors
+     * {@link #resolveLayer0} raises for the identical breakage - a broken parent ref must never
+     * silently drop the transforms or textures it was meant to supply.
      */
     private ChainData resolveModelChain(String modelRefValue) {
         ResourceRef modelRef = parseRefOrResolveError(modelRefValue, "minecraft");
@@ -1057,10 +1089,15 @@ final class LoadedPack {
             }
             ModelInfo model = models.get(modelRef.toString());
             if (model == null) {
-                if (BUILTIN_FLAT_PARENTS.contains(modelRef.toString())) {
-                    // The builtin flat templates carry nothing this walk collects; ending here
-                    // is the ordinary flat-item shape, not a broken pack. The vanilla templates
-                    // declare gui_light front, so an undeclared chain inherits it here.
+                if (isVanillaItemTerminal(modelRef)) {
+                    // A concrete vanilla item template the pack does not ship (item/generated,
+                    // item/handheld, or a named item like item/wooden_pickaxe): every vanilla
+                    // item model is a flat generated-family model, so ending here is the ordinary
+                    // flat-item shape, not a broken pack. The template's own layer0 is the
+                    // identically named texture; contribute it when no child overrode it (see
+                    // the helper). The vanilla templates declare gui_light front, so an undeclared
+                    // chain inherits it here.
+                    contributeVanillaTerminalLayer0(modelRef, textures);
                     return new ChainData(elements, Map.copyOf(textures), guiTransform,
                         guiLightOf(guiLight, true));
                 }
@@ -1104,24 +1141,26 @@ final class LoadedPack {
      * {@link #loadElementTexture}, so the two texture paths can never disagree on where a bare
      * reference points.
      *
-     * <p>Reaching a {@link #BUILTIN_FLAT_PARENTS builtin flat parent} that is not in the pack
-     * ends the chain like {@link #resolveModelChain}: the builtin templates declare no layer0
-     * of their own, so arriving here without one found earlier means the chain has no texture
-     * at all - a loud failure with a dedicated message rather than a missing-model error.
+     * <p>Reaching a {@link #isVanillaItemTerminal vanilla item template} that is not in the pack
+     * ends the chain like {@link #resolveModelChain}: those templates declare no layer0 of their
+     * own beyond the identically named texture, so arriving here without one found earlier (and
+     * without the pack shipping that texture, which {@link #resolveModelChain} would have
+     * contributed) means the chain has no texture at all - a loud failure with a dedicated message
+     * rather than a missing-model error.
      */
     private String resolveLayer0(String modelRefValue) {
         ResourceRef modelRef = parseRefOrResolveError(modelRefValue, "minecraft");
         for (int depth = 0; depth < MAX_PARENT_DEPTH; depth++) {
             ModelInfo model = namespaces.contains(modelRef.namespace()) ? models.get(modelRef.toString()) : null;
             if (model == null) {
-                if (BUILTIN_FLAT_PARENTS.contains(modelRef.toString())) {
-                    throw new PackResolveException(
-                        "Model chain ends at builtin `%s` without any layer0 texture in pack `%s`",
-                        modelRef.toString(), id.toString());
-                }
                 if (!namespaces.contains(modelRef.namespace())) {
                     throw new PackResolveException(
                         "Model `%s` in pack `%s` resolves outside the pack; cannot render without vanilla model assets",
+                        modelRef.toString(), id.toString());
+                }
+                if (isVanillaItemTerminal(modelRef)) {
+                    throw new PackResolveException(
+                        "Model chain ends at vanilla item template `%s` without any layer0 texture in pack `%s`",
                         modelRef.toString(), id.toString());
                 }
                 throw new PackResolveException("Model `%s` not found in pack `%s`", modelRef.toString(), id.toString());

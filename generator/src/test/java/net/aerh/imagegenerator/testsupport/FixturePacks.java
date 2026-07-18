@@ -820,9 +820,19 @@ public final class FixturePacks {
      *     without shipping the builtin templates, the real-pack shape. {@code vanilla_exit} and
      *     {@code handheld_exit} end their chains at {@code minecraft:item/generated} /
      *     {@code item/handheld} with a layer0 present (render as flat sprites);
-     *     {@code vanilla_dead_end} ends at another missing minecraft-namespace model (resolve
-     *     throws); {@code generated_no_layer0} ends at {@code item/generated} without any
-     *     layer0 (resolve throws).</li>
+     *     {@code generated_no_layer0} ends at {@code item/generated} without any layer0 (resolve
+     *     throws).</li>
+     * <li>Concrete vanilla item terminals (the modern-pack shape - models parent named vanilla
+     *     item templates the pack does not ship). {@code item_terminal_reskin} parents
+     *     {@code minecraft:item/wooden_pickaxe} and supplies its own layer0 -> renders that
+     *     (green); {@code item_terminal_shipped_texture} parents {@code minecraft:item/paper}
+     *     with NO layer0 but ships the identically named vanilla texture -> renders it (0xFF334455);
+     *     {@code item_terminal_no_texture} parents {@code minecraft:item/stick} with no layer0 and
+     *     ships no texture -> the layer is warn-skipped and resolve throws; {@code shipped_vanilla_wins}
+     *     parents {@code minecraft:item/shipped_vanilla}, which the pack DOES ship (layer0 red) ->
+     *     the shipped model wins over the synthesized terminal; {@code block_dead_end} parents a
+     *     {@code minecraft:block/*} template -> still fails loud (block chains are not flat
+     *     terminals).</li>
      * </ul>
      */
     public static Path writeElementsPack(Path root) {
@@ -1069,13 +1079,45 @@ public final class FixturePacks {
                 {"parent":"minecraft:item/handheld",
                  "textures":{"layer0":"testpack:item/green"}}""");
             delegatingItem(root, "handheld_exit", "testpack:item/handheld_child");
-            write(root, "assets/testpack/models/item/other_vanilla_child.json", """
-                {"parent":"minecraft:item/other_template",
-                 "textures":{"layer0":"testpack:item/white"}}""");
-            delegatingItem(root, "vanilla_dead_end", "testpack:item/other_vanilla_child");
             write(root, "assets/testpack/models/item/gen_bare_child.json", """
                 {"parent":"minecraft:item/generated"}""");
             delegatingItem(root, "generated_no_layer0", "testpack:item/gen_bare_child");
+
+            // Concrete vanilla item terminals: a modern pack whose models parent NAMED vanilla item
+            // templates it does not ship. Each is a flat generated-family model; the chain must
+            // terminate flat rather than throwing model-not-found.
+            // (1) child supplies its own layer0 -> renders it, exactly like an item/generated child.
+            write(root, "assets/testpack/models/item/item_terminal_reskin_model.json", """
+                {"parent":"minecraft:item/wooden_pickaxe",
+                 "textures":{"layer0":"testpack:item/green"}}""");
+            delegatingItem(root, "item_terminal_reskin", "testpack:item/item_terminal_reskin_model");
+            // (2) child has NO layer0, but the pack ships the identically named vanilla texture the
+            // template's own layer0 points at -> the terminal contributes that layer0 (the reskin
+            // shape: a pack overrides the vanilla item texture but keeps the vanilla model).
+            write(root, "assets/testpack/models/item/item_terminal_shipped_model.json", """
+                {"parent":"minecraft:item/paper"}""");
+            textureAt(root, "minecraft", "paper", solid(2, 2, 0xFF334455));
+            delegatingItem(root, "item_terminal_shipped_texture", "testpack:item/item_terminal_shipped_model");
+            // (3) child has no layer0 and the pack ships no such texture -> the terminal layer is
+            // warn-skipped, leaving nothing to render (resolve throws).
+            write(root, "assets/testpack/models/item/item_terminal_bare_model.json", """
+                {"parent":"minecraft:item/stick"}""");
+            delegatingItem(root, "item_terminal_no_texture", "testpack:item/item_terminal_bare_model");
+            // (4) the pack DOES ship the vanilla-named model: it wins over the synthesized terminal,
+            // so the chain walks into it and renders its layer0 (red) rather than a paper-style
+            // terminal texture.
+            write(root, "assets/minecraft/models/item/shipped_vanilla.json", """
+                {"parent":"minecraft:item/generated",
+                 "textures":{"layer0":"testpack:item/red"}}""");
+            write(root, "assets/testpack/models/item/shipped_vanilla_child.json", """
+                {"parent":"minecraft:item/shipped_vanilla"}""");
+            delegatingItem(root, "shipped_vanilla_wins", "testpack:item/shipped_vanilla_child");
+            // (5) a minecraft:block/* template the pack does not ship still fails loud: block models
+            // carry real geometry this flat-item path cannot synthesize.
+            write(root, "assets/testpack/models/item/block_parent_model.json", """
+                {"parent":"minecraft:block/some_block",
+                 "textures":{"layer0":"testpack:item/white"}}""");
+            delegatingItem(root, "block_dead_end", "testpack:item/block_parent_model");
 
             return root;
         } catch (IOException e) {

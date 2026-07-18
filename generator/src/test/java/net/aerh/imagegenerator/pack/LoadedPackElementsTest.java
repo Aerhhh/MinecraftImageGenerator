@@ -378,12 +378,49 @@ class LoadedPackElementsTest {
     }
 
     @Test
-    void chainEndingAtOtherMissingVanillaModelStillFailsLoudly() {
-        // Only item/generated and item/handheld are known texture-less flat templates; any
-        // other missing minecraft-namespace parent was meant to supply something.
+    void chainEndingAtNamedVanillaItemWithChildLayer0RendersFlat() {
+        // A child of a concrete vanilla item template (item/wooden_pickaxe) the pack does not
+        // ship, supplying its own layer0: every vanilla item model is a flat generated-family
+        // model, so this renders the child sprite flat rather than throwing model-not-found.
+        PackItemVisual visual = pack.resolveItemVisual("testpack:item/item_terminal_reskin",
+            CustomModelData.EMPTY, SCALE).orElseThrow();
+        assertEquals(0xFF00FF00, assertInstanceOf(PackItemVisual.Sprite.class, visual).sprite().getRGB(0, 0));
+        assertEquals(0xFF00FF00, pack.resolveSprite("testpack:item/item_terminal_reskin").orElseThrow().getRGB(0, 0),
+            "resolveSprite terminates the chain identically");
+    }
+
+    @Test
+    void chainEndingAtNamedVanillaItemUsesShippedVanillaTexture() {
+        // The child declares no layer0, so the template's own layer0 (the identically named
+        // texture) is used - here the pack ships assets/minecraft/textures/item/paper.png.
+        assertEquals(0xFF334455, pack.resolveSprite("testpack:item/item_terminal_shipped_texture")
+            .orElseThrow().getRGB(0, 0));
+    }
+
+    @Test
+    void chainEndingAtNamedVanillaItemWithoutTextureFailsLoudly() {
+        // No child layer0 and no shipped vanilla texture: the terminal layer is warn-skipped,
+        // leaving nothing to render.
         PackResolveException exception = assertThrows(PackResolveException.class,
-            () -> pack.resolveItemVisual("testpack:item/vanilla_dead_end", CustomModelData.EMPTY, SCALE));
-        assertTrue(exception.getMessage().contains("other_template"), exception.getMessage());
+            () -> pack.resolveItemVisual("testpack:item/item_terminal_no_texture", CustomModelData.EMPTY, SCALE));
+        assertTrue(exception.getMessage().contains("layer0"), exception.getMessage());
+    }
+
+    @Test
+    void packShippedVanillaModelWinsOverTheSynthesizedTerminal() {
+        // The pack ships minecraft:item/shipped_vanilla, so the chain walks into it (layer0 red)
+        // instead of synthesizing a terminal from the reference's own name.
+        assertEquals(0xFFFF0000, pack.resolveSprite("testpack:item/shipped_vanilla_wins")
+            .orElseThrow().getRGB(0, 0));
+    }
+
+    @Test
+    void chainEndingAtVanillaBlockTemplateStillFailsLoudly() {
+        // Only minecraft:item/* templates terminate flat; a minecraft:block/* parent carries
+        // real geometry this flat-item path cannot synthesize and must still fail loud.
+        PackResolveException exception = assertThrows(PackResolveException.class,
+            () -> pack.resolveItemVisual("testpack:item/block_dead_end", CustomModelData.EMPTY, SCALE));
+        assertTrue(exception.getMessage().contains("block/some_block"), exception.getMessage());
     }
 
     @Test
