@@ -19,6 +19,7 @@ import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -73,14 +74,29 @@ class JsonSceneGeneratorTest {
     }
 
     private static void assertSamePixels(BufferedImage expected, BufferedImage actual, String message) {
-        assertEquals(expected.getWidth(), actual.getWidth(), message + " (width)");
-        assertEquals(expected.getHeight(), actual.getHeight(), message + " (height)");
+        String difference = firstDifference(expected, actual);
+        assertNull(difference, () -> message + ": " + difference);
+    }
+
+    /**
+     * The single width/height plus per-pixel RGB comparison both the assert and boolean helpers run
+     * through. Returns a description of the first mismatch, or null when the two images are identical.
+     */
+    private static String firstDifference(BufferedImage expected, BufferedImage actual) {
+        if (expected.getWidth() != actual.getWidth()) {
+            return "width " + expected.getWidth() + " vs " + actual.getWidth();
+        }
+        if (expected.getHeight() != actual.getHeight()) {
+            return "height " + expected.getHeight() + " vs " + actual.getHeight();
+        }
         for (int y = 0; y < expected.getHeight(); y++) {
             for (int x = 0; x < expected.getWidth(); x++) {
-                assertEquals(expected.getRGB(x, y), actual.getRGB(x, y),
-                    message + " at (" + x + ", " + y + ")");
+                if (expected.getRGB(x, y) != actual.getRGB(x, y)) {
+                    return "pixel at (" + x + ", " + y + ")";
+                }
             }
         }
+        return null;
     }
 
     // ------------------------------------------------------------ rejections
