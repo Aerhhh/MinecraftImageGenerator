@@ -64,7 +64,6 @@ public class MinecraftItemGenerator implements Generator {
     private final String color;
     private final boolean enchanted;
     private final boolean hoverEffect;
-    private final boolean bigImage;
     private final Integer durabilityPercent;
     private final OverlayLoader overlayLoader;
     private final EffectPipeline effectPipeline;
@@ -105,25 +104,7 @@ public class MinecraftItemGenerator implements Generator {
         // Execute effect pipeline (overlay, glint, hover, durability)
         context = effectPipeline.execute(context);
 
-        // Apply big image scaling if requested
         BufferedImage finalImage = context.getImage();
-        if (bigImage && finalImage != null && finalImage.getHeight() <= 16 && finalImage.getWidth() <= 16) {
-            if (context.isAnimated()) {
-                List<BufferedImage> scaledFrames = context.getAnimationFrames().stream()
-                    .map(frame -> ImageUtil.upscaleImage(frame, 10))
-                    .toList();
-                context = new EffectContext.Builder()
-                    .withAnimationFrames(scaledFrames, context.getFrameDelayMs())
-                    .withItemId(displayId())
-                    .withEnchanted(enchanted)
-                    .withHovered(hoverEffect)
-                    .withMetadata(context.getMetadata())
-                    .build();
-                finalImage = scaledFrames.getFirst();
-            } else {
-                finalImage = ImageUtil.upscaleImage(finalImage, 10);
-            }
-        }
 
         if (context.isAnimated()) {
             try {
@@ -180,9 +161,6 @@ public class MinecraftItemGenerator implements Generator {
                 case PackItemVisual.ElementsRaster raster -> raster.image();
             };
             frames.add(applyStaticEffects(base));
-        }
-        if (bigImage && frames.getFirst().getWidth() <= 16 && frames.getFirst().getHeight() <= 16) {
-            frames = frames.stream().map(frame -> ImageUtil.upscaleImage(frame, 10)).toList();
         }
         List<Integer> delaysMs = animation.stepTicks().stream()
             .map(AnimationTimeline::ticksToMillis)
@@ -278,7 +256,6 @@ public class MinecraftItemGenerator implements Generator {
         private String color;
         private boolean enchanted;
         private boolean hoverEffect;
-        private boolean bigImage;
         private Integer durabilityPercent;
         private OverlayLoader overlayLoader;
         private EffectPipeline effectPipeline;
@@ -386,15 +363,6 @@ public class MinecraftItemGenerator implements Generator {
             return this;
         }
 
-        public MinecraftItemGenerator.Builder isBigImage(boolean bigImage) {
-            this.bigImage = bigImage;
-            return this;
-        }
-
-        public MinecraftItemGenerator.Builder isBigImage() {
-            return isBigImage(true);
-        }
-
         public MinecraftItemGenerator.Builder withDurability(int durabilityPercent) {
             if (durabilityPercent < 0 || durabilityPercent > 100) {
                 throw new IllegalArgumentException("durabilityPercent must be between 0 and 100");
@@ -487,7 +455,7 @@ public class MinecraftItemGenerator implements Generator {
 
             return new MinecraftItemGenerator(
                 itemId, itemModel, customModelData, itemDamage, fullGuiRotations, animatedTextures, data, color,
-                enchanted, hoverEffect, bigImage, durabilityPercent, overlayLoader, effectPipeline,
+                enchanted, hoverEffect, durabilityPercent, overlayLoader, effectPipeline,
                 packId, packRepository
             );
         }
