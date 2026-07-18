@@ -104,14 +104,12 @@ public class MinecraftNbtParser {
             } else {
                 generators.add(new MinecraftItemGenerator.Builder()
                     .withItem(parsedItemId)
-                    .isEnchanted(enchanted)
-                    .isBigImage());
+                    .isEnchanted(enchanted));
             }
         } else {
             generators.add(new MinecraftItemGenerator.Builder()
                 .withItem(parsedItemId)
-                .isEnchanted(enchanted)
-                .isBigImage());
+                .isEnchanted(enchanted));
         }
 
         int maxLineLength = resolveMaxLineLength(formatMetadata, formatHandler);
@@ -132,8 +130,7 @@ public class MinecraftNbtParser {
             generators.add(new MinecraftItemGenerator.Builder()
                 .withItem(jsonObject.get("id").getAsString())
                 .withData(dyeColor)
-                .isEnchanted(enchanted)
-                .isBigImage());
+                .isEnchanted(enchanted));
         } else if (dyeColor == null) {
             log.trace("No dye color present for item '{}'", parsedItemId);
         } else {

@@ -105,7 +105,6 @@ Render any vanilla item from its id, optionally with an animated enchantment gli
 // Static item
 new MinecraftItemGenerator.Builder()
     .withItem("diamond_sword")
-    .isBigImage()
     .build();
 
 // Animated enchant glint
@@ -113,7 +112,6 @@ GeneratedObject glint = new GeneratorImageBuilder()
     .addGenerator(new MinecraftItemGenerator.Builder()
         .withItem("netherite_sword")
         .isEnchanted(true)
-        .isBigImage()
         .build())
     .build();
 
@@ -204,7 +202,6 @@ new MinecraftTooltipGenerator.Builder()
 new MinecraftItemGenerator.Builder()
     .withItem("hypixel_skyblock:item/uncategorized/aurora_staff")
     .withPack("hypixel:skyblock")
-    .isBigImage()
     .build();
 ```
 
@@ -363,7 +360,6 @@ Items can be addressed by their `minecraft:item_model` component value, and item
 new MinecraftItemGenerator.Builder()
     .withItemModel("emberveil:item/ember_blade")
     .withPack("emberveil:main")
-    .isBigImage()
     .build();
 
 // Evaluate custom_model_data dispatch nodes and tint sources
