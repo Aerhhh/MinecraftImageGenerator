@@ -289,34 +289,36 @@ public class MinecraftTooltip {
 
         BufferedImage tempImg = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
         Graphics2D tempG2d = tempImg.createGraphics();
-        tempG2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
-        FontMetrics[] metrics = new FontMetrics[fonts.size()];
+        try {
+            tempG2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
+            FontMetrics[] metrics = new FontMetrics[fonts.size()];
 
-        for (int i = 0; i < fonts.size(); i++) {
-            metrics[i] = tempG2d.getFontMetrics(fonts.get(i));
-        }
+            for (int i = 0; i < fonts.size(); i++) {
+                metrics[i] = tempG2d.getFontMetrics(fonts.get(i));
+            }
 
-        for (int fontIndex = 0; fontIndex < fonts.size(); fontIndex++) {
-            Font font = fonts.get(fontIndex);
-            FontMetrics fontMetrics = metrics[fontIndex];
+            for (int fontIndex = 0; fontIndex < fonts.size(); fontIndex++) {
+                Font font = fonts.get(fontIndex);
+                FontMetrics fontMetrics = metrics[fontIndex];
 
-            Map<Integer, List<Character>> map = OBFUSCATION_WIDTH_MAPS.get(fontIndex);
+                Map<Integer, List<Character>> map = OBFUSCATION_WIDTH_MAPS.get(fontIndex);
 
-            for (int range = 0; range < UNICODE_BLOCK_RANGES.length; range += 2) {
-                for (int codePoint = UNICODE_BLOCK_RANGES[range]; codePoint <= UNICODE_BLOCK_RANGES[range + 1]; codePoint++) {
-                    char c = (char) codePoint;
+                for (int range = 0; range < UNICODE_BLOCK_RANGES.length; range += 2) {
+                    for (int codePoint = UNICODE_BLOCK_RANGES[range]; codePoint <= UNICODE_BLOCK_RANGES[range + 1]; codePoint++) {
+                        char c = (char) codePoint;
 
-                    if (MinecraftFonts.canRender(font, c)) {
-                        int width = fontMetrics.charWidth(c);
-                        if (width > 0) {
-                            map.computeIfAbsent(width, k -> new ArrayList<>()).add(c);
+                        if (MinecraftFonts.canRender(font, c)) {
+                            int width = fontMetrics.charWidth(c);
+                            if (width > 0) {
+                                map.computeIfAbsent(width, k -> new ArrayList<>()).add(c);
+                            }
                         }
                     }
                 }
             }
+        } finally {
+            tempG2d.dispose();
         }
-
-        tempG2d.dispose();
 
         log.info("Precomputed obfuscation character widths. Regular: {} chars, Bold: {} chars, Italic: {} chars, BoldItalic: {} chars.",
             OBFUSCATION_WIDTH_MAPS.get(0).values().stream().mapToInt(List::size).sum(),
@@ -363,8 +365,11 @@ public class MinecraftTooltip {
         );
 
         Graphics2D graphics2D = paddedFrame.createGraphics();
-        graphics2D.drawImage(frame, this.getPadding(), this.getPadding(), frame.getWidth(), frame.getHeight(), null);
-        graphics2D.dispose();
+        try {
+            graphics2D.drawImage(frame, this.getPadding(), this.getPadding(), frame.getWidth(), frame.getHeight(), null);
+        } finally {
+            graphics2D.dispose();
+        }
 
         return paddedFrame;
     }
@@ -1073,10 +1078,14 @@ public class MinecraftTooltip {
         // Determine the largest width using the measureLines method
         BufferedImage dummyImage = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
         Graphics2D measureGraphics = dummyImage.createGraphics();
-        measureGraphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
-        measureLines(measureGraphics);
-        int measuredHeight = this.locationY;
-        measureGraphics.dispose();
+        int measuredHeight;
+        try {
+            measureGraphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
+            measureLines(measureGraphics);
+            measuredHeight = this.locationY;
+        } finally {
+            measureGraphics.dispose();
+        }
 
         // Calculate final dimensions based on the measured largestWidth and height; leftShift
         // widens the canvas for glyph art that would otherwise clip at the left edge
@@ -1107,32 +1116,36 @@ public class MinecraftTooltip {
         for (int i = 0; i < framesToGenerate; i++) {
             BufferedImage frameImage = new BufferedImage(frameWidth, frameHeight, BufferedImage.TYPE_INT_ARGB);
             Graphics2D graphics = frameImage.createGraphics();
-            graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
+            BufferedImage processedFrame;
+            try {
+                graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
 
-            if (themeLayer != null) {
-                // Background and frame sprites carry their own alpha; the alpha knob is not applied.
-                graphics.drawImage(themeLayer, 0, 0, null);
-            } else {
-                // Draw background first
-                graphics.setColor(new Color(18, 3, 18, this.isAnimated ? 255 : this.getAlpha()));
-                graphics.fillRect(
-                    pixelSize * 2, // Inner edge of border
-                    pixelSize * 2,
-                    frameWidth - pixelSize * 4, // Width inside borders
-                    frameHeight - pixelSize * 4 // Height inside borders
-                );
+                if (themeLayer != null) {
+                    // Background and frame sprites carry their own alpha; the alpha knob is not applied.
+                    graphics.drawImage(themeLayer, 0, 0, null);
+                } else {
+                    // Draw background first
+                    graphics.setColor(new Color(18, 3, 18, this.isAnimated ? 255 : this.getAlpha()));
+                    graphics.fillRect(
+                        pixelSize * 2, // Inner edge of border
+                        pixelSize * 2,
+                        frameWidth - pixelSize * 4, // Width inside borders
+                        frameHeight - pixelSize * 4 // Height inside borders
+                    );
+                }
+
+                drawLinesInternal(graphics, i);
+
+                // Draw borders onto the frame
+                if (this.renderBorder && themeLayer == null) {
+                    this.drawBorders(graphics, frameWidth, frameHeight);
+                }
+
+                // Add padding after rendering tooltip content and borders
+                processedFrame = this.addPadding(frameImage);
+            } finally {
+                graphics.dispose();
             }
-
-            drawLinesInternal(graphics, i);
-
-            // Draw borders onto the frame
-            if (this.renderBorder && themeLayer == null) {
-                this.drawBorders(graphics, frameWidth, frameHeight);
-            }
-
-            // Add padding after rendering tooltip content and borders
-            BufferedImage processedFrame = this.addPadding(frameImage);
-            graphics.dispose();
 
             this.animationFrames.add(processedFrame);
         }
@@ -1191,11 +1204,15 @@ public class MinecraftTooltip {
 
             BufferedImage frameImage = new BufferedImage(frameWidth, frameHeight, BufferedImage.TYPE_INT_ARGB);
             Graphics2D graphics = frameImage.createGraphics();
-            graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
-            graphics.drawImage(themeLayer, 0, 0, null);
-            drawLinesInternal(graphics, obfuscationSource >= 0 ? step.framePositions().get(obfuscationSource) : 0);
-            BufferedImage processedFrame = this.addPadding(frameImage);
-            graphics.dispose();
+            BufferedImage processedFrame;
+            try {
+                graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
+                graphics.drawImage(themeLayer, 0, 0, null);
+                drawLinesInternal(graphics, obfuscationSource >= 0 ? step.framePositions().get(obfuscationSource) : 0);
+                processedFrame = this.addPadding(frameImage);
+            } finally {
+                graphics.dispose();
+            }
 
             this.animationFrames.add(processedFrame);
             delays.add(AnimationTimeline.ticksToMillis(step.durationTicks()));

@@ -643,11 +643,14 @@ public class MinecraftInventoryGenerator implements Generator {
 
         BufferedImage scaled = new BufferedImage(itemSize, itemSize, BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = scaled.createGraphics();
-        graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
-        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-        graphics.setComposite(AlphaComposite.Src);
-        graphics.drawImage(image, 0, 0, itemSize, itemSize, null);
-        graphics.dispose();
+        try {
+            graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
+            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+            graphics.setComposite(AlphaComposite.Src);
+            graphics.drawImage(image, 0, 0, itemSize, itemSize, null);
+        } finally {
+            graphics.dispose();
+        }
         return scaled;
     }
 
@@ -752,23 +755,26 @@ public class MinecraftInventoryGenerator implements Generator {
         for (int frameIndex = 0; frameIndex < maxFrames; frameIndex++) {
             BufferedImage frame = new BufferedImage(inventoryImage.getWidth(), inventoryImage.getHeight(), BufferedImage.TYPE_INT_ARGB);
             Graphics2D frameGraphics = frame.createGraphics();
-            frameGraphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
-            frameGraphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-            frameGraphics.setFont(MinecraftFonts.getFont(MinecraftFonts.REGULAR).deriveFont((float) scaleFactor * 8));
-            frameGraphics.drawImage(inventoryImage, 0, 0, null);
+            try {
+                frameGraphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
+                frameGraphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+                frameGraphics.setFont(MinecraftFonts.getFont(MinecraftFonts.REGULAR).deriveFont((float) scaleFactor * 8));
+                frameGraphics.drawImage(inventoryImage, 0, 0, null);
 
-            for (InventoryItem item : items) {
-                BufferedImage original = item.getItemImage();
-                if (item.getAnimationFrames() != null && !item.getAnimationFrames().isEmpty()) {
-                    BufferedImage animatedFrame = item.getAnimationFrames().get(frameIndex % item.getAnimationFrames().size());
-                    item.setItemImage(animatedFrame);
+                for (InventoryItem item : items) {
+                    BufferedImage original = item.getItemImage();
+                    if (item.getAnimationFrames() != null && !item.getAnimationFrames().isEmpty()) {
+                        BufferedImage animatedFrame = item.getAnimationFrames().get(frameIndex % item.getAnimationFrames().size());
+                        item.setItemImage(animatedFrame);
+                    }
+
+                    drawItem(frameGraphics, item);
+                    item.setItemImage(original);
                 }
-
-                drawItem(frameGraphics, item);
-                item.setItemImage(original);
+            } finally {
+                frameGraphics.dispose();
             }
 
-            frameGraphics.dispose();
             frames.add(frame);
         }
 
@@ -819,20 +825,23 @@ public class MinecraftInventoryGenerator implements Generator {
         for (AnimationTimeline.Step step : timeline.steps()) {
             BufferedImage frame = new BufferedImage(inventoryImage.getWidth(), inventoryImage.getHeight(), BufferedImage.TYPE_INT_ARGB);
             Graphics2D frameGraphics = frame.createGraphics();
-            frameGraphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
-            frameGraphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-            frameGraphics.setFont(MinecraftFonts.getFont(MinecraftFonts.REGULAR).deriveFont((float) scaleFactor * 8));
-            frameGraphics.drawImage(inventoryImage, 0, 0, null);
+            try {
+                frameGraphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
+                frameGraphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+                frameGraphics.setFont(MinecraftFonts.getFont(MinecraftFonts.REGULAR).deriveFont((float) scaleFactor * 8));
+                frameGraphics.drawImage(inventoryImage, 0, 0, null);
 
-            for (int index = 0; index < animatedItems.size(); index++) {
-                InventoryItem item = animatedItems.get(index);
-                item.setItemImage(item.getAnimationFrames().get(step.framePositions().get(index)));
-            }
-            for (InventoryItem item : items) {
-                drawItem(frameGraphics, item);
+                for (int index = 0; index < animatedItems.size(); index++) {
+                    InventoryItem item = animatedItems.get(index);
+                    item.setItemImage(item.getAnimationFrames().get(step.framePositions().get(index)));
+                }
+                for (InventoryItem item : items) {
+                    drawItem(frameGraphics, item);
+                }
+            } finally {
+                frameGraphics.dispose();
             }
 
-            frameGraphics.dispose();
             frames.add(frame);
         }
         for (int index = 0; index < animatedItems.size(); index++) {
@@ -845,12 +854,15 @@ public class MinecraftInventoryGenerator implements Generator {
     public @NotNull GeneratedObject render(@Nullable GenerationContext generationContext) {
         log.debug("Rendering inventory ({})", this);
 
-        drawInventoryBackground();
-        drawSlots();
-        drawTitle();
-        drawItems(generationContext);
+        try {
+            drawInventoryBackground();
+            drawSlots();
+            drawTitle();
+            drawItems(generationContext);
+        } finally {
+            g2d.dispose();
+        }
 
-        g2d.dispose();
         log.debug("Rendered inventory image (dimensions {}x{})", inventoryImage.getWidth(), inventoryImage.getHeight());
 
         if (generatedObject != null) {

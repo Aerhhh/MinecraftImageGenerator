@@ -168,17 +168,20 @@ public class GeneratorImageBuilder {
 
         BufferedImage finalImage = new BufferedImage(totalWidth + 2 * IMAGE_BORDER_PADDING_PX, maxHeight + 2 * IMAGE_BORDER_PADDING_PX, BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = finalImage.createGraphics();
-        int currentX = IMAGE_BORDER_PADDING_PX;
+        try {
+            int currentX = IMAGE_BORDER_PADDING_PX;
 
-        // Draw images
-        for (GeneratedObject generatedObject : generatedObjects) {
-            BufferedImage generatedImage = generatedObject.getImage();
-            int yOffset = IMAGE_BORDER_PADDING_PX + (maxHeight - generatedImage.getHeight()) / 2;
-            graphics.drawImage(generatedImage, currentX, yOffset, null);
-            currentX += generatedImage.getWidth() + IMAGE_PADDING_PX;
+            // Draw images
+            for (GeneratedObject generatedObject : generatedObjects) {
+                BufferedImage generatedImage = generatedObject.getImage();
+                int yOffset = IMAGE_BORDER_PADDING_PX + (maxHeight - generatedImage.getHeight()) / 2;
+                graphics.drawImage(generatedImage, currentX, yOffset, null);
+                currentX += generatedImage.getWidth() + IMAGE_PADDING_PX;
+            }
+        } finally {
+            graphics.dispose();
         }
 
-        graphics.dispose();
         return new GeneratedObject(finalImage);
     }
 
@@ -244,28 +247,31 @@ public class GeneratorImageBuilder {
         for (int frameIndex = 0; frameIndex < maxFrames; frameIndex++) {
             BufferedImage compositeFrame = new BufferedImage(totalWidth + 2 * IMAGE_BORDER_PADDING_PX, maxHeight + 2 * IMAGE_BORDER_PADDING_PX, BufferedImage.TYPE_INT_ARGB);
             Graphics2D graphics = compositeFrame.createGraphics();
-            int currentX = IMAGE_BORDER_PADDING_PX;
+            try {
+                int currentX = IMAGE_BORDER_PADDING_PX;
 
-            for (GeneratedObject obj : generatedObjects) {
-                BufferedImage currentFrameImage;
+                for (GeneratedObject obj : generatedObjects) {
+                    BufferedImage currentFrameImage;
 
-                if (obj.isAnimated()) {
-                    List<BufferedImage> frames = obj.getAnimationFrames();
+                    if (obj.isAnimated()) {
+                        List<BufferedImage> frames = obj.getAnimationFrames();
 
-                    if (frames == null || frames.isEmpty()) {
-                        throw new GeneratorException("Animated object has null or empty frames list: " + obj.getClass().getSimpleName());
+                        if (frames == null || frames.isEmpty()) {
+                            throw new GeneratorException("Animated object has null or empty frames list: " + obj.getClass().getSimpleName());
+                        }
+                        currentFrameImage = frames.get(frameIndex % frames.size());
+                    } else {
+                        currentFrameImage = obj.getImage();
                     }
-                    currentFrameImage = frames.get(frameIndex % frames.size());
-                } else {
-                    currentFrameImage = obj.getImage();
-                }
 
-                int yOffset = IMAGE_BORDER_PADDING_PX + (maxHeight - currentFrameImage.getHeight()) / 2;
-                graphics.drawImage(currentFrameImage, currentX, yOffset, null);
-                currentX += currentFrameImage.getWidth() + IMAGE_PADDING_PX;
+                    int yOffset = IMAGE_BORDER_PADDING_PX + (maxHeight - currentFrameImage.getHeight()) / 2;
+                    graphics.drawImage(currentFrameImage, currentX, yOffset, null);
+                    currentX += currentFrameImage.getWidth() + IMAGE_PADDING_PX;
+                }
+            } finally {
+                graphics.dispose();
             }
 
-            graphics.dispose();
             compositeFrames.add(compositeFrame);
         }
 
@@ -317,29 +323,32 @@ public class GeneratorImageBuilder {
         for (AnimationTimeline.Step step : timeline.steps()) {
             BufferedImage compositeFrame = new BufferedImage(totalWidth + 2 * IMAGE_BORDER_PADDING_PX, maxHeight + 2 * IMAGE_BORDER_PADDING_PX, BufferedImage.TYPE_INT_ARGB);
             Graphics2D graphics = compositeFrame.createGraphics();
-            int currentX = IMAGE_BORDER_PADDING_PX;
-            int animatedIndex = 0;
+            try {
+                int currentX = IMAGE_BORDER_PADDING_PX;
+                int animatedIndex = 0;
 
-            for (GeneratedObject obj : generatedObjects) {
-                BufferedImage currentFrameImage;
-                if (obj.isAnimated()) {
-                    List<BufferedImage> frames = obj.getAnimationFrames();
-                    if (frames == null || frames.isEmpty()) {
-                        throw new GeneratorException("Animated object has null or empty frames list: "
-                            + obj.getClass().getSimpleName());
+                for (GeneratedObject obj : generatedObjects) {
+                    BufferedImage currentFrameImage;
+                    if (obj.isAnimated()) {
+                        List<BufferedImage> frames = obj.getAnimationFrames();
+                        if (frames == null || frames.isEmpty()) {
+                            throw new GeneratorException("Animated object has null or empty frames list: "
+                                + obj.getClass().getSimpleName());
+                        }
+                        currentFrameImage = frames.get(step.framePositions().get(animatedIndex));
+                        animatedIndex++;
+                    } else {
+                        currentFrameImage = obj.getImage();
                     }
-                    currentFrameImage = frames.get(step.framePositions().get(animatedIndex));
-                    animatedIndex++;
-                } else {
-                    currentFrameImage = obj.getImage();
-                }
 
-                int yOffset = IMAGE_BORDER_PADDING_PX + (maxHeight - currentFrameImage.getHeight()) / 2;
-                graphics.drawImage(currentFrameImage, currentX, yOffset, null);
-                currentX += currentFrameImage.getWidth() + IMAGE_PADDING_PX;
+                    int yOffset = IMAGE_BORDER_PADDING_PX + (maxHeight - currentFrameImage.getHeight()) / 2;
+                    graphics.drawImage(currentFrameImage, currentX, yOffset, null);
+                    currentX += currentFrameImage.getWidth() + IMAGE_PADDING_PX;
+                }
+            } finally {
+                graphics.dispose();
             }
 
-            graphics.dispose();
             compositeFrames.add(compositeFrame);
         }
 
