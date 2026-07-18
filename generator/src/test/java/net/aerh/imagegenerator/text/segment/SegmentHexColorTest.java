@@ -2,9 +2,8 @@ package net.aerh.imagegenerator.text.segment;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import net.aerh.imagegenerator.text.ChatFormat;
+import lib.minecraft.text.ChatColor;
 import net.aerh.imagegenerator.text.MinecraftFont;
-import net.aerh.imagegenerator.text.RgbColor;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -36,14 +35,14 @@ class SegmentHexColorTest {
     void parsesAmpersandHexIntoRgbColorSegment() {
         ColorSegment segment = onlySegment(ColorSegment.fromLegacy("&#ff00aaHello"));
         assertEquals("Hello", segment.getText());
-        assertEquals(new RgbColor(0xFF00AA), segment.getColor().orElseThrow());
+        assertEquals(ChatColor.of(0xFF00AA), segment.getColor().orElseThrow());
     }
 
     @Test
     void parsesSectionSymbolHexCaseInsensitively() {
         ColorSegment segment = onlySegment(ColorSegment.fromLegacy("§#FF00AAHello"));
         assertEquals("Hello", segment.getText());
-        assertEquals(new RgbColor(0xFF00AA), segment.getColor().orElseThrow());
+        assertEquals(ChatColor.of(0xFF00AA), segment.getColor().orElseThrow());
     }
 
     @Test
@@ -63,22 +62,22 @@ class SegmentHexColorTest {
         ColorSegment segment = onlySegment(ColorSegment.fromLegacy("&l&#ff00aatext"));
         assertEquals("text", segment.getText());
         assertFalse(segment.isBold(), "a color change resets formatting in vanilla");
-        assertEquals(new RgbColor(0xFF00AA), segment.getColor().orElseThrow());
+        assertEquals(ChatColor.of(0xFF00AA), segment.getColor().orElseThrow());
     }
 
     @Test
     void hexColorPreservesActiveFont() {
         ColorSegment segment = onlySegment(ColorSegment.fromLegacy("&g&#ff00aarunes"));
         assertEquals(MinecraftFont.GALACTIC, segment.getFont());
-        assertEquals(new RgbColor(0xFF00AA), segment.getColor().orElseThrow());
+        assertEquals(ChatColor.of(0xFF00AA), segment.getColor().orElseThrow());
     }
 
     @Test
     void hexColorSplitsSegmentsMidLine() {
         List<ColorSegment> segments = withText(ColorSegment.fromLegacy("&cred &#00ff00lime"));
         assertEquals(2, segments.size());
-        assertEquals(ChatFormat.RED, segments.get(0).getColor().orElseThrow());
-        assertEquals(new RgbColor(0x00FF00), segments.get(1).getColor().orElseThrow());
+        assertEquals(ChatColor.Legacy.RED, segments.get(0).getColor().orElseThrow());
+        assertEquals(ChatColor.of(0x00FF00), segments.get(1).getColor().orElseThrow());
         assertEquals("lime", segments.get(1).getText());
     }
 
@@ -95,7 +94,7 @@ class SegmentHexColorTest {
         TextSegment segment = assertDoesNotThrow(() -> TextSegment.fromJson(json),
             "vanilla 1.16+ hex colors must not crash fromJson");
         assertNotNull(segment);
-        assertEquals(new RgbColor(0xFF00AA), segment.getColor().orElseThrow());
+        assertEquals(ChatColor.of(0xFF00AA), segment.getColor().orElseThrow());
     }
 
     @Test
@@ -103,7 +102,7 @@ class SegmentHexColorTest {
         JsonObject json = JsonParser.parseString("{\"text\":\"Hi\",\"color\":\"gold\"}").getAsJsonObject();
         TextSegment segment = TextSegment.fromJson(json);
         assertNotNull(segment);
-        assertEquals(ChatFormat.GOLD, segment.getColor().orElseThrow());
+        assertEquals(ChatColor.Legacy.GOLD, segment.getColor().orElseThrow());
     }
 
     @Test
@@ -111,7 +110,7 @@ class SegmentHexColorTest {
         JsonObject json = JsonParser.parseString("{\"text\":\"Hi\",\"color\":\"chartreuse\"}").getAsJsonObject();
         TextSegment segment = assertDoesNotThrow(() -> TextSegment.fromJson(json));
         assertNotNull(segment);
-        assertEquals(ChatFormat.GRAY, segment.getColor().orElseThrow(), "unknown colors fall back to the default");
+        assertEquals(ChatColor.Legacy.GRAY, segment.getColor().orElseThrow(), "unknown colors fall back to the default");
     }
 
     @Test
@@ -121,6 +120,6 @@ class SegmentHexColorTest {
         assertNotNull(segment);
         JsonObject reEmitted = segment.toJson();
         assertEquals("#ff00aa", reEmitted.get("color").getAsString());
-        assertInstanceOf(RgbColor.class, segment.getColor().orElseThrow());
+        assertInstanceOf(ChatColor.Custom.class, segment.getColor().orElseThrow());
     }
 }

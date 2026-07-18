@@ -5,8 +5,8 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import lib.minecraft.text.ChatColor;
 import net.aerh.imagegenerator.pack.PackId;
-import net.aerh.imagegenerator.text.ChatFormat;
 import net.hypixel.nerdbot.marmalade.registry.DataRegistry;
 import org.jetbrains.annotations.Nullable;
 
@@ -56,8 +56,8 @@ public class Stat implements FormattableEntry {
     private String name;
     private String stat;
     private String display;
-    private ChatFormat color;
-    private ChatFormat subColor;
+    private ChatColor.Legacy color;
+    private ChatColor.Legacy subColor;
     private String parseType;
     @Nullable
     private Float powerScalingMultiplier;
@@ -141,9 +141,9 @@ public class Stat implements FormattableEntry {
      * In some cases, stats can have multiple colors.
      * One for the number and another for the stat.
      *
-     * @return Secondary {@link ChatFormat} of the stat
+     * @return Secondary {@link ChatColor.Legacy} of the stat
      */
-    public ChatFormat getSecondaryColor() {
+    public ChatColor.Legacy getSecondaryColor() {
         if (subColor != null) {
             return subColor;
         } else {

@@ -36,7 +36,7 @@ class PlaceholderReverseMapperPackTest {
         // Five fortune stats share U+E053; the format-rule pattern includes the stat text, so the
         // right placeholder comes back for each.
         Stat mining = Stat.byName("mining_fortune");
-        String colorCode = String.valueOf(mining.getColor().getCode());
+        String colorCode = String.valueOf(mining.getColor().codeChar());
 
         assertEquals("%%mining_fortune%%", mapper.mapPlaceholders("\u00A7" + colorCode + "\uE053 Mining Fortune"));
         assertEquals("%%ore_fortune%%", mapper.mapPlaceholders("\u00A7" + colorCode + "\uE053 Ore Fortune"));
@@ -47,7 +47,7 @@ class PlaceholderReverseMapperPackTest {
         // melon_fortune and melon_slice_fortune are duplicate stats.json entries with identical
         // display text - nothing can tell them apart; this pins the deterministic winner.
         Stat melon = Stat.byName("melon_fortune");
-        String colorCode = String.valueOf(melon.getColor().getCode());
+        String colorCode = String.valueOf(melon.getColor().codeChar());
 
         assertEquals("%%melon_fortune%%", mapper.mapPlaceholders("\u00A7" + colorCode + "\uE051 Melon Slice Fortune"));
     }
@@ -55,7 +55,7 @@ class PlaceholderReverseMapperPackTest {
     @Test
     void packFormattedStatTextReverseMaps() {
         Stat strength = Stat.byName("strength");
-        String colorCode = String.valueOf(strength.getColor().getCode());
+        String colorCode = String.valueOf(strength.getColor().codeChar());
 
         assertEquals("%%strength%%", mapper.mapPlaceholders("\u00A7" + colorCode + "\uE00D Strength"));
     }
@@ -63,7 +63,7 @@ class PlaceholderReverseMapperPackTest {
     @Test
     void baseFormattedStatTextStillReverseMaps() {
         Stat strength = Stat.byName("strength");
-        String colorCode = String.valueOf(strength.getColor().getCode());
+        String colorCode = String.valueOf(strength.getColor().codeChar());
 
         assertEquals("%%strength%%", mapper.mapPlaceholders("\u00A7" + colorCode + "\u2741 Strength"));
     }
@@ -89,7 +89,7 @@ class PlaceholderReverseMapperPackTest {
     @Test
     void formattedStatTextStillWinsOverBareStatGlyphRules() {
         Stat health = Stat.byName("health");
-        String colorCode = String.valueOf(health.getColor().getCode());
+        String colorCode = String.valueOf(health.getColor().codeChar());
 
         assertEquals("%%health%%", mapper.mapPlaceholders("§" + colorCode + "❤ Health"));
     }
@@ -125,7 +125,7 @@ class PlaceholderReverseMapperPackTest {
         // U+E077 is both the tracking stat's override char and mob_elusive's base char; stat
         // format rules run before bare-char icon rules, so the surrounding "Tracking" text wins.
         Stat tracking = Stat.byName("tracking");
-        String colorCode = String.valueOf(tracking.getColor().getCode());
+        String colorCode = String.valueOf(tracking.getColor().codeChar());
 
         assertEquals("%%tracking%%", mapper.mapPlaceholders("\u00A7" + colorCode + "\uE077 Tracking"));
     }

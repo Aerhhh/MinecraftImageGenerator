@@ -5,8 +5,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
-import net.aerh.imagegenerator.text.ChatFormat;
-import net.aerh.imagegenerator.text.TextColor;
+import lib.minecraft.text.ChatColor;
+import net.aerh.imagegenerator.text.LegacyCode;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Locale;
@@ -232,9 +232,9 @@ public final class NbtTextComponentUtil {
         String color = inherited.colorCode();
         if (component.has("color")) {
             // Named colors and vanilla 1.16+ hex colors; unrecognized values inherit the parent's color.
-            TextColor textColor = TextColor.fromJsonString(component.get("color").getAsString());
+            ChatColor textColor = ChatColor.fromJsonString(component.get("color").getAsString());
             if (textColor != null) {
-                color = "&" + textColor.getLegacyCode();
+                color = "&" + legacyCodeOf(textColor);
             }
         }
 
@@ -274,14 +274,14 @@ public final class NbtTextComponentUtil {
         if (to.colorCode() != null) {
             result.append(to.colorCode());
         } else if (from.needsFormattingReset(to)) {
-            result.append("&").append(ChatFormat.RESET.getCode());
+            result.append("&").append(LegacyCode.RESET.getCode());
         }
 
-        if (to.bold()) result.append("&").append(ChatFormat.BOLD.getCode());
-        if (to.italic()) result.append("&").append(ChatFormat.ITALIC.getCode());
-        if (to.underlined()) result.append("&").append(ChatFormat.UNDERLINE.getCode());
-        if (to.strikethrough()) result.append("&").append(ChatFormat.STRIKETHROUGH.getCode());
-        if (to.obfuscated()) result.append("&").append(ChatFormat.OBFUSCATED.getCode());
+        if (to.bold()) result.append("&").append(LegacyCode.BOLD.getCode());
+        if (to.italic()) result.append("&").append(LegacyCode.ITALIC.getCode());
+        if (to.underlined()) result.append("&").append(LegacyCode.UNDERLINE.getCode());
+        if (to.strikethrough()) result.append("&").append(LegacyCode.STRIKETHROUGH.getCode());
+        if (to.obfuscated()) result.append("&").append(LegacyCode.OBFUSCATED.getCode());
     }
 
     /**
@@ -303,7 +303,17 @@ public final class NbtTextComponentUtil {
             }
         }
 
-        return rawValue.replace(ChatFormat.SECTION_SYMBOL, ChatFormat.AMPERSAND_SYMBOL);
+        return rawValue.replace(LegacyCode.SECTION_SYMBOL, LegacyCode.AMPERSAND_SYMBOL);
+    }
+
+    /**
+     * The in-band legacy code for a resolved color: the single-character code for a named
+     * {@link ChatColor.Legacy} color, or the lowercase {@code #rrggbb} hex literal for a custom color.
+     */
+    private static String legacyCodeOf(ChatColor color) {
+        return color.code()
+            .map(String::valueOf)
+            .orElseGet(() -> String.format("#%06x", color.rgb() & 0xFFFFFF));
     }
 
 }

@@ -5,8 +5,8 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import lib.minecraft.text.ChatColor;
 import net.aerh.imagegenerator.pack.PackId;
-import net.aerh.imagegenerator.text.ChatFormat;
 import net.hypixel.nerdbot.marmalade.registry.DataRegistry;
 import org.jetbrains.annotations.Nullable;
 
@@ -56,9 +56,9 @@ public class Flavor implements FormattableEntry {
     private String name;
     private String stat;
     private String display;
-    private ChatFormat color;
+    private ChatColor.Legacy color;
     @Nullable
-    private ChatFormat subColor;
+    private ChatColor.Legacy subColor;
     private String parseType;
     /**
      * Pack-conditional replacement icon characters keyed by pack ID string
@@ -131,7 +131,7 @@ public class Flavor implements FormattableEntry {
         return REGISTRY.getAll();
     }
 
-    public ChatFormat getSecondaryColor() {
+    public ChatColor.Legacy getSecondaryColor() {
         if (subColor != null) {
             return subColor;
         } else {

@@ -4,7 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.aerh.imagegenerator.data.FormattableEntry;
 import net.aerh.imagegenerator.data.ParseType;
 import net.aerh.imagegenerator.parser.ParseContext;
-import net.aerh.imagegenerator.text.ChatFormat;
+import net.aerh.imagegenerator.text.LegacyCode;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -26,10 +26,10 @@ public final class ParseTypeFormatter {
 
     static {
         try {
-            Arrays.stream(ChatFormat.values()).forEach(format ->
+            Arrays.stream(LegacyCode.VALUES).forEach(format ->
                 BASE_PLACEHOLDERS.put(format.name().toLowerCase(), String.valueOf(format.getCode()))
             );
-            BASE_PLACEHOLDERS.put("ampersand", String.valueOf(ChatFormat.AMPERSAND_SYMBOL));
+            BASE_PLACEHOLDERS.put("ampersand", String.valueOf(LegacyCode.AMPERSAND_SYMBOL));
             log.info("Initialized ParseTypeFormatter with {} base placeholders", BASE_PLACEHOLDERS.size());
         } catch (Exception e) {
             log.error("Failed to initialize ParseTypeFormatter placeholders", e);
@@ -76,8 +76,8 @@ public final class ParseTypeFormatter {
         }
 
         Map<String, String> placeholders = new HashMap<>(BASE_PLACEHOLDERS);
-        placeholders.put("color", String.valueOf(entry.getColor().getCode()));
-        placeholders.put("subColor", String.valueOf(entry.getSecondaryColor().getCode()));
+        placeholders.put("color", String.valueOf(entry.getColor().codeChar()));
+        placeholders.put("subColor", String.valueOf(entry.getSecondaryColor().codeChar()));
         String icon = entry.getIcon(context.packId());
         String stat = entry.getStat(context.packId());
         String display = entry.getDisplay(context.packId());

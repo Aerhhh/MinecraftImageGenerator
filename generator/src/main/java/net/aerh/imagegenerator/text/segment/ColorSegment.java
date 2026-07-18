@@ -4,11 +4,11 @@ import com.google.gson.JsonObject;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
+import lib.minecraft.text.ChatColor;
 import net.aerh.imagegenerator.builder.ClassBuilder;
-import net.aerh.imagegenerator.text.ChatFormat;
+import net.aerh.imagegenerator.text.Colors;
+import net.aerh.imagegenerator.text.LegacyCode;
 import net.aerh.imagegenerator.text.MinecraftFont;
-import net.aerh.imagegenerator.text.RgbColor;
-import net.aerh.imagegenerator.text.TextColor;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -22,7 +22,7 @@ import java.util.function.Supplier;
 public class ColorSegment {
 
     protected @NotNull String text;
-    protected TextColor color = ChatFormat.GRAY;
+    protected ChatColor color = ChatColor.Legacy.GRAY;
     protected @NotNull MinecraftFont font = MinecraftFont.DEFAULT;
     protected boolean italic, bold, underlined, obfuscated, strikethrough;
 
@@ -41,10 +41,10 @@ public class ColorSegment {
     /**
      * This function takes in a legacy text string and converts it into a {@link ColorSegment}.
      * <p>
-     * Legacy text strings use the {@link ChatFormat#SECTION_SYMBOL}. Many keyboards do not have this symbol however,
+     * Legacy text strings use the {@link LegacyCode#SECTION_SYMBOL}. Many keyboards do not have this symbol however,
      * which is probably why it was chosen. To get around this, it is common practice to substitute
      * the symbol for another, then translate it later. Often '&' is used, but this can differ from person
-     * to person. In case the string does not have a {@link ChatFormat#SECTION_SYMBOL}, the method also checks for the
+     * to person. In case the string does not have a {@link LegacyCode#SECTION_SYMBOL}, the method also checks for the
      * {@param characterSubstitute}
      *
      * @param legacyText       The text to make into an object
@@ -64,13 +64,13 @@ public class ColorSegment {
         for (int i = 0; i < legacyText.length(); i++) {
             char charAtIndex = legacyText.charAt(i);
 
-            if (charAtIndex == ChatFormat.SECTION_SYMBOL || charAtIndex == symbolSubstitute) {
+            if (charAtIndex == LegacyCode.SECTION_SYMBOL || charAtIndex == symbolSubstitute) {
                 if ((i + 1) > legacyText.length() - 1)
                     continue; // do nothing.
 
                 // peek at the next character.
                 char peek = legacyText.charAt(i + 1);
-                RgbColor hexColor = peek == '#' ? RgbColor.tryParseAt(legacyText, i + 1) : null;
+                ChatColor hexColor = peek == '#' ? Colors.tryParseHexAt(legacyText, i + 1) : null;
 
                 if (hexColor != null) {
                     // Hex colors behave exactly like named color codes: flush the pending
@@ -86,8 +86,8 @@ public class ColorSegment {
                     currentObject = segmentSupplier.get();
                     currentObject.setColor(hexColor);
                     currentObject.setFont(currentFont);
-                    i += RgbColor.HEX_CODE_LENGTH; // skip #RRGGBB; the loop increment skips the symbol
-                } else if (ChatFormat.isValid(peek)) {
+                    i += Colors.HEX_CODE_LENGTH; // skip #RRGGBB; the loop increment skips the symbol
+                } else if (LegacyCode.isValid(peek)) {
                     i += 1; // if valid
 
                     // Preserve the current font before creating a new segment
@@ -101,9 +101,9 @@ public class ColorSegment {
                         text.setLength(0); // reset the buffer
                     }
 
-                    ChatFormat color = Objects.requireNonNull(ChatFormat.of(peek));
+                    LegacyCode code = Objects.requireNonNull(LegacyCode.of(peek));
 
-                    switch (color) {
+                    switch (code) {
                         case FONT_GALACTIC:
                             currentObject.setFont(MinecraftFont.GALACTIC);
                             break;
@@ -127,7 +127,7 @@ public class ColorSegment {
                             break;
                         case RESET:
                             // Reset everything.
-                            currentObject.setColor(ChatFormat.GRAY);
+                            currentObject.setColor(ChatColor.Legacy.GRAY);
                             currentObject.setFont(MinecraftFont.DEFAULT);
                             currentObject.setObfuscated(false);
                             currentObject.setBold(false);
@@ -139,7 +139,7 @@ public class ColorSegment {
                             // emulate Minecraft's behavior of dropping styles that do not yet have an object.
                             currentFont = currentObject.getFont(); // capture font before reset
                             currentObject = segmentSupplier.get();
-                            currentObject.setColor(color);
+                            currentObject.setColor(code.chatColor());
                             currentObject.setFont(currentFont); // preserve the active font
                             break;
                     }
@@ -158,11 +158,11 @@ public class ColorSegment {
         return builder.build();
     }
 
-    public Optional<TextColor> getColor() {
+    public Optional<ChatColor> getColor() {
         return Optional.ofNullable(this.color);
     }
 
-    public void setColor(@NotNull TextColor color) {
+    public void setColor(@NotNull ChatColor color) {
         this.color = color;
     }
 
@@ -176,7 +176,9 @@ public class ColorSegment {
     public @NotNull JsonObject toJson() {
         JsonObject object = new JsonObject();
         object.addProperty("text", this.getText());
-        this.getColor().ifPresent(color -> object.addProperty("color", color.toJsonString()));
+        // Lowercase keeps MIG's canonical hex form (#rrggbb); the library's Custom color emits
+        // uppercase. Named colors are already lowercase, so this is a no-op for them.
+        this.getColor().ifPresent(color -> object.addProperty("color", color.toJsonString().toLowerCase(java.util.Locale.ROOT)));
 
         if (this.font != MinecraftFont.DEFAULT) object.addProperty("font", this.font.getResourceLocation());
         if (this.isItalic()) object.addProperty("italic", true);
@@ -189,13 +191,13 @@ public class ColorSegment {
     }
 
     public @NotNull String toLegacy() {
-        return this.toLegacy(ChatFormat.SECTION_SYMBOL);
+        return this.toLegacy(LegacyCode.SECTION_SYMBOL);
     }
 
     /**
      * Takes an {@link ColorSegment} and transforms it into a legacy string.
      *
-     * @param substitute The substitute character to use if you do not want to use {@link ChatFormat#SECTION_SYMBOL}
+     * @param substitute The substitute character to use if you do not want to use {@link LegacyCode#SECTION_SYMBOL}
      *
      * @return A legacy string representation of a text object
      */
@@ -204,21 +206,21 @@ public class ColorSegment {
     }
 
     protected @NotNull StringBuilder toLegacyBuilder() {
-        return this.toLegacyBuilder(ChatFormat.SECTION_SYMBOL);
+        return this.toLegacyBuilder(LegacyCode.SECTION_SYMBOL);
     }
 
     protected @NotNull StringBuilder toLegacyBuilder(char symbol) {
         StringBuilder builder = new StringBuilder();
-        this.getColor().ifPresent(color -> builder.append(symbol).append(color.getLegacyCode()));
-        if (this.isObfuscated()) builder.append(symbol).append(ChatFormat.OBFUSCATED.getCode());
-        if (this.isBold()) builder.append(symbol).append(ChatFormat.BOLD.getCode());
-        if (this.isStrikethrough()) builder.append(symbol).append(ChatFormat.STRIKETHROUGH.getCode());
-        if (this.isUnderlined()) builder.append(symbol).append(ChatFormat.UNDERLINE.getCode());
-        if (this.isItalic()) builder.append(symbol).append(ChatFormat.ITALIC.getCode());
+        this.getColor().ifPresent(color -> builder.append(symbol).append(legacyCodeOf(color)));
+        if (this.isObfuscated()) builder.append(symbol).append(LegacyCode.OBFUSCATED.getCode());
+        if (this.isBold()) builder.append(symbol).append(LegacyCode.BOLD.getCode());
+        if (this.isStrikethrough()) builder.append(symbol).append(LegacyCode.STRIKETHROUGH.getCode());
+        if (this.isUnderlined()) builder.append(symbol).append(LegacyCode.UNDERLINE.getCode());
+        if (this.isItalic()) builder.append(symbol).append(LegacyCode.ITALIC.getCode());
 
         this.getColor().ifPresent(color -> {
             builder.setLength(0);
-            builder.append(symbol).append(ChatFormat.RESET.getCode());
+            builder.append(symbol).append(LegacyCode.RESET.getCode());
         });
 
         if (!this.getText().isEmpty()) {
@@ -228,13 +230,21 @@ public class ColorSegment {
         return builder;
     }
 
+    /**
+     * The in-band legacy code for a color: the single-character code for a named
+     * {@link ChatColor.Legacy} color, or the {@code #RRGGBB} hex literal for a custom color.
+     */
+    private static @NotNull String legacyCodeOf(@NotNull ChatColor color) {
+        return color.code().map(String::valueOf).orElseGet(color::toJsonString);
+    }
+
     public @Nullable TextSegment toTextObject() {
         return TextSegment.fromJson(this.toJson());
     }
 
     public static class Builder implements ClassBuilder<ColorSegment> {
         protected String text = "";
-        protected TextColor color = ChatFormat.GRAY;
+        protected ChatColor color = ChatColor.Legacy.GRAY;
         protected MinecraftFont font = MinecraftFont.DEFAULT;
         protected boolean italic, bold, underlined, obfuscated, strikethrough;
 
@@ -283,7 +293,7 @@ public class ColorSegment {
             return this;
         }
 
-        public Builder withColor(@NotNull TextColor color) {
+        public Builder withColor(@NotNull ChatColor color) {
             this.color = color;
             return this;
         }

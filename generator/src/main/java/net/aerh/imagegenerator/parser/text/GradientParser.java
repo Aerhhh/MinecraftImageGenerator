@@ -1,10 +1,11 @@
 package net.aerh.imagegenerator.parser.text;
 
+import lib.minecraft.text.ChatColor;
 import net.aerh.imagegenerator.parser.StringParser;
-import net.aerh.imagegenerator.text.ChatFormat;
 import net.aerh.imagegenerator.text.CodeClassifier;
 import net.aerh.imagegenerator.text.CodeClassifier.CodeType;
-import net.aerh.imagegenerator.text.RgbColor;
+import net.aerh.imagegenerator.text.Colors;
+import net.aerh.imagegenerator.text.LegacyCode;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -64,12 +65,13 @@ public class GradientParser implements StringParser {
         return result.append(input, cursor, input.length()).toString();
     }
 
-    private static List<RgbColor> parseStops(String stopsGroup) {
-        List<RgbColor> stops = new ArrayList<>();
+    private static List<Integer> parseStops(String stopsGroup) {
+        List<Integer> stops = new ArrayList<>();
 
         for (String stop : stopsGroup.split(":")) {
             if (!stop.isEmpty()) {
-                stops.add(Objects.requireNonNull(RgbColor.tryParse(stop), stop));
+                ChatColor color = Objects.requireNonNull(Colors.tryParseHex(stop), stop);
+                stops.add(color.rgb() & 0xFFFFFF);
             }
         }
 
@@ -81,8 +83,8 @@ public class GradientParser implements StringParser {
      * only when the gradient actually colored something and ran to the end of the body; an
      * explicit inner color code takes over instead and needs no restoration.
      */
-    private static String expand(String body, List<RgbColor> stops, String restoration) {
-        StringBuilder out = new StringBuilder(body.length() * (RgbColor.HEX_CODE_LENGTH + 2));
+    private static String expand(String body, List<Integer> stops, String restoration) {
+        StringBuilder out = new StringBuilder(body.length() * (Colors.HEX_CODE_LENGTH + 2));
         StringBuilder activeStyles = new StringBuilder();
         int visibleCount = visibleLength(body);
         int visibleIndex = 0;
@@ -97,7 +99,7 @@ public class GradientParser implements StringParser {
                 return out.append(body, i, body.length()).toString();
             }
             if (type == CodeType.STYLE) {
-                String style = "" + ChatFormat.AMPERSAND_SYMBOL + Character.toLowerCase(body.charAt(i + 1));
+                String style = "" + LegacyCode.AMPERSAND_SYMBOL + Character.toLowerCase(body.charAt(i + 1));
                 if (activeStyles.indexOf(style) == -1) {
                     activeStyles.append(style);
                 }
@@ -133,8 +135,8 @@ public class GradientParser implements StringParser {
                 continue;
             }
 
-            RgbColor color = sampleGradient(stops, position(visibleIndex, visibleCount));
-            out.append(ChatFormat.AMPERSAND_SYMBOL).append(color.toJsonString())
+            int color = sampleGradient(stops, position(visibleIndex, visibleCount));
+            out.append(LegacyCode.AMPERSAND_SYMBOL).append(String.format("#%06x", color))
                 .append(activeStyles).append(symbol);
             visibleIndex++;
             colored = true;
@@ -160,23 +162,23 @@ public class GradientParser implements StringParser {
 
             switch (type) {
                 case HEX_COLOR:
-                    lastColor = ChatFormat.AMPERSAND_SYMBOL
-                        + before.subSequence(i + 1, i + 1 + RgbColor.HEX_CODE_LENGTH).toString().toLowerCase(Locale.ROOT);
+                    lastColor = LegacyCode.AMPERSAND_SYMBOL
+                        + before.subSequence(i + 1, i + 1 + Colors.HEX_CODE_LENGTH).toString().toLowerCase(Locale.ROOT);
                     styles.setLength(0);
                     break;
                 case NAMED_COLOR:
-                    lastColor = "" + ChatFormat.AMPERSAND_SYMBOL + Character.toLowerCase(before.charAt(i + 1));
+                    lastColor = "" + LegacyCode.AMPERSAND_SYMBOL + Character.toLowerCase(before.charAt(i + 1));
                     styles.setLength(0);
                     break;
                 case STYLE: {
-                    String style = "" + ChatFormat.AMPERSAND_SYMBOL + Character.toLowerCase(before.charAt(i + 1));
+                    String style = "" + LegacyCode.AMPERSAND_SYMBOL + Character.toLowerCase(before.charAt(i + 1));
                     if (styles.indexOf(style) == -1) {
                         styles.append(style);
                     }
                     break;
                 }
                 case FONT:
-                    lastFont = "" + ChatFormat.AMPERSAND_SYMBOL + Character.toLowerCase(before.charAt(i + 1));
+                    lastFont = "" + LegacyCode.AMPERSAND_SYMBOL + Character.toLowerCase(before.charAt(i + 1));
                     break;
                 case RESET:
                     lastColor = "";
@@ -190,7 +192,7 @@ public class GradientParser implements StringParser {
             i += CodeClassifier.skipLength(type);
         }
 
-        return "" + ChatFormat.AMPERSAND_SYMBOL + ChatFormat.RESET.getCode() + lastColor + lastFont + styles;
+        return "" + LegacyCode.AMPERSAND_SYMBOL + LegacyCode.RESET.getCode() + lastColor + lastFont + styles;
     }
 
     /**
@@ -227,9 +229,9 @@ public class GradientParser implements StringParser {
     }
 
     /** Samples the multi-stop gradient at {@code t} in [0, 1]; stops are evenly spaced. */
-    private static RgbColor sampleGradient(List<RgbColor> stops, double t) {
+    private static int sampleGradient(List<Integer> stops, double t) {
         double scaled = t * (stops.size() - 1);
         int index = Math.min((int) scaled, stops.size() - 2);
-        return RgbColor.lerp(stops.get(index), stops.get(index + 1), scaled - index);
+        return Colors.lerp(stops.get(index), stops.get(index + 1), scaled - index);
     }
 }
