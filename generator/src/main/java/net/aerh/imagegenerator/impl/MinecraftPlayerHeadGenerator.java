@@ -25,8 +25,10 @@ import org.jetbrains.annotations.Nullable;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.regex.Matcher;
@@ -40,6 +42,7 @@ public class MinecraftPlayerHeadGenerator implements Generator {
     private static final Pattern TEXTURE_URL = Pattern.compile("(?:https?://textures.minecraft.net/texture/)?([a-zA-Z0-9]+)");
     private static final Pattern SKIN_BASE64_REGEX = Pattern.compile("^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$");
     private static final Pattern HEX_TEXTURE_HASH = Pattern.compile("^[a-fA-F0-9]{64}$");
+    private static final int SKIN_FETCH_TIMEOUT_MS = 5_000;
 
     private final String textureId;
     private final int scale;
@@ -87,7 +90,19 @@ public class MinecraftPlayerHeadGenerator implements Generator {
 
         try {
             URL target = new URL("http://textures.minecraft.net/texture/" + textureId);
-            BufferedImage skin = ImageIO.read(target);
+            URLConnection connection = target.openConnection();
+            connection.setConnectTimeout(SKIN_FETCH_TIMEOUT_MS);
+            connection.setReadTimeout(SKIN_FETCH_TIMEOUT_MS);
+
+            BufferedImage skin;
+            try (InputStream stream = connection.getInputStream()) {
+                skin = ImageIO.read(stream);
+            }
+
+            if (skin == null) {
+                throw new GeneratorException("Could not find skin with ID: `%s`", textureId);
+            }
+
             BufferedImage head = new RenderedPlayerSkull(skin).generate().getImage();
 
             if (scale > 0) {
