@@ -484,7 +484,31 @@ For layouts that need precise placement, `MinecraftSceneGenerator.fromScene(json
 }
 ```
 
-Region types are `tooltip`, `item`, `container`, `hud`, and the `row`/`column`/`grid` arrangements (which nest their own `regions`). The document is parsed and validated eagerly, so a malformed scene throws with a message naming the offender rather than rendering something silently wrong; unknown keys anywhere are logged and ignored, so a document written against a newer schema still renders on an older build. Pass a `PackId` and `PackRepository` to `fromScene(json, packId, repository)` to render pack-backed members.
+Region types are `tooltip`, `item`, `container`, `hud`, `template`, and the `row`/`column`/`grid` arrangements (which nest their own `regions`). The document is parsed and validated eagerly, so a malformed scene throws with a message naming the offender rather than rendering something silently wrong; unknown keys anywhere are logged and ignored, so a document written against a newer schema still renders on an older build. Pass a `PackId` and `PackRepository` to `fromScene(json, packId, repository)` to render pack-backed members.
+
+A `template` region embeds a content template (see below) inline: `template` is a full template document, `values` supplies its global placeholders, and `rows` supplies each `template_repeat` section's rows. The scene fills the template with them and renders the result exactly like an `nbt` tooltip region, so a template filled with a capture's own values renders byte-for-byte identically to the raw capture (a capture whose text carries a literal `{` or `}` must escape it as `{{`/`}}` in the template, since a lone brace is a placeholder token). Both the template's own parse rejections and any fill rejection (an unsupplied required placeholder, a row keyed by an unknown section) surface prefixed with the region name.
+
+```json
+{
+  "schema_version": 1,
+  "regions": [
+    {"name": "vault", "type": "template",
+     "template": {
+       "schema_version": 1,
+       "placeholders": {"owner": {}, "item": {}, "count": {}},
+       "content": {"components": {
+         "minecraft:custom_name": {"text": "{owner}'s Vault"},
+         "minecraft:lore": [
+           {"template_repeat": "entries", "text": "{item} x{count}", "color": "gray"}
+         ]}}},
+     "values": {"owner": "Aerh"},
+     "rows": {"entries": [
+       {"item": "Diamond", "count": "64"},
+       {"item": "Emerald", "count": "12"}
+     ]}}
+  ]
+}
+```
 
 ### Content templates
 

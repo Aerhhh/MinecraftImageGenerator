@@ -19,6 +19,7 @@ import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -62,6 +63,40 @@ class JsonSceneGeneratorTest {
 
     private static int alpha(BufferedImage image, int x, int y) {
         return image.getRGB(x, y) >>> 24;
+    }
+
+    private static BufferedImage renderScene(String json) {
+        return MinecraftSceneGenerator.fromScene(json).render(null).getImage();
+    }
+
+    private static BufferedImage renderScene(String json, Pack pack) {
+        return MinecraftSceneGenerator.fromScene(json, pack.id(), pack.repository()).render(null).getImage();
+    }
+
+    private static void assertSamePixels(BufferedImage expected, BufferedImage actual, String message) {
+        String difference = firstDifference(expected, actual);
+        assertNull(difference, () -> message + ": " + difference);
+    }
+
+    /**
+     * The single width/height plus per-pixel RGB comparison both the assert and boolean helpers run
+     * through. Returns a description of the first mismatch, or null when the two images are identical.
+     */
+    private static String firstDifference(BufferedImage expected, BufferedImage actual) {
+        if (expected.getWidth() != actual.getWidth()) {
+            return "width " + expected.getWidth() + " vs " + actual.getWidth();
+        }
+        if (expected.getHeight() != actual.getHeight()) {
+            return "height " + expected.getHeight() + " vs " + actual.getHeight();
+        }
+        for (int y = 0; y < expected.getHeight(); y++) {
+            for (int x = 0; x < expected.getWidth(); x++) {
+                if (expected.getRGB(x, y) != actual.getRGB(x, y)) {
+                    return "pixel at (" + x + ", " + y + ")";
+                }
+            }
+        }
+        return null;
     }
 
     // ------------------------------------------------------------ rejections
@@ -460,5 +495,171 @@ class JsonSceneGeneratorTest {
         assertFalse(delays.isEmpty());
         // Two 256x256 background frames at frametime 2 (2 ticks = 100 ms = 10 centiseconds each)
         assertTrue(delays.stream().allMatch(delay -> delay == 10), "each frame holds 10 centiseconds: " + delays);
+    }
+
+    // ------------------------------------------------------------- template region
+
+    @Test
+    @DisplayName("a template filled with its capture values renders byte-for-byte like the nbt region")
+    void templateRegionMatchesEquivalentTooltipNbt() {
+        // The bridge invariant crossing from the template engine into the scene: a template filled
+        // with the capture's own values must reach the render pipeline identically to feeding the
+        // capture straight to an `nbt` tooltip region.
+        BufferedImage fromTemplate = renderScene("""
+            {"schema_version":1,"regions":[
+              {"name":"card","type":"template",
+               "template":{
+                 "schema_version":1,
+                 "placeholders":{"owner":{},"balance":{},"rank":{}},
+                 "content":{"components":{
+                   "minecraft:custom_name":{"text":"{owner}'s Vault","color":"gold"},
+                   "minecraft:lore":[
+                     {"text":"Balance: {balance}","color":"gray"},
+                     {"text":"Rank: {rank}","color":"aqua"}]}}},
+               "values":{"owner":"Aerh","balance":"1,024","rank":"MVP"}}]}""");
+
+        BufferedImage fromNbt = renderScene("""
+            {"schema_version":1,"regions":[
+              {"name":"card","type":"tooltip","nbt":{"components":{
+                "minecraft:custom_name":{"text":"Aerh's Vault","color":"gold"},
+                "minecraft:lore":[
+                  {"text":"Balance: 1,024","color":"gray"},
+                  {"text":"Rank: MVP","color":"aqua"}]}}}]}""");
+
+        assertSamePixels(fromNbt, fromTemplate, "filled template must render like the equivalent nbt region");
+    }
+
+    @Test
+    @DisplayName("values and rows plumb through: repeated rows render like the hand-expanded nbt")
+    void templateValuesAndRowsPlumbThrough() {
+        // Two rows expand in order under a fixed header; the rendered text of each repeated row must
+        // match the hand-expanded lore exactly, proving the row map layers over the globals and the
+        // expansion reaches the render.
+        BufferedImage fromTemplate = renderScene("""
+            {"schema_version":1,"regions":[
+              {"name":"vault","type":"template",
+               "template":{
+                 "schema_version":1,
+                 "placeholders":{"title":{},"item":{},"count":{}},
+                 "content":{"components":{
+                   "minecraft:custom_name":{"text":"{title}","color":"yellow"},
+                   "minecraft:lore":[
+                     {"template_repeat":"entries","text":"{item} x{count}","color":"gray"}]}}},
+               "values":{"title":"Contents"},
+               "rows":{"entries":[
+                 {"item":"Diamond","count":"64"},
+                 {"item":"Emerald","count":"12"}]}}]}""");
+
+        BufferedImage fromNbt = renderScene("""
+            {"schema_version":1,"regions":[
+              {"name":"vault","type":"tooltip","nbt":{"components":{
+                "minecraft:custom_name":{"text":"Contents","color":"yellow"},
+                "minecraft:lore":[
+                  {"text":"Diamond x64","color":"gray"},
+                  {"text":"Emerald x12","color":"gray"}]}}}]}""");
+
+        assertSamePixels(fromNbt, fromTemplate, "expanded rows must render like the hand-expanded lore");
+    }
+
+    @Test
+    @DisplayName("a missing required placeholder is rejected, naming the region and the placeholder")
+    void templateFillErrorNamesRegionAndPlaceholder() {
+        IllegalArgumentException exception = reject("""
+            {"schema_version":1,"regions":[
+              {"name":"card","type":"template","template":{
+                "schema_version":1,
+                "placeholders":{"owner":{}},
+                "content":{"components":{"minecraft:custom_name":{"text":"{owner}"}}}}}]}""");
+        assertMessageNames(exception, "card");
+        assertMessageNames(exception, "owner");
+    }
+
+    @Test
+    @DisplayName("rows for an unknown section are rejected, naming the region")
+    void templateRowsUnknownSectionNamesRegion() {
+        IllegalArgumentException exception = reject("""
+            {"schema_version":1,"regions":[
+              {"name":"card","type":"template","template":{
+                "schema_version":1,
+                "content":{"components":{"minecraft:custom_name":{"text":"Hi"}}}},
+               "rows":{"ghost":[{}]}}]}""");
+        assertMessageNames(exception, "card");
+        assertMessageNames(exception, "ghost");
+    }
+
+    @Test
+    @DisplayName("a parse rejection inside the nested template document names the region")
+    void templateParseErrorNamesRegion() {
+        // An undeclared content token is ContentTemplate's own parse rejection; it must surface
+        // prefixed with the region name like every other scene validation.
+        IllegalArgumentException exception = reject("""
+            {"schema_version":1,"regions":[
+              {"name":"card","type":"template","template":{
+                "schema_version":1,
+                "content":{"components":{"minecraft:custom_name":{"text":"{undeclared}"}}}}}]}""");
+        assertMessageNames(exception, "card");
+        assertMessageNames(exception, "undeclared");
+    }
+
+    @Test
+    @DisplayName("an unknown key on a template region is tolerated: the region renders")
+    void templateUnknownRegionKeyTolerated() {
+        GeneratedObject result = MinecraftSceneGenerator.fromScene("""
+            {"schema_version":1,"regions":[
+              {"name":"card","type":"template","mystery":5,"template":{
+                "schema_version":1,
+                "placeholders":{"owner":{}},
+                "content":{"components":{"minecraft:custom_name":{"text":"{owner}"}}}},
+               "values":{"owner":"Aerh"}}]}""").render(null);
+        assertFalse(result.isAnimated());
+        assertTrue(result.getImage().getWidth() > 0);
+        assertTrue(result.getImage().getHeight() > 0);
+    }
+
+    @Test
+    @DisplayName("scale and pack thread through the template region like the nbt tooltip region")
+    void templateThreadsScaleAndPack() {
+        // The text font pack maps minecraft:default onto its own glyphs, so lore carrying a pack
+        // codepoint renders differently with the pack than without - proof the pair is consulted.
+        Pack pack = registerPack(FixturePacks::writeTextFontPack, "test:scenetemplatefont");
+        String templateScene = """
+            {"schema_version":1,"scale":%d,"regions":[
+              {"name":"card","type":"template","template":{
+                "schema_version":1,
+                "content":{"components":{"minecraft:lore":["\\uE000 Loot"]}}}}]}""";
+        String nbtScene = """
+            {"schema_version":1,"scale":%d,"regions":[
+              {"name":"card","type":"tooltip","nbt":{"components":{
+                "minecraft:lore":["\\uE000 Loot"]}}}]}""";
+
+        // Threading is identical to the nbt region: same pack, same scale, byte-for-byte.
+        BufferedImage templatePacked = renderScene(templateScene.formatted(2), pack);
+        BufferedImage nbtPacked = renderScene(nbtScene.formatted(2), pack);
+        assertSamePixels(nbtPacked, templatePacked, "template must thread pack and scale like the nbt region");
+
+        // The pack is actually consulted: the pack glyph changes the render versus vanilla.
+        BufferedImage templateVanilla = renderScene(templateScene.formatted(2));
+        assertFalse(sameDimensionsAndPixels(templateVanilla, templatePacked),
+            "the pack glyph must change the render, proving the pack threads through");
+
+        // The scene scale threads through to the tooltip: doubling it enlarges the render.
+        BufferedImage scaleOne = renderScene(templateScene.formatted(1), pack);
+        assertTrue(templatePacked.getWidth() > scaleOne.getWidth()
+            && templatePacked.getHeight() > scaleOne.getHeight(),
+            "scale 2 must render larger than scale 1, proving the scale threads through");
+    }
+
+    private static boolean sameDimensionsAndPixels(BufferedImage a, BufferedImage b) {
+        if (a.getWidth() != b.getWidth() || a.getHeight() != b.getHeight()) {
+            return false;
+        }
+        for (int y = 0; y < a.getHeight(); y++) {
+            for (int x = 0; x < a.getWidth(); x++) {
+                if (a.getRGB(x, y) != b.getRGB(x, y)) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 }
