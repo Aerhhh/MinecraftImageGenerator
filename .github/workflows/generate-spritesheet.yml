@@ -57,7 +57,7 @@ jobs:
 
       - name: Set up .NET SDK
         if: inputs.pipeline == 'full' || inputs.pipeline == 'render-only'
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
