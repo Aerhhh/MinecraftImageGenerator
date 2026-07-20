@@ -7,7 +7,6 @@ import lombok.extern.slf4j.Slf4j;
 import net.aerh.imagegenerator.builder.ClassBuilder;
 import net.aerh.imagegenerator.pack.AnimatedTooltipSprites;
 import net.aerh.imagegenerator.pack.AnimationTimeline;
-import net.aerh.imagegenerator.pack.GuiScaling;
 import net.aerh.imagegenerator.pack.GuiSpriteRenderer;
 import net.aerh.imagegenerator.pack.PackAnimation;
 import net.aerh.imagegenerator.pack.TooltipSprites;
@@ -52,12 +51,12 @@ public class MinecraftTooltip {
     private static final int UNDERLINE_OFFSET = 2;
 
     /**
-     * Content inset, in GUI px, for a themed tooltip whose frame does not declare per-side
-     * nine-slice borders (a stretched or tiled frame) - the historical symmetric themed inset
-     * (vanilla tooltip content padding plus sprite margin). Nine-slice frames inset each side to
-     * at least this value; see {@link #contentInsetGuiPx}.
+     * Content inset, in GUI px, for a themed tooltip - vanilla's tooltip content padding (3)
+     * plus sprite margin (9). Vanilla draws the background and frame sprites over one rect
+     * expanded by this amount on every side of the text; a frame's nine-slice border governs
+     * how its art slices across that rect, never where the content sits.
      */
-    private static final int THEMED_BASE_INSET_GUI_PX = 12;
+    private static final int THEMED_INSET_GUI_PX = 12;
     /** Content inset, in GUI px, for an unthemed (programmatic-chrome) tooltip. */
     private static final int PLAIN_INSET_GUI_PX = 5;
 
@@ -103,15 +102,10 @@ public class MinecraftTooltip {
     // Scaled values based on scale factor
     private final int pixelSize;
     /**
-     * Per-side content inset in CANVAS px (GUI px times {@link #pixelSize}). Unthemed and
-     * stretched/tiled-frame tooltips carry the historical symmetric inset on all four sides; a
-     * themed tooltip whose frame declares nine-slice borders insets each side to clear that
-     * border. See {@link #contentInsetGuiPx}.
+     * Symmetric content inset in CANVAS px (GUI px times {@link #pixelSize}):
+     * {@link #THEMED_INSET_GUI_PX} for themed tooltips, {@link #PLAIN_INSET_GUI_PX} otherwise.
      */
-    private final int insetLeft;
-    private final int insetTop;
-    private final int insetRight;
-    private final int insetBottom;
+    private final int startXY;
     private final int yIncrement;
 
     @Getter
@@ -149,7 +143,7 @@ public class MinecraftTooltip {
     /**
      * Rightmost extent (canvas px) reached by the current line's cursor. In the measure pass the
      * line starts at 0, so this is relative to the line start; the draw pass folds absolute
-     * (inset-based) positions into the same field, but only the measure-pass value is ever
+     * (startXY-based) positions into the same field, but only the measure-pass value is ever
      * consumed. Negative pack advances can move the cursor LEFT, so a line's width for canvas
      * sizing and centering is this max extent, not the final cursor position.
      */
@@ -230,46 +224,13 @@ public class MinecraftTooltip {
 
         this.pixelSize = DEFAULT_PIXEL_SIZE * scaleFactor;
         // Themed tooltips use the vanilla sprite-rect model: background and frame cover ONE rect
-        // expanded per-side around the text, with 1 GUI px equal to one pixelSize unit. A frame
-        // that declares nine-slice borders insets the content to clear those borders; every other
-        // case keeps the historical symmetric inset. Pack art may legitimately extend past the box.
-        int[] insetGuiPx = contentInsetGuiPx();
-        this.insetLeft = pixelSize * insetGuiPx[0];
-        this.insetTop = pixelSize * insetGuiPx[1];
-        this.insetRight = pixelSize * insetGuiPx[2];
-        this.insetBottom = pixelSize * insetGuiPx[3];
+        // expanded 12 GUI px (padding 3 + margin 9) on every side of the text, with 1 GUI px equal
+        // to one pixelSize unit. Pack art may legitimately extend past the classic tooltip box.
+        this.startXY = pixelSize * (isThemed() ? THEMED_INSET_GUI_PX : PLAIN_INSET_GUI_PX);
         this.yIncrement = pixelSize * 10;
 
-        this.locationX = insetLeft;
-        this.locationY = insetTop + pixelSize * 2 + yIncrement / 2;
-    }
-
-    /**
-     * Per-side content inset in GUI px, ordered {@code [left, top, right, bottom]}.
-     *
-     * <p>An unthemed tooltip insets every side by {@link #PLAIN_INSET_GUI_PX}. A themed tooltip
-     * whose frame sprite declares {@link GuiScaling.NineSlice nine-slice} scaling insets each
-     * side to that side's declared border, so the content clears the frame's drawn border art
-     * exactly as vanilla places content relative to the style's nine-slice declarations - but
-     * never tighter than {@link #THEMED_BASE_INSET_GUI_PX} (a border thinner than the base
-     * tooltip padding still leaves the vanilla-equivalent gap, keeping thin-border frames
-     * pixel-identical to the historical themed inset). A stretched or tiled frame carries no
-     * per-side border, so it falls back to the symmetric base inset.
-     */
-    private int[] contentInsetGuiPx() {
-        if (!isThemed()) {
-            return new int[]{PLAIN_INSET_GUI_PX, PLAIN_INSET_GUI_PX, PLAIN_INSET_GUI_PX, PLAIN_INSET_GUI_PX};
-        }
-        if (themeSprites.frame().scaling() instanceof GuiScaling.NineSlice nineSlice) {
-            GuiScaling.NineSlice.Border border = nineSlice.border();
-            return new int[]{
-                Math.max(border.left(), THEMED_BASE_INSET_GUI_PX),
-                Math.max(border.top(), THEMED_BASE_INSET_GUI_PX),
-                Math.max(border.right(), THEMED_BASE_INSET_GUI_PX),
-                Math.max(border.bottom(), THEMED_BASE_INSET_GUI_PX)
-            };
-        }
-        return new int[]{THEMED_BASE_INSET_GUI_PX, THEMED_BASE_INSET_GUI_PX, THEMED_BASE_INSET_GUI_PX, THEMED_BASE_INSET_GUI_PX};
+        this.locationX = startXY;
+        this.locationY = startXY + pixelSize * 2 + yIncrement / 2;
     }
 
     /** Sprite chrome applies only when a theme is present AND the border is enabled; renderBorder=false means no chrome at all. */
@@ -671,7 +632,7 @@ public class MinecraftTooltip {
     private void measureLines(Graphics2D measureGraphics) {
         this.lineMetrics = new HashMap<>();
         this.lineMinExtents = new HashMap<>();
-        this.locationY = insetTop + pixelSize * 2 + yIncrement / 2;
+        this.locationY = startXY + pixelSize * 2 + yIncrement / 2;
 
         for (int lineIndex = 0; lineIndex < this.getLines().size(); lineIndex++) {
             LineSegment line = this.getLines().get(lineIndex);
@@ -697,7 +658,7 @@ public class MinecraftTooltip {
         int shift = 0;
         for (Map.Entry<Integer, Double> entry : this.lineMinExtents.entrySet()) {
             int lineWidth = this.lineMetrics.getOrDefault(entry.getKey(), 0);
-            int lineStart = insetLeft + (this.centeredText ? (this.largestWidth - lineWidth) / 2 : 0);
+            int lineStart = startXY + (this.centeredText ? (this.largestWidth - lineWidth) / 2 : 0);
             shift = Math.max(shift, (int) Math.ceil(-(lineStart + entry.getValue())));
         }
         return shift;
@@ -711,7 +672,7 @@ public class MinecraftTooltip {
      *                      obfuscation so identical renders produce identical frames.
      */
     private void drawLinesInternal(Graphics2D frameGraphics, int frameIndex) {
-        this.locationY = insetTop + pixelSize * 2 + yIncrement / 2;
+        this.locationY = startXY + pixelSize * 2 + yIncrement / 2;
         this.isAnimated = false;
         this.packObfuscationCounter = 0;
 
@@ -722,9 +683,9 @@ public class MinecraftTooltip {
             // Adjust X position based on if text is centered; leftShift keeps left-overdrawing
             // glyph art inside the canvas (zero for normal text)
             if (this.centeredText) {
-                this.locationX = this.leftShift + insetLeft + (this.largestWidth - lineWidth) / 2;
+                this.locationX = this.leftShift + startXY + (this.largestWidth - lineWidth) / 2;
             } else {
-                this.locationX = this.leftShift + insetLeft;
+                this.locationX = this.leftShift + startXY;
             }
 
             // Draw segments for the line
@@ -1089,8 +1050,8 @@ public class MinecraftTooltip {
 
         // Calculate final dimensions based on the measured largestWidth and height; leftShift
         // widens the canvas for glyph art that would otherwise clip at the left edge
-        int finalWidth = this.leftShift + insetLeft + this.largestWidth + insetRight;
-        int finalHeight = measuredHeight - (yIncrement + (this.lines.isEmpty() || !this.firstLinePadding ? 0 : pixelSize * 2)) + insetBottom + pixelSize * 2;
+        int finalWidth = this.leftShift + startXY + this.largestWidth + startXY;
+        int finalHeight = measuredHeight - (yIncrement + (this.lines.isEmpty() || !this.firstLinePadding ? 0 : pixelSize * 2)) + startXY + pixelSize * 2;
 
         if (isThemed()) {
             // Sprite texels map 1:pixelSize, so the themed canvas must be a whole number of GUI px.

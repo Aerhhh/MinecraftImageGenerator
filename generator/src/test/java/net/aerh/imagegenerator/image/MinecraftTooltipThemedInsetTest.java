@@ -10,26 +10,20 @@ import org.junit.jupiter.api.Test;
 import java.awt.image.BufferedImage;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 /**
- * Pins themed tooltip content placement against the resolved style's nine-slice frame borders.
- * A themed frame that declares per-side nine-slice borders insets the content to clear those
- * borders (a large production server legendary frame declares a thicker top/bottom border than
- * left/right, and vanilla places content relative to those declarations); a stretched frame, or
- * a border thinner than the historical themed padding, keeps the symmetric base inset so existing
- * themed goldens stay byte-identical.
+ * Pins themed tooltip content placement to the fixed vanilla inset (content padding 3 plus
+ * sprite margin 9 GUI px per side). A frame's nine-slice border declaration governs how the
+ * frame art slices across the tooltip rect and must never move the content or grow the canvas:
+ * production packs declare large borders purely to keep ornate corner art unscaled, and vanilla
+ * draws the sprites over the same fixed rect regardless of those declarations.
  *
  * <p>Frames are fully transparent so the solid stretched background shows behind the white text,
- * making the content's top-left position directly measurable. The canvas grows by exactly the
- * per-side inset the border adds, so the deltas below isolate the inset math from glyph metrics.
+ * making any content displacement directly measurable against the stretched-frame baseline.
  */
 class MinecraftTooltipThemedInsetTest {
 
-    private static final int PIXEL_SIZE = 2; // scaleFactor 1
-    private static final int BASE_INSET_GUI = 12;
     private static final int BACKGROUND = 0xFF203040;
-    private static final int WHITE = 0xFFFFFFFF;
 
     private static BufferedImage solid(int width, int height, int argb) {
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
@@ -67,18 +61,6 @@ class MinecraftTooltipThemedInsetTest {
             new GuiScaling.NineSlice.Border(left, top, right, bottom), false);
     }
 
-    /** Row of the first white text pixel - the content's drawn top. */
-    private static int firstTextRow(BufferedImage image) {
-        for (int y = 0; y < image.getHeight(); y++) {
-            for (int x = 0; x < image.getWidth(); x++) {
-                if (image.getRGB(x, y) == WHITE) {
-                    return y;
-                }
-            }
-        }
-        throw new AssertionError("no white text pixel found");
-    }
-
     private static void assertPixelsEqual(BufferedImage expected, BufferedImage actual) {
         assertEquals(expected.getWidth(), actual.getWidth(), "width");
         assertEquals(expected.getHeight(), actual.getHeight(), "height");
@@ -90,83 +72,25 @@ class MinecraftTooltipThemedInsetTest {
     }
 
     @Test
-    void stretchedFrameKeepsTheSymmetricBaseInset() {
+    void thinNineSliceBorderRendersIdenticallyToAStretchedFrame() {
         BufferedImage stretched = renderThemed(new GuiScaling.Stretch(), 4, 4);
-        // A symmetric nine-slice border equal to the base inset must render identically - it
-        // clears the same amount the stretched fallback already reserved.
-        BufferedImage nineSliceAtBase = renderThemed(
-            nineSlice(BASE_INSET_GUI, BASE_INSET_GUI, BASE_INSET_GUI, BASE_INSET_GUI, 48, 48), 48, 48);
-        assertPixelsEqual(stretched, nineSliceAtBase);
-    }
-
-    @Test
-    void borderThinnerThanTheBaseFloorsToTheBaseInset() {
-        BufferedImage stretched = renderThemed(new GuiScaling.Stretch(), 4, 4);
-        // Borders below the base padding still leave the vanilla-equivalent gap: byte-identical.
         BufferedImage thinBorder = renderThemed(nineSlice(4, 4, 4, 4, 16, 16), 16, 16);
         assertPixelsEqual(stretched, thinBorder);
     }
 
     @Test
-    void thickerTopBottomBorderInsetsContentVerticallyLikeTheLegendaryFrame() {
-        BufferedImage base = renderThemed(new GuiScaling.Stretch(), 4, 4);
-        // The reference legendary frame shape: left/right 12 (= base), top/bottom 20.
-        BufferedImage legendaryShape = renderThemed(nineSlice(12, 20, 12, 20, 48, 48), 48, 48);
-
-        // Left/right borders equal the base, so the width is unchanged.
-        assertEquals(base.getWidth(), legendaryShape.getWidth(), "left/right at base leaves width unchanged");
-        // Top and bottom each grow by (20 - 12) GUI px.
-        int expectedHeightDelta = 2 * (20 - BASE_INSET_GUI) * PIXEL_SIZE;
-        assertEquals(base.getHeight() + expectedHeightDelta, legendaryShape.getHeight(),
-            "top and bottom borders above the base each enlarge the canvas");
-
-        // The content itself moves down by the extra top inset, not merely the canvas.
-        int expectedTopShift = (20 - BASE_INSET_GUI) * PIXEL_SIZE;
-        assertEquals(firstTextRow(base) + expectedTopShift, firstTextRow(legendaryShape),
-            "content drops by the extra top border");
-        assertNotEquals(base.getHeight(), legendaryShape.getHeight(), "the legendary shape must differ from the base");
+    void thickUniformBorderLikeTheProductionFramesDoesNotMoveContent() {
+        BufferedImage stretched = renderThemed(new GuiScaling.Stretch(), 4, 4);
+        // The production rarity frames declare border 24 on every side (100x100 sprites) purely
+        // for corner slicing; content placement and canvas size must not change.
+        BufferedImage thickBorder = renderThemed(nineSlice(24, 24, 24, 24, 100, 100), 100, 100);
+        assertPixelsEqual(stretched, thickBorder);
     }
 
     @Test
-    void asymmetricBordersInsetEachSideIndependently() {
-        BufferedImage base = renderThemed(new GuiScaling.Stretch(), 4, 4);
-        // Distinct value per side catches any left/top/right/bottom transposition; all above base.
-        int left = 16;
-        int top = 20;
-        int right = 24;
-        int bottom = 30;
-        BufferedImage asymmetric = renderThemed(nineSlice(left, top, right, bottom, 64, 80), 64, 80);
-
-        int expectedWidthDelta = ((left - BASE_INSET_GUI) + (right - BASE_INSET_GUI)) * PIXEL_SIZE;
-        int expectedHeightDelta = ((top - BASE_INSET_GUI) + (bottom - BASE_INSET_GUI)) * PIXEL_SIZE;
-        assertEquals(base.getWidth() + expectedWidthDelta, asymmetric.getWidth(),
-            "width grows by the left plus right borders above the base");
-        assertEquals(base.getHeight() + expectedHeightDelta, asymmetric.getHeight(),
-            "height grows by the top plus bottom borders above the base");
-
-        int expectedLeftShift = (left - BASE_INSET_GUI) * PIXEL_SIZE;
-        int expectedTopShift = (top - BASE_INSET_GUI) * PIXEL_SIZE;
-        assertEquals(firstTextRow(base) + expectedTopShift, firstTextRow(asymmetric),
-            "content drops by the extra top border");
-        // The left shift moves the first white pixel's column right by the extra left border.
-        assertEquals(firstTextColumn(base) + expectedLeftShift, firstTextColumn(asymmetric),
-            "content moves right by the extra left border");
-    }
-
-    /** Column of the first white text pixel - the content's drawn left edge. */
-    private static int firstTextColumn(BufferedImage image) {
-        int best = Integer.MAX_VALUE;
-        for (int y = 0; y < image.getHeight(); y++) {
-            for (int x = 0; x < image.getWidth(); x++) {
-                if (image.getRGB(x, y) == WHITE) {
-                    best = Math.min(best, x);
-                    break;
-                }
-            }
-        }
-        if (best == Integer.MAX_VALUE) {
-            throw new AssertionError("no white text pixel found");
-        }
-        return best;
+    void asymmetricBordersDoNotMoveContentEither() {
+        BufferedImage stretched = renderThemed(new GuiScaling.Stretch(), 4, 4);
+        BufferedImage asymmetric = renderThemed(nineSlice(16, 20, 24, 30, 64, 80), 64, 80);
+        assertPixelsEqual(stretched, asymmetric);
     }
 }
