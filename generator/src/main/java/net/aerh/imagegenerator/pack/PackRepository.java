@@ -235,6 +235,27 @@ public final class PackRepository {
     }
 
     /**
+     * Sorted item refs defined by a registered pack, for discovery/autocomplete. Doesn't include items with an error associated. <br />
+     * Overload for {@link #itemRefs(PackId packId, boolean includeErroredItems)} where you can set the on error behavior.
+     *
+     * @throws PackResolveException when the pack is not registered
+     */
+    public List<String> itemRefs(PackId packId) {
+        return requireRegistered(packId).itemRefs();
+    }
+
+    /**
+     * Sorted item refs defined by a registered pack, for discovery/autocomplete.
+     *
+     * @param includeErroredItems If True filters out all the item refs that have an error associated to the item ref.
+     *
+     * @throws PackResolveException when the pack is not registered
+     */
+    public List<String> itemRefs(PackId packId, boolean includeErroredItems) {
+        return requireRegistered(packId).itemRefs(includeErroredItems);
+    }
+
+    /**
      * Resolves a tooltip style's sprite animations against a registered pack: the animated
      * counterpart of {@link #resolveTooltipSprites(PackId, String)}, present when at least one
      * of the style's two sprites carries an animation mcmeta (the "shiny" frame strips real

@@ -486,6 +486,32 @@ final class LoadedPack {
     }
 
     /**
+     * Overload for {@link #itemRefs(boolean includeErroredItems)} where {@code includeErroredItems} is set to true.
+     */
+    public List<String> itemRefs() {
+        return itemRefs(false);
+    }
+
+    /**
+     * returns a sorted list of all the items in the pack by their key (a string).
+     *
+     * @param includeErroredItems If True filters out all the item keys that have an error associated to the item key.
+     */
+    public List<String> itemRefs(boolean includeErroredItems) {
+        if (includeErroredItems) {
+            return items.keySet().stream()
+                .sorted()
+                .toList();
+        }
+
+        return items.entrySet().stream()
+            .filter(entry -> entry.getValue().error == null)
+            .map(Map.Entry::getKey)
+            .sorted()
+            .toList();
+    }
+
+    /**
      * Resolves a font id (e.g. {@code minecraft:default}, {@code mypack:chest_backgrounds}; a bare
      * id defaults to the {@code minecraft} namespace) to its resolved font: references expanded,
      * filters applied for Force Unicode OFF / jp OFF, bitmap sheets decoded and metrics computed.
