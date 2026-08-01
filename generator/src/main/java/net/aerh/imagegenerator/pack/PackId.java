@@ -20,7 +20,7 @@ public record PackId(String namespace, String name) {
         if (name == null || !PART.matcher(name).matches()) {
             throw new IllegalArgumentException("Invalid pack name: " + name);
         }
-        if (VANILLA.namespace.equals(namespace) && VANILLA.name.equals(name)) {
+        if (VANILLA != null && VANILLA.namespace.equals(namespace) && VANILLA.name.equals(name)) {
             throw new IllegalArgumentException("minecraft:minecraft is the built-in vanilla pack and cannot be registered");
         }
     }
