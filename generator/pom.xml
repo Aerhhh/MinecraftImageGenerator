@@ -23,7 +23,7 @@
         <dependency>
             <groupId>com.github.minecraft-library</groupId>
             <artifactId>text</artifactId>
-            <version>c05df496f6</version>
+            <version>117775e414</version>
         </dependency>
         <dependency>
             <groupId>com.github.ben-manes.caffeine</groupId>
