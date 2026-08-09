@@ -79,10 +79,6 @@ public final class PackRepository {
         LoadedPack loaded;
         try {
             id = PackId.parse(packId);
-            if (PackId.VANILLA.equals(id)) {
-                throw new IllegalArgumentException(
-                    "minecraft:minecraft is the built-in vanilla pack and cannot be registered");
-            }
             loaded = new LoadedPack(id, source, limits);
             if (packs.putIfAbsent(id, loaded) != null) {
                 throw new IllegalArgumentException("Pack already registered: " + id);

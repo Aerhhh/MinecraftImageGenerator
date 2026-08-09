@@ -21,7 +21,9 @@ class PackIdTest {
 
     @Test
     void vanillaConstantIsMinecraftMinecraft() {
-        assertEquals(PackId.parse("minecraft:minecraft"), PackId.VANILLA);
+        assertEquals("minecraft", PackId.VANILLA.namespace());
+        assertEquals("minecraft", PackId.VANILLA.name());
+        assertEquals("minecraft:minecraft", PackId.VANILLA.toString());
     }
 
     @ParameterizedTest
@@ -40,7 +42,6 @@ class PackIdTest {
     void isActiveTreatsNullAndVanillaAsNoPack() {
         assertFalse(PackId.isActive(null));
         assertFalse(PackId.isActive(PackId.VANILLA));
-        assertFalse(PackId.isActive(PackId.parse("minecraft:minecraft")));
         assertTrue(PackId.isActive(PackId.parse("hypixel:skyblock")));
     }
 }
