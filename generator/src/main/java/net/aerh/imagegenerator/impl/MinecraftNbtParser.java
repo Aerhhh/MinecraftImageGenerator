@@ -87,6 +87,11 @@ public class MinecraftNbtParser {
             metadataMaxLineLength
         );
 
+        String itemModel = formatMetadata.get(NbtFormatMetadata.KEY_ITEM_MODEL, String.class);
+        if (itemModel != null) {
+            log.debug("Item '{}' is addressed by item model '{}'", parsedItemId, itemModel);
+        }
+
         String base64Texture = null;
         if (isPlayerHead) {
             base64Texture = formatMetadata.get(NbtFormatMetadata.KEY_PLAYER_HEAD_TEXTURE, String.class);
@@ -96,20 +101,6 @@ public class MinecraftNbtParser {
             } else {
                 log.debug("Handler '{}' did not provide a player head texture; falling back to static item render", handlerName(formatHandler));
             }
-
-            if (base64Texture != null) {
-                generators.add(new MinecraftPlayerHeadGenerator.Builder()
-                    .withSkin(base64Texture)
-                    .withScale(-2));
-            } else {
-                generators.add(new MinecraftItemGenerator.Builder()
-                    .withItem(parsedItemId)
-                    .isEnchanted(enchanted));
-            }
-        } else {
-            generators.add(new MinecraftItemGenerator.Builder()
-                .withItem(parsedItemId)
-                .isEnchanted(enchanted));
         }
 
         int maxLineLength = resolveMaxLineLength(formatMetadata, formatHandler);
@@ -121,20 +112,26 @@ public class MinecraftNbtParser {
             .hasFirstLinePadding(true)
             .withMaxLineLength(maxLineLength);
 
-        // Extract dye color and apply to item generator if it exists
         String dyeColor = tooltipGenerator.getDyeColor(jsonObject);
-        if (dyeColor != null && !isPlayerHead) {
-            log.debug("Detected dye color '{}' for item '{}'", dyeColor, parsedItemId);
-            // Update the item generator with dye color
-            generators = new ArrayList<>();
-            generators.add(new MinecraftItemGenerator.Builder()
-                .withItem(jsonObject.get("id").getAsString())
-                .withData(dyeColor)
-                .isEnchanted(enchanted));
-        } else if (dyeColor == null) {
+        if (dyeColor == null) {
             log.trace("No dye color present for item '{}'", parsedItemId);
+        }
+
+        // An item model replaces the item's model outright (as it does in vanilla), so it wins
+        // over the player head render even when a profile texture is present. The texture stays
+        // on the result so callers that cannot resolve the model can still fall back to the head.
+        if (rendersAsPlayerHead(isPlayerHead, base64Texture, itemModel)) {
+            if (dyeColor != null) {
+                log.trace("Ignoring dye color '{}' because '{}' renders as a player head", dyeColor, parsedItemId);
+            }
+            generators.add(new MinecraftPlayerHeadGenerator.Builder()
+                .withSkin(base64Texture)
+                .withScale(-2));
         } else {
-            log.trace("Ignoring dye color '{}' because '{}' renders as a player head", dyeColor, parsedItemId);
+            if (dyeColor != null) {
+                log.debug("Detected dye color '{}' for item '{}'", dyeColor, parsedItemId);
+            }
+            generators.add(newItemGenerator(itemModel, parsedItemId, dyeColor, enchanted));
         }
 
         generators.add(tooltipGenerator);
@@ -154,7 +151,34 @@ public class MinecraftNbtParser {
             .withItemLore(mappedLore)
             .withName(mappedName);
 
-        return new ParsedNbt(generators, base64Texture, parsedItemId, enchanted);
+        return new ParsedNbt(generators, base64Texture, parsedItemId, itemModel, enchanted);
+    }
+
+    /**
+     * Whether the item renders as a 3D player head: a {@code player_head} whose profile texture
+     * resolved and which carries no {@code minecraft:item_model} component. An item model
+     * replaces the model vanilla would pick for the item, head included.
+     */
+    private static boolean rendersAsPlayerHead(boolean isPlayerHead, String base64Texture, String itemModel) {
+        return isPlayerHead && base64Texture != null && itemModel == null;
+    }
+
+    /**
+     * The single place an item generator is built for a parsed item, so the item model, dye color
+     * and enchant glint cannot be dropped by one construction path disagreeing with another.
+     * A {@code minecraft:item_model} component addresses the item by its model definition;
+     * without one the item id is used.
+     */
+    private static MinecraftItemGenerator.Builder newItemGenerator(String itemModel, String itemId, String dyeColor, boolean enchanted) {
+        MinecraftItemGenerator.Builder builder = new MinecraftItemGenerator.Builder();
+
+        if (itemModel != null) {
+            builder.withItemModel(itemModel);
+        } else {
+            builder.withItem(itemId);
+        }
+
+        return builder.withData(dyeColor).isEnchanted(enchanted);
     }
 
     /**
@@ -277,6 +301,8 @@ public class MinecraftNbtParser {
         private ArrayList<ClassBuilder<? extends Generator>> generators;
         private String base64Texture;
         private String parsedItemId;
+        /** The {@code minecraft:item_model} component value, or null when the item has none. */
+        private String parsedItemModel;
         private boolean enchanted;
     }
 

@@ -388,6 +388,7 @@ new MinecraftItemGenerator.Builder()
 - `condition`, `select`, `range_dispatch` and `composite` nodes are supported, along with `constant`, `custom_model_data` and `dye` (rendered at its required `default` color) tint sources.
 - `withItemDamage(damage, maxDamage)` feeds `range_dispatch` nodes with `property: minecraft:damage`: `normalize: true` (the vanilla default) evaluates the 0..1 damage fraction, `normalize: false` the raw damage value. When no damage is set, the property evaluates at 0.
 - Model parent chains may end at the vanilla flat templates `minecraft:item/generated` or `minecraft:item/handheld` without the pack shipping them - the ordinary flat-item shape real packs rely on. Any other parent missing from a pack-claimed namespace still fails loudly.
+- `MinecraftNbtParser` picks the component up straight from 1.20.5+ NBT: an item whose `components` carry `minecraft:item_model` is addressed by that model instead of by its `id`, and the value is exposed on `ParsedNbt.getParsedItemModel()`. The model wins over the player head render even when `minecraft:profile` is also present (as it does in vanilla), while the resolved head texture stays on the result so a caller whose pack cannot resolve the model can fall back to the head. A blank or non-string component is ignored rather than failing the parse.
 
 ### HUD lines
 
