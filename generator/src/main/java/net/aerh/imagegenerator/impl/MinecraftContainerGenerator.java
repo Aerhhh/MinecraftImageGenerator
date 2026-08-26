@@ -143,8 +143,6 @@ public class MinecraftContainerGenerator implements Generator {
     // Final non-transient so it enters the render cache key: the flag changes rendered pixels
     // for slots whose models carry unsupported gui rotations.
     private final boolean fullGuiRotations;
-    // Final non-transient so the flag enters the reflective render cache key.
-    private final boolean animatedTextures;
     // packId is final non-transient so it enters the render cache key; the repository reference
     // is transient so instances never split it.
     @Nullable
@@ -236,16 +234,14 @@ public class MinecraftContainerGenerator implements Generator {
     public @NotNull GeneratedObject render(@Nullable GenerationContext generationContext) {
         log.debug("Rendering container ({})", this);
 
-        if (animatedTextures) {
-            GeneratedObject animated = renderAnimated(generationContext);
-            if (animated != null) {
-                return animated;
-            }
+        GeneratedObject animated = renderAnimated(generationContext);
+        if (animated != null) {
+            return animated;
         }
         return renderStatic(generationContext);
     }
 
-    /** The historical static render, byte-identical with the animated-textures flag off. */
+    /** The static render, used whenever nothing in the container animates. */
     private GeneratedObject renderStatic(@Nullable GenerationContext generationContext) {
         int pixelSize = 2 * scaleFactor;
         Layout layout = computeLayout(pixelSize);
@@ -446,7 +442,7 @@ public class MinecraftContainerGenerator implements Generator {
             item.getDurabilityPercent(), data);
         GeneratedObject generated = generatedCache.computeIfAbsent(visualKey,
             key -> MinecraftInventoryGenerator.generateSlotObject(item, generationContext,
-                PackId.isActive(packId) ? packId : null, packRepository, key.customModelData(), true));
+                PackId.isActive(packId) ? packId : null, packRepository, key.customModelData()));
         if (generated.getFrameDelaysMs() != null) {
             List<Integer> stepTicks = generated.getFrameDelaysMs().stream()
                 .map(AnimationTimeline::millisToTicks)
@@ -1045,7 +1041,6 @@ public class MinecraftContainerGenerator implements Generator {
         private final SortedMap<Integer, CustomModelData> slotCustomModelData = new TreeMap<>();
         private int scaleFactor = 1;
         private boolean fullGuiRotations;
-        private boolean animatedTextures;
         private PackId packId;
         private PackRepository packRepository;
 
@@ -1163,18 +1158,6 @@ public class MinecraftContainerGenerator implements Generator {
             return this;
         }
 
-        /**
-         * Opts the render into animated pack textures (default false): an animated pack
-         * container background and every texture-animated slot item join one shared scene
-         * timeline (the LCM of the cycles, capped per
-         * {@link net.aerh.imagegenerator.pack.AnimationTimeline}) and {@code build().generate()}
-         * returns the GIF form of {@link GeneratedObject} with per-frame delays. Scenes without
-         * animated textures render the static image exactly as before.
-         */
-        public Builder withAnimatedTextures(boolean animatedTextures) {
-            this.animatedTextures = animatedTextures;
-            return this;
-        }
 
         /**
          * Validates the slot indices against the final row count and builds the generator.
@@ -1195,7 +1178,7 @@ public class MinecraftContainerGenerator implements Generator {
                 }
             }
             return new MinecraftContainerGenerator(rows, title, new TreeMap<>(slots),
-                new TreeMap<>(slotCustomModelData), scaleFactor, fullGuiRotations, animatedTextures,
+                new TreeMap<>(slotCustomModelData), scaleFactor, fullGuiRotations,
                 packId, packRepository);
         }
     }

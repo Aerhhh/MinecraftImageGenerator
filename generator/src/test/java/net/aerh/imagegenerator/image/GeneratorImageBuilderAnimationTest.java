@@ -53,7 +53,7 @@ class GeneratorImageBuilderAnimationTest {
         // per-frame delays (the uniform maxFrames/first-delay path would flatten the 5-second
         // hold to 100 ms).
         GeneratedObject composite = new GeneratorImageBuilder()
-            .addGenerator(item("testpack:item/animated_hold").withAnimatedTextures(true).build())
+            .addGenerator(item("testpack:item/animated_hold").build())
             .addGenerator(item("testpack:item/simple").build())
             .build();
 
@@ -69,12 +69,12 @@ class GeneratorImageBuilderAnimationTest {
     @Test
     void compositedVariableDelayAnimationIsDeterministic() {
         byte[] first = new GeneratorImageBuilder()
-            .addGenerator(item("testpack:item/animated_hold").withAnimatedTextures(true).build())
+            .addGenerator(item("testpack:item/animated_hold").build())
             .addGenerator(item("testpack:item/simple").build())
             .build()
             .getGifData();
         byte[] second = new GeneratorImageBuilder()
-            .addGenerator(item("testpack:item/animated_hold").withAnimatedTextures(true).build())
+            .addGenerator(item("testpack:item/animated_hold").build())
             .addGenerator(item("testpack:item/simple").build())
             .build()
             .getGifData();

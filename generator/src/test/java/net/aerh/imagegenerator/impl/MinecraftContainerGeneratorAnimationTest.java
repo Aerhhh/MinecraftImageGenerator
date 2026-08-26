@@ -1,6 +1,5 @@
 package net.aerh.imagegenerator.impl;
 
-import net.aerh.imagegenerator.cache.GeneratorCacheKey;
 import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.pack.AnimationTimeline;
 import net.aerh.imagegenerator.pack.PackId;
@@ -18,7 +17,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -47,7 +46,6 @@ class MinecraftContainerGeneratorAnimationTest {
             .withSlot(1, "testpack:item/marker")
             .withPack(packId)
             .withPackRepository(repository)
-            .withAnimatedTextures(true)
             .build()
             .generate();
 
@@ -81,7 +79,6 @@ class MinecraftContainerGeneratorAnimationTest {
             .withSlot(3, "testpack:item/plain_sprite")
             .withPack(packId)
             .withPackRepository(repository)
-            .withAnimatedTextures(true)
             .build()
             .generate();
 
@@ -123,7 +120,6 @@ class MinecraftContainerGeneratorAnimationTest {
             .withSlot(1, "testpack:item/animated_sprite")
             .withPack(packId)
             .withPackRepository(repository)
-            .withAnimatedTextures(true)
             .build()
             .generate();
 
@@ -139,54 +135,26 @@ class MinecraftContainerGeneratorAnimationTest {
     }
 
     @Test
-    void flagOnWithoutAnimatedContentRendersTheExactStaticImage() {
+    void aContainerWithoutAnimatedTexturesStaysStatic() {
         FixturePacks.writeContainerArtPack(packDir);
         PackRepository repository = new PackRepository();
         PackId packId = register(repository, packDir);
 
-        GeneratedObject off = new MinecraftContainerGenerator.Builder()
+        GeneratedObject first = new MinecraftContainerGenerator.Builder()
             .withRows(2)
             .withPack(packId)
             .withPackRepository(repository)
             .build()
             .generate();
-        GeneratedObject on = new MinecraftContainerGenerator.Builder()
+        GeneratedObject second = new MinecraftContainerGenerator.Builder()
             .withRows(2)
             .withPack(packId)
             .withPackRepository(repository)
-            .withAnimatedTextures(true)
             .build()
             .generate();
 
-        assertFalse(on.isAnimated());
-        ImageAssertions.assertPixelsEqual(off.getImage(), on.getImage(), "static scenes are untouched");
-    }
-
-    @Test
-    void cacheKeysDifferAcrossTheAnimatedTexturesFlag() {
-        MinecraftContainerGenerator off = new MinecraftContainerGenerator.Builder()
-            .withRows(1).withSlot(1, "testpack:item/animated_quad").build();
-        MinecraftContainerGenerator on = new MinecraftContainerGenerator.Builder()
-            .withRows(1).withSlot(1, "testpack:item/animated_quad")
-            .withAnimatedTextures(true).build();
-        assertNotEquals(GeneratorCacheKey.fromGenerator(off), GeneratorCacheKey.fromGenerator(on),
-            "the flag changes rendered output, so it must enter the render cache key");
-    }
-
-    @Test
-    void flagOffRendersTheAnimatedBackgroundStatic() {
-        FixturePacks.writeAnimatedContainerPack(packDir);
-        PackRepository repository = new PackRepository();
-        PackId packId = register(repository, packDir);
-
-        GeneratedObject generated = new MinecraftContainerGenerator.Builder()
-            .withRows(1)
-            .withPack(packId)
-            .withPackRepository(repository)
-            .build()
-            .generate();
-
-        assertFalse(generated.isAnimated());
-        assertEquals(0xFF113355, generated.getImage().getRGB(300, 4), "the first-frame crop paints");
+        assertFalse(first.isAnimated(), "a pack with no animated texture renders a static image");
+        assertNull(first.getFrameDelaysMs());
+        ImageAssertions.assertPixelsEqual(first.getImage(), second.getImage(), "the static render is deterministic");
     }
 }

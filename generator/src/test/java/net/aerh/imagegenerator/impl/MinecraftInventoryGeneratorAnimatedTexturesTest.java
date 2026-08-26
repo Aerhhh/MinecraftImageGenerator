@@ -1,6 +1,5 @@
 package net.aerh.imagegenerator.impl;
 
-import net.aerh.imagegenerator.cache.GeneratorCacheKey;
 import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.pack.AnimationTimeline;
 import net.aerh.imagegenerator.pack.PackId;
@@ -19,7 +18,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -57,7 +56,6 @@ class MinecraftInventoryGeneratorAnimatedTexturesTest {
         // LCM 36, sampled at every multiple of 2 or 3 - 24 scene steps.
         GeneratedObject inventory = builder(
             "testpack:item/animated_quad:1%%testpack:item/animated_quad_fast:2")
-            .withAnimatedTextures(true)
             .build()
             .generate();
 
@@ -99,7 +97,6 @@ class MinecraftInventoryGeneratorAnimatedTexturesTest {
         // item pipeline (getFrameDelaysMs carried into the scene timeline), not the elements
         // raster path. A mutant that dropped its per-frame delays would leave the scene static.
         GeneratedObject inventory = builder("testpack:item/animated_sprite:1")
-            .withAnimatedTextures(true)
             .build()
             .generate();
 
@@ -123,7 +120,6 @@ class MinecraftInventoryGeneratorAnimatedTexturesTest {
     void staticScenePartsAreIdenticalAcrossFrames() {
         GeneratedObject inventory = builder(
             "testpack:item/animated_quad:1%%testpack:item/plain_sprite:2")
-            .withAnimatedTextures(true)
             .build()
             .generate();
 
@@ -144,38 +140,10 @@ class MinecraftInventoryGeneratorAnimatedTexturesTest {
     }
 
     @Test
-    void flagOffRendersTheAnimatedItemStatic() {
-        GeneratedObject inventory = builder("testpack:item/animated_quad:1").build().generate();
+    void anInventoryWithoutAnimatedItemsStaysStatic() {
+        GeneratedObject inventory = builder("testpack:item/plain_sprite:1").build().generate();
 
-        assertFalse(inventory.isAnimated());
-        int scaleFactor = MinecraftInventoryGenerator.getScaleFactor();
-        int slotSize = 18 * scaleFactor;
-        int borderSize = 7 * scaleFactor;
-        int itemSize = 16 * scaleFactor;
-        int padding = (slotSize - itemSize) / 2;
-        assertEquals(0xFF0000FF,
-            inventory.getImage().getRGB(borderSize + padding + itemSize / 2, borderSize + padding + itemSize / 2),
-            "the static render shows the first-frame crop (flipbook frame 2, blue)");
-    }
-
-    @Test
-    void cacheKeysDifferAcrossTheAnimatedTexturesFlag() {
-        MinecraftInventoryGenerator off = builder("testpack:item/animated_quad:1").build();
-        MinecraftInventoryGenerator on = builder("testpack:item/animated_quad:1")
-            .withAnimatedTextures(true).build();
-        assertNotEquals(GeneratorCacheKey.fromGenerator(off), GeneratorCacheKey.fromGenerator(on),
-            "the flag changes rendered output, so it must enter the render cache key");
-    }
-
-    @Test
-    void flagOnWithoutAnimatedItemsRendersTheExactStaticImage() {
-        BufferedImage off = builder("testpack:item/plain_sprite:1").build().generate().getImage();
-        GeneratedObject on = builder("testpack:item/plain_sprite:1")
-            .withAnimatedTextures(true)
-            .build()
-            .generate();
-
-        assertFalse(on.isAnimated());
-        ImageAssertions.assertPixelsEqual(off, on.getImage(), "static scenes are untouched");
+        assertFalse(inventory.isAnimated(), "a slot item with no animation mcmeta renders a static image");
+        assertNull(inventory.getFrameDelaysMs());
     }
 }

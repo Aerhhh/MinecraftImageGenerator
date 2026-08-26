@@ -488,7 +488,7 @@ class JsonSceneGeneratorTest {
         Pack pack = registerPack(FixturePacks::writeAnimatedContainerPack, "test:sceneanim");
         GeneratedObject result = MinecraftSceneGenerator.fromScene("""
             {"schema_version":1,"regions":[
-              {"name":"menu","type":"container","recipe":{"rows":1},"animated_textures":true}]}""",
+              {"name":"menu","type":"container","recipe":{"rows":1}}]}""",
             pack.id(), pack.repository()).render(null);
         assertTrue(result.isAnimated());
         List<Integer> delays = GifBytes.frameDelaysCentiseconds(result.getGifData());

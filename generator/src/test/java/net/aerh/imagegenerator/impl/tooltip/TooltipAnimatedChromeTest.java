@@ -1,6 +1,5 @@
 package net.aerh.imagegenerator.impl.tooltip;
 
-import net.aerh.imagegenerator.cache.GeneratorCacheKey;
 import net.aerh.imagegenerator.data.Rarity;
 import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.pack.PackId;
@@ -22,7 +21,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -55,7 +53,6 @@ class TooltipAnimatedChromeTest {
         PackId packId = register(repository, packDir);
 
         GeneratedObject generated = builder(repository, packId, "testpack:anim", "Lore line")
-            .withAnimatedTextures(true)
             .build()
             .generate();
 
@@ -82,7 +79,6 @@ class TooltipAnimatedChromeTest {
         PackId packId = register(repository, packDir);
 
         GeneratedObject generated = builder(repository, packId, "testpack:tallstrip", "Lore line")
-            .withAnimatedTextures(true)
             .build()
             .generate();
 
@@ -107,7 +103,6 @@ class TooltipAnimatedChromeTest {
         PackId packId = register(repository, packDir);
 
         GeneratedObject generated = builder(repository, packId, "testpack:anim", "&kAB")
-            .withAnimatedTextures(true)
             .build()
             .generate();
 
@@ -129,7 +124,6 @@ class TooltipAnimatedChromeTest {
         PackId packId = register(repository, packDir);
 
         GeneratedObject generated = builder(repository, packId, "testpack:anim", "&k\uE000\uE001")
-            .withAnimatedTextures(true)
             .build()
             .generate();
 
@@ -154,7 +148,7 @@ class TooltipAnimatedChromeTest {
 
         // Pack-glyph obfuscation is seeded, so two renders are byte-identical (unlike built-in &k).
         byte[] second = builder(repository, packId, "testpack:anim", "&k\uE000\uE001")
-            .withAnimatedTextures(true).build().generate().getGifData();
+            .build().generate().getGifData();
         assertArrayEquals(generated.getGifData(), second);
     }
 
@@ -165,50 +159,23 @@ class TooltipAnimatedChromeTest {
         PackId packId = register(repository, packDir);
 
         byte[] first = builder(repository, packId, "testpack:anim", "Lore line")
-            .withAnimatedTextures(true).build().generate().getGifData();
+            .build().generate().getGifData();
         byte[] second = builder(repository, packId, "testpack:anim", "Lore line")
-            .withAnimatedTextures(true).build().generate().getGifData();
+            .build().generate().getGifData();
         assertArrayEquals(first, second);
     }
 
     @Test
-    void flagOffKeepsTheAnimatedStyleStaticFirstFrame() {
+    void aStyleWithoutAnimatedSpritesStaysStatic() {
         FixturePacks.writeDefaultPack(packDir);
         PackRepository repository = new PackRepository();
         PackId packId = register(repository, packDir);
 
-        GeneratedObject withoutFlag = builder(repository, packId, "testpack:anim", "Lore line")
-            .build()
-            .generate();
+        GeneratedObject first = builder(repository, packId, "testpack:fancy", "Lore line").build().generate();
+        GeneratedObject second = builder(repository, packId, "testpack:fancy", "Lore line").build().generate();
 
-        assertFalse(withoutFlag.isAnimated(), "the flag gates the animated chrome");
-    }
-
-    @Test
-    void staticStyleWithFlagRendersTheExactStaticImage() {
-        FixturePacks.writeDefaultPack(packDir);
-        PackRepository repository = new PackRepository();
-        PackId packId = register(repository, packDir);
-
-        GeneratedObject off = builder(repository, packId, "testpack:fancy", "Lore line").build().generate();
-        GeneratedObject on = builder(repository, packId, "testpack:fancy", "Lore line")
-            .withAnimatedTextures(true).build().generate();
-
-        assertFalse(on.isAnimated());
-        ImageAssertions.assertPixelsEqual(off.getImage(), on.getImage(), "static styles are untouched");
-    }
-
-    @Test
-    void cacheKeysDifferAcrossTheAnimatedTexturesFlag() {
-        FixturePacks.writeDefaultPack(packDir);
-        PackRepository repository = new PackRepository();
-        PackId packId = register(repository, packDir);
-
-        MinecraftTooltipGenerator off = builder(repository, packId, "testpack:anim", "Lore line").build();
-        MinecraftTooltipGenerator on = builder(repository, packId, "testpack:anim", "Lore line")
-            .withAnimatedTextures(true).build();
-        assertNotEquals(GeneratorCacheKey.fromGenerator(off), GeneratorCacheKey.fromGenerator(on),
-            "the flag changes rendered output, so it must enter the render cache key");
+        assertFalse(first.isAnimated(), "a style with no animated sprite strip renders a static image");
+        ImageAssertions.assertPixelsEqual(first.getImage(), second.getImage(), "the static render is deterministic");
     }
 
     @Test
@@ -218,7 +185,6 @@ class TooltipAnimatedChromeTest {
         PackId packId = register(repository, packDir);
 
         GeneratedObject generated = builder(repository, packId, "testpack:anim", "Lore line")
-            .withAnimatedTextures(true)
             .build()
             .generate();
 
