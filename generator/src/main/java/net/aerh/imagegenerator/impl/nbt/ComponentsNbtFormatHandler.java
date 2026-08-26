@@ -17,6 +17,8 @@ import com.google.gson.JsonObject;
  *   <li>Player head textures use {@code minecraft:profile} instead of {@code SkullOwner}</li>
  *   <li>Enchantments use {@code minecraft:enchantments} and {@code minecraft:stored_enchantments}</li>
  *   <li>Enchantment glint can be overridden via {@code minecraft:enchantment_glint_override}</li>
+ *   <li>Items may be addressed by model definition via {@code minecraft:item_model} instead of
+ *       by their item id</li>
  * </ul>
  *
  * @see <a href="https://minecraft.wiki/w/Data_component_format">Data Component Format</a>
@@ -40,12 +42,29 @@ public class ComponentsNbtFormatHandler implements NbtFormatHandler {
         String skinValue = resolveSkinValue(components);
         Integer maxLineLength = resolveMaxLineLength(components);
         boolean enchanted = detectEnchanted(components);
+        String itemModel = resolveItemModel(components);
 
         return NbtFormatMetadata.builder()
             .withValue(NbtFormatMetadata.KEY_PLAYER_HEAD_TEXTURE, skinValue)
             .withValue(NbtFormatMetadata.KEY_MAX_LINE_LENGTH, maxLineLength)
             .withValue(NbtFormatMetadata.KEY_ENCHANTED, enchanted ? Boolean.TRUE : null)
+            .withValue(NbtFormatMetadata.KEY_ITEM_MODEL, itemModel)
             .build();
+    }
+
+    /**
+     * The {@code minecraft:item_model} component value, trimmed. Null when the component is
+     * absent, blank, or not a string - a malformed component leaves the item addressed by its
+     * item id rather than failing the whole parse.
+     */
+    private String resolveItemModel(JsonObject components) {
+        JsonElement itemModel = components.get("minecraft:item_model");
+        if (itemModel == null || !itemModel.isJsonPrimitive() || !itemModel.getAsJsonPrimitive().isString()) {
+            return null;
+        }
+
+        String value = itemModel.getAsString().trim();
+        return value.isEmpty() ? null : value;
     }
 
     private String resolveSkinValue(JsonObject components) {

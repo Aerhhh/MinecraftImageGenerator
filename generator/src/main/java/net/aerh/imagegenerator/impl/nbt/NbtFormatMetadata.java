@@ -24,6 +24,12 @@ public final class NbtFormatMetadata {
     /** Whether the item has enchantments or an enchantment glint override. */
     public static final String KEY_ENCHANTED = "enchanted";
 
+    /**
+     * The {@code minecraft:item_model} component value, addressing the item by its model
+     * definition instead of its item id.
+     */
+    public static final String KEY_ITEM_MODEL = "item_model";
+
     /** Shared empty instance returned when a handler extracts no metadata. */
     public static final NbtFormatMetadata EMPTY = new NbtFormatMetadata(Collections.emptyMap());
 
