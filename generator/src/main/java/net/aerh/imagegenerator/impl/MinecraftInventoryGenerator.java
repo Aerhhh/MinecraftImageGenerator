@@ -105,8 +105,6 @@ public class MinecraftInventoryGenerator implements Generator {
     private final int totalSlots;
     private final String inventoryString;
     private final boolean animateGlint;
-    // Final non-transient so the flag enters the reflective render cache key.
-    private final boolean animatedTextures;
     @Nullable
     private final PackId packId;
     @ToString.Exclude
@@ -153,14 +151,6 @@ public class MinecraftInventoryGenerator implements Generator {
     public MinecraftInventoryGenerator(int rows, int slotsPerRow, String containerTitle, String inventoryString,
                                         boolean drawBorder, boolean drawBackground, boolean animateGlint,
                                         @Nullable PackId packId, @Nullable PackRepository packRepository) {
-        this(rows, slotsPerRow, containerTitle, inventoryString, drawBorder, drawBackground, animateGlint, false,
-            packId, packRepository);
-    }
-
-    public MinecraftInventoryGenerator(int rows, int slotsPerRow, String containerTitle, String inventoryString,
-                                        boolean drawBorder, boolean drawBackground, boolean animateGlint,
-                                        boolean animatedTextures, @Nullable PackId packId,
-                                        @Nullable PackRepository packRepository) {
         this.rows = rows;
         this.slotsPerRow = slotsPerRow;
         this.containerTitle = containerTitle;
@@ -170,7 +160,6 @@ public class MinecraftInventoryGenerator implements Generator {
         this.drawBackground = drawBackground;
         this.totalSlots = rows * slotsPerRow;
         this.animateGlint = animateGlint;
-        this.animatedTextures = animatedTextures;
         this.packId = packId;
         this.packRepository = packRepository != null ? packRepository : PackRepository.global();
 
@@ -331,7 +320,7 @@ public class MinecraftInventoryGenerator implements Generator {
             }
         }
 
-        if (animatedTextures && hasTextureAnimation) {
+        if (hasTextureAnimation) {
             SceneAnimation scene = buildTextureAnimationFrames(items);
             try {
                 byte[] gifData = AnimatedGifEncoder.encode(scene.frames(), scene.delaysMs());
@@ -452,7 +441,7 @@ public class MinecraftInventoryGenerator implements Generator {
             // rendered again by the pipeline.
             PackItemVisual.ElementsRaster staticRaster = resolveStaticElementsRaster(item);
             if (staticRaster != null) {
-                SlotVisual animated = animatedTextures ? animatedElementsVisual(item) : null;
+                SlotVisual animated = animatedElementsVisual(item);
                 visual = animated != null ? animated
                     : new SlotVisual(clipToItemBox(staticRaster), null, null, null);
             } else {
@@ -546,8 +535,7 @@ public class MinecraftInventoryGenerator implements Generator {
     }
 
     private GeneratedObject generateSlotObject(InventoryItem item, @Nullable GenerationContext generationContext) {
-        return generateSlotObject(item, generationContext, packId, packRepository, CustomModelData.EMPTY,
-            animatedTextures);
+        return generateSlotObject(item, generationContext, packId, packRepository, CustomModelData.EMPTY);
     }
 
     /**
@@ -569,23 +557,15 @@ public class MinecraftInventoryGenerator implements Generator {
      * {@code customModelData}, so a per-slot component value drives flat-sprite dispatch through
      * the standard item pipeline (elements-model dispatch is handled by the callers' dedicated
      * raster path before this pipeline runs). The dedicated player head pipeline carries no
-     * custom model data; head specs ignore it.
+     * custom model data; head specs ignore it, and never animates.
+     * <p>
+     * When the pack visual uses an animated texture the returned object carries per-frame delays
+     * ({@link GeneratedObject#getFrameDelaysMs()}), which the marker composites use to build the
+     * scene timeline.
      */
     static GeneratedObject generateSlotObject(InventoryItem item, @Nullable GenerationContext generationContext,
                                               @Nullable PackId packId, @Nullable PackRepository packRepository,
                                               CustomModelData customModelData) {
-        return generateSlotObject(item, generationContext, packId, packRepository, customModelData, false);
-    }
-
-    /**
-     * Like the five-argument overload with the item generator's animated-textures flag: when
-     * set and the pack visual uses animated textures, the returned object carries per-frame
-     * delays ({@link GeneratedObject#getFrameDelaysMs()}), the marker composites use to build
-     * the scene timeline. The dedicated player head pipeline never animates.
-     */
-    static GeneratedObject generateSlotObject(InventoryItem item, @Nullable GenerationContext generationContext,
-                                              @Nullable PackId packId, @Nullable PackRepository packRepository,
-                                              CustomModelData customModelData, boolean animatedTextures) {
         if (item.getItemName().contains("player_head")) {
             String skinValue = item.getExtraContent();
             if (skinValue != null && skinValue.contains(",")) {
@@ -612,7 +592,6 @@ public class MinecraftInventoryGenerator implements Generator {
         MinecraftItemGenerator.Builder itemBuilder = new MinecraftItemGenerator.Builder()
             .withItem(item.getItemName())
             .withCustomModelData(customModelData)
-            .withAnimatedTextures(animatedTextures)
             .isEnchanted(contentLower != null && contentLower.contains("enchant"))
             .withHoverEffect(contentLower != null && contentLower.contains("hover"))
             .withData(item.getExtraContent());
@@ -880,7 +859,6 @@ public class MinecraftInventoryGenerator implements Generator {
         private boolean drawBackground = true;
         private String inventoryString;
         private boolean animateGlint;
-        private boolean animatedTextures;
         private PackId packId;
         private PackRepository packRepository;
 
@@ -925,20 +903,6 @@ public class MinecraftInventoryGenerator implements Generator {
             return this;
         }
 
-        /**
-         * Opts the render into animated pack textures (default false): when at least one slot
-         * item's pack visual uses an animated texture, every texture-animated item joins one
-         * shared scene timeline (the LCM of the item cycles, capped per
-         * {@link net.aerh.imagegenerator.pack.AnimationTimeline}) and {@code generate()}
-         * returns the GIF form of {@link GeneratedObject} with per-frame delays. Scenes without
-         * texture-animated items render exactly as before ({@code withAnimateGlint} included).
-         * While texture animation drives the output, glint-animated items render their static
-         * frame with a warning - the 33 ms glint cycle cannot join a tick-based timeline.
-         */
-        public Builder withAnimatedTextures(boolean animatedTextures) {
-            this.animatedTextures = animatedTextures;
-            return this;
-        }
 
         /**
          * Selects the resource pack to resolve every item slot from. Propagated to every
@@ -973,7 +937,7 @@ public class MinecraftInventoryGenerator implements Generator {
         @Override
         protected MinecraftInventoryGenerator construct() {
             return new MinecraftInventoryGenerator(rows, slotsPerRow, containerTitle, inventoryString, drawBorder,
-                drawBackground, animateGlint, animatedTextures, packId, packRepository);
+                drawBackground, animateGlint, packId, packRepository);
         }
     }
 }

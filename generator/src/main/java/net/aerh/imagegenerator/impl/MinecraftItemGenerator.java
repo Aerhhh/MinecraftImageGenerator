@@ -58,8 +58,6 @@ public class MinecraftItemGenerator implements Generator {
     @Nullable
     private final ItemDamage itemDamage;
     private final boolean fullGuiRotations;
-    // Final non-transient so the flag enters the reflective render cache key.
-    private final boolean animatedTextures;
     private final String data;
     private final String color;
     private final boolean enchanted;
@@ -76,7 +74,7 @@ public class MinecraftItemGenerator implements Generator {
     public @NotNull GeneratedObject render(@Nullable GenerationContext generationContext) {
         log.debug("Rendering item '{}' ({})", displayId(), this);
 
-        if (animatedTextures && PackId.isActive(packId)) {
+        if (PackId.isActive(packId)) {
             GeneratedObject animated = renderAnimatedTextures();
             if (animated != null) {
                 return animated;
@@ -251,7 +249,6 @@ public class MinecraftItemGenerator implements Generator {
         private CustomModelData customModelData;
         private ItemDamage itemDamage;
         private boolean fullGuiRotations;
-        private boolean animatedTextures;
         private String data;
         private String color;
         private boolean enchanted;
@@ -326,22 +323,6 @@ public class MinecraftItemGenerator implements Generator {
             return this;
         }
 
-        /**
-         * Opts the render into animated pack textures (default false): when the resolved pack
-         * visual - layer0 sprite layers or elements-model face textures - uses at least one
-         * texture with an animation mcmeta, the item renders one canvas per timeline step and
-         * {@code generate()} returns the GIF form of {@link GeneratedObject} with per-frame
-         * delays (1 tick = 50 ms; timelines cap per
-         * {@link net.aerh.imagegenerator.pack.AnimationTimeline}). Items without animated
-         * textures render the static image exactly as before. The {@code interpolate} flag is
-         * honored as a per-tick keyframe cross-fade (see
-         * {@link net.aerh.imagegenerator.pack.PackAnimation}), and the enchant glint is not applied
-         * while animated textures drive the output.
-         */
-        public MinecraftItemGenerator.Builder withAnimatedTextures(boolean animatedTextures) {
-            this.animatedTextures = animatedTextures;
-            return this;
-        }
 
         public MinecraftItemGenerator.Builder withData(String data) {
             this.data = data;
@@ -454,7 +435,7 @@ public class MinecraftItemGenerator implements Generator {
             }
 
             return new MinecraftItemGenerator(
-                itemId, itemModel, customModelData, itemDamage, fullGuiRotations, animatedTextures, data, color,
+                itemId, itemModel, customModelData, itemDamage, fullGuiRotations, data, color,
                 enchanted, hoverEffect, durabilityPercent, overlayLoader, effectPipeline,
                 packId, packRepository
             );

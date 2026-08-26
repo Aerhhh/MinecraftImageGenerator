@@ -360,7 +360,7 @@ class JsonSceneGenerator implements Generator {
 
     /** An item region addressed by item id or item-model reference, with the usual modifiers. */
     record ItemContent(@Nullable String item, @Nullable String model, @Nullable Integer customModelData,
-                       boolean enchanted, boolean animatedTextures) implements Content {
+                       boolean enchanted) implements Content {
 
         @Override
         public Generator toGenerator(int scale, @Nullable PackId packId, @Nullable PackRepository packRepository) {
@@ -377,7 +377,6 @@ class JsonSceneGenerator implements Generator {
             // The item generator has no scale factor: it renders on the fixed 256-per-16 canvas.
             return builder
                 .isEnchanted(enchanted)
-                .withAnimatedTextures(animatedTextures)
                 .withPack(packId)
                 .withPackRepository(packRepository)
                 .build();
@@ -385,13 +384,12 @@ class JsonSceneGenerator implements Generator {
     }
 
     /** A container region built from a menu recipe subtree, re-serialized through the recipe parser. */
-    record ContainerContent(String recipeJson, boolean animatedTextures) implements Content {
+    record ContainerContent(String recipeJson) implements Content {
 
         @Override
         public Generator toGenerator(int scale, @Nullable PackId packId, @Nullable PackRepository packRepository) {
             return MinecraftContainerGenerator.fromRecipe(recipeJson)
                 .withScaleFactor(scale)
-                .withAnimatedTextures(animatedTextures)
                 .withPack(packId)
                 .withPackRepository(packRepository)
                 .build();

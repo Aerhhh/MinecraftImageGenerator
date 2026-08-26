@@ -57,8 +57,8 @@ final class SceneParser {
     private static final Set<String> ANCHOR_KEYS = Set.of("to", "edge", "align", "offset");
     private static final Set<String> RUN_KEYS = Set.of("text", "font", "color", "bold", "italic");
     private static final Set<String> TOOLTIP_KEYS = Set.of("nbt", "rarity", "lore", "max_line_length");
-    private static final Set<String> ITEM_KEYS = Set.of("item", "model", "custom_model_data", "enchanted", "animated_textures");
-    private static final Set<String> CONTAINER_KEYS = Set.of("recipe", "animated_textures");
+    private static final Set<String> ITEM_KEYS = Set.of("item", "model", "custom_model_data", "enchanted");
+    private static final Set<String> CONTAINER_KEYS = Set.of("recipe");
     private static final Set<String> HUD_KEYS = Set.of("lines", "gui_width", "text_shadow");
     private static final Set<String> ARRANGEMENT_KEYS = Set.of("regions", "spacing", "alignment");
     private static final Set<String> GRID_KEYS = Set.of("regions", "spacing", "alignment", "columns", "cell");
@@ -299,8 +299,7 @@ final class SceneParser {
         }
         Integer customModelData = object.has("custom_model_data") ? StrictJson.requireInt(object, "custom_model_data") : null;
         boolean enchanted = StrictJson.requireBoolean(object, "enchanted", context);
-        boolean animatedTextures = StrictJson.requireBoolean(object, "animated_textures", context);
-        return new ParsedContent(new ItemContent(item, model, customModelData, enchanted, animatedTextures), ITEM_KEYS);
+        return new ParsedContent(new ItemContent(item, model, customModelData, enchanted), ITEM_KEYS);
     }
 
     private static ParsedContent parseContainer(JsonObject object, String name) {
@@ -320,8 +319,7 @@ final class SceneParser {
         } catch (IllegalArgumentException exception) {
             throw new IllegalArgumentException(context + " " + exception.getMessage(), exception);
         }
-        boolean animatedTextures = StrictJson.requireBoolean(object, "animated_textures", context);
-        return new ParsedContent(new ContainerContent(recipeJson, animatedTextures), CONTAINER_KEYS);
+        return new ParsedContent(new ContainerContent(recipeJson), CONTAINER_KEYS);
     }
 
     private static ParsedContent parseHud(JsonObject object, String name) {

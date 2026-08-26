@@ -1,6 +1,5 @@
 package net.aerh.imagegenerator.impl;
 
-import net.aerh.imagegenerator.cache.GeneratorCacheKey;
 import net.aerh.imagegenerator.effect.EffectPipeline;
 import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.pack.PackId;
@@ -21,7 +20,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -54,7 +52,6 @@ class MinecraftItemGeneratorAnimatedTexturesTest {
     @Test
     void animatedSpriteRendersOneFramePerTimelineStep() {
         GeneratedObject generated = packBuilder("testpack:item/animated")
-            .withAnimatedTextures(true)
             .build()
             .generate();
 
@@ -74,7 +71,6 @@ class MinecraftItemGeneratorAnimatedTexturesTest {
     @Test
     void mixedFrameTimesHoldInTheEncodedGif() {
         GeneratedObject generated = packBuilder("testpack:item/animated_hold")
-            .withAnimatedTextures(true)
             .build()
             .generate();
 
@@ -90,39 +86,25 @@ class MinecraftItemGeneratorAnimatedTexturesTest {
     }
 
     @Test
-    void flagOffKeepsAnimatedItemsStaticAndByteIdentical() {
-        GeneratedObject withoutFlag = packBuilder("testpack:item/animated").build().generate();
-        assertFalse(withoutFlag.isAnimated());
-        assertNull(withoutFlag.getFrameDelaysMs());
-        assertEquals(0xFF0000FF, withoutFlag.getImage().getRGB(128, 128),
-            "static render keeps the first-frame crop (flipbook frame 2, blue)");
-    }
+    void anItemWithoutAnimatedTexturesStaysStatic() {
+        GeneratedObject generated = packBuilder("testpack:item/simple").build().generate();
 
-    @Test
-    void flagOnWithoutAnimatedTexturesRendersTheExactStaticImage() {
-        BufferedImage animatedOff = packBuilder("testpack:item/simple").build().generate().getImage();
-        GeneratedObject animatedOn = packBuilder("testpack:item/simple")
-            .withAnimatedTextures(true)
-            .build()
-            .generate();
-
-        assertFalse(animatedOn.isAnimated());
-        ImageAssertions.assertPixelsEqual(animatedOff, animatedOn.getImage(), "static path is untouched");
+        assertFalse(generated.isAnimated(), "a pack item with no animation mcmeta renders a static image");
+        assertNull(generated.getFrameDelaysMs());
     }
 
     @Test
     void animatedRendersAreByteIdenticalAcrossRuns() {
         byte[] first = packBuilder("testpack:item/animated_hold")
-            .withAnimatedTextures(true).build().generate().getGifData();
+            .build().generate().getGifData();
         byte[] second = packBuilder("testpack:item/animated_hold")
-            .withAnimatedTextures(true).build().generate().getGifData();
+            .build().generate().getGifData();
         assertArrayEquals(first, second);
     }
 
     @Test
     void enchantGlintIsSuppressedOnTheAnimatedPath() {
         GeneratedObject generated = packBuilder("testpack:item/animated")
-            .withAnimatedTextures(true)
             .isEnchanted(true)
             .build()
             .generate();
@@ -134,20 +116,7 @@ class MinecraftItemGeneratorAnimatedTexturesTest {
     }
 
     @Test
-    void cacheKeysDifferAcrossTheAnimatedTexturesFlag() {
-        // Hold the effect pipeline constant: GeneratorCacheKey stringifies it via identity hash
-        // (pre-existing behavior), so a shared instance isolates the flag as the only variable.
-        EffectPipeline sharedPipeline = new EffectPipeline.Builder().build();
-        MinecraftItemGenerator off = packBuilder("testpack:item/animated")
-            .withEffectPipeline(sharedPipeline).build();
-        MinecraftItemGenerator on = packBuilder("testpack:item/animated")
-            .withEffectPipeline(sharedPipeline).withAnimatedTextures(true).build();
-        assertNotEquals(GeneratorCacheKey.fromGenerator(off), GeneratorCacheKey.fromGenerator(on),
-            "the flag changes rendered output, so it must enter the render cache key");
-    }
-
-    @Test
-    void animatedElementsModelAnimatesThroughTheSameFlag(@TempDir Path elementsDir) {
+    void animatedElementsModelAnimatesOnTheSamePath(@TempDir Path elementsDir) {
         FixturePacks.writeElementsPack(elementsDir);
         PackRepository elementsRepository = new PackRepository();
         PackId elementsPackId = elementsRepository.register("test:elements",
@@ -157,7 +126,6 @@ class MinecraftItemGeneratorAnimatedTexturesTest {
             .withPack(elementsPackId)
             .withPackRepository(elementsRepository)
             .withItem("testpack:item/animated_quad")
-            .withAnimatedTextures(true)
             .build()
             .generate();
 
