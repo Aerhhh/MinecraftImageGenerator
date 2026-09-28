@@ -915,5 +915,17 @@
         "packOverrides": {
             "hypixel:skyblock": "\uE02B"
         }
+    },
+    {
+        "icon": "?",
+        "name": "timber",
+        "stat": "Timber",
+        "display": "? Timber",
+        "color": "DARK_RED",
+        "subColor": null,
+        "parseType": "NORMAL",
+        "packOverrides": {
+            "hypixel:skyblock": "\uE02E"
+        }
     }
 ]
