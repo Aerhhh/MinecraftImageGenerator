@@ -22,6 +22,8 @@
         <feign.version>13.14</feign.version>
         <maven.compiler.release>${java.version}</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- Live-network tests are skipped by default; run them with -Dsurefire.excludedGroups= -->
+        <surefire.excludedGroups>network</surefire.excludedGroups>
     </properties>
 
     <repositories>
@@ -78,6 +80,7 @@
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>3.6.0</version>
                     <configuration>
+                        <excludedGroups>${surefire.excludedGroups}</excludedGroups>
                         <argLine>-javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar</argLine>
                     </configuration>
                 </plugin>
