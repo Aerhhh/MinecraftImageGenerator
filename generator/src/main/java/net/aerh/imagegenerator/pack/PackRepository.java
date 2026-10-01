@@ -13,6 +13,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Registry of runtime-loaded resource packs, keyed by {@link PackId}. Vanilla is NOT registered
@@ -20,7 +21,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * path in the generators.
  *
  * <p>The repository takes ownership of registered sources; they remain open until the pack is
- * {@link #unregister(String) unregistered} (or the process ends). Sources passed to failed
+ * {@link #unregister(String) unregistered}, {@link #replace(PreparedPack) replaced} (released
+ * after the {@link PackReleaseScheduler} grace) or the process ends. Sources passed to failed
  * registrations are closed before the exception propagates.
  *
  * <p>All operations are safe for concurrent use: registration, resolution and unregistration
@@ -36,6 +38,30 @@ public final class PackRepository {
     private static final PackRepository GLOBAL = new PackRepository();
 
     private final Map<PackId, LoadedPack> packs = new ConcurrentHashMap<>();
+    private final PackReleaseScheduler releaseScheduler;
+    /** False only for preview repositories, which borrow a {@link PreparedPack}'s pack. */
+    private final boolean ownsPacks;
+
+    /** A repository that releases replaced packs after the grace from system properties. */
+    public PackRepository() {
+        this(PackReleaseScheduler.fromSystemProperties());
+    }
+
+    /** A repository that releases replaced packs through {@code releaseScheduler}. */
+    public PackRepository(PackReleaseScheduler releaseScheduler) {
+        this(releaseScheduler, true);
+    }
+
+    private PackRepository(PackReleaseScheduler releaseScheduler, boolean ownsPacks) {
+        this.releaseScheduler = Objects.requireNonNull(releaseScheduler, "releaseScheduler");
+        this.ownsPacks = ownsPacks;
+    }
+
+    static PackRepository preview(LoadedPack pack) {
+        PackRepository repository = new PackRepository(PackReleaseScheduler.immediate(), false);
+        repository.packs.put(pack.id(), pack);
+        return repository;
+    }
 
     /** The process-wide repository used by generator builders unless one is injected. */
     public static PackRepository global() {
@@ -71,24 +97,106 @@ public final class PackRepository {
      * files under {@code assets/}. See the {@link PackLimits} javadoc for sizing guidance.
      *
      * @throws IllegalArgumentException on duplicate registration or the reserved vanilla ID
+     * @throws IllegalStateException    when called on a preview repository (the source is closed)
      */
     public PackId register(String packId, PackSource source, PackLimits limits) {
+        PreparedPack prepared = prepare(packId, source, limits);
+        try {
+            return register(prepared);
+        } catch (RuntimeException e) {
+            prepared.close();
+            throw e;
+        }
+    }
+
+    /**
+     * Loads a pack without making it live. Same eager, fail-fast loading and the same id rules as
+     * {@link #register(String, PackSource, PackLimits)}: on failure the source is closed before
+     * the exception propagates. On success the returned handle owns the source.
+     *
+     * @throws IllegalArgumentException on a malformed or reserved vanilla id
+     */
+    public static PreparedPack prepare(String packId, PackSource source, PackLimits limits) {
         Objects.requireNonNull(source, "source");
         Objects.requireNonNull(limits, "limits");
-        PackId id;
-        LoadedPack loaded;
         try {
-            id = PackId.parse(packId);
-            loaded = new LoadedPack(id, source, limits);
-            if (packs.putIfAbsent(id, loaded) != null) {
-                throw new IllegalArgumentException("Pack already registered: " + id);
-            }
+            PackId id = PackId.parse(packId);
+            LoadedPack loaded = new LoadedPack(id, source, limits);
+            return new PreparedPack(loaded, PackFormatRange.read(source));
         } catch (RuntimeException e) {
             closeQuietly(source);
             throw e;
         }
-        log.info("Registered resource pack {} (asset namespaces: {})", id, loaded.assetNamespaces());
+    }
+
+    /**
+     * Publishes a prepared pack under an id that is not registered yet. On success the
+     * repository owns the pack.
+     *
+     * @throws IllegalArgumentException when the id is already registered (the pack stays OPEN)
+     * @throws IllegalStateException    when the pack was already published or closed, or when this
+     *                                  is a preview repository
+     */
+    public PackId register(PreparedPack prepared) {
+        requireOwningRepository("register");
+        LoadedPack loaded = prepared.claim();
+        if (packs.putIfAbsent(loaded.id(), loaded) != null) {
+            prepared.unclaim();
+            throw new IllegalArgumentException("Pack already registered: " + loaded.id());
+        }
+        log.info("Registered resource pack {} (asset namespaces: {})", loaded.id(), loaded.assetNamespaces());
+        return loaded.id();
+    }
+
+    /**
+     * Atomically swaps the pack registered under the prepared pack's id for the prepared one. The
+     * id never appears unregistered: resolves that looked the pack up before the swap finish
+     * against the old pack, later ones see the new pack. The old pack is released through this
+     * repository's {@link PackReleaseScheduler}, by default after a grace period, so renders in
+     * progress are not cut off by its source closing.
+     *
+     * <p>The swap is atomic per resolve only: a single render that makes several repository calls
+     * can straddle a swap and mix old and new assets in one image. Generator render caches keyed
+     * by pack id ({@code GeneratorCache}, when {@code generator.cache.enabled} is true) are not
+     * invalidated by a replace, so they can serve old renders until evicted.
+     *
+     * @throws IllegalArgumentException when no pack is registered under the id (the pack stays OPEN);
+     *                                  use {@link #register(PreparedPack)} for a first registration
+     * @throws IllegalStateException    when the pack was already published or closed, or when this
+     *                                  is a preview repository
+     */
+    public PackId replace(PreparedPack prepared) {
+        requireOwningRepository("replace");
+        LoadedPack incoming = prepared.claim();
+        PackId id = incoming.id();
+        AtomicReference<LoadedPack> replaced = new AtomicReference<>();
+
+        packs.computeIfPresent(id, (key, current) -> {
+            replaced.set(current);
+            return incoming;
+        });
+
+        if (replaced.get() == null) {
+            prepared.unclaim();
+            throw new IllegalArgumentException("Pack is not registered, so it cannot be replaced: " + id);
+        }
+
+        releaseLater(replaced.get());
+        log.info("Replaced resource pack {} (asset namespaces: {})", id, incoming.assetNamespaces());
         return id;
+    }
+
+    private void requireOwningRepository(String operation) {
+        if (!ownsPacks) {
+            throw new IllegalStateException("Cannot " + operation + " a pack in a preview repository; previews only resolve the pack they were created for");
+        }
+    }
+
+    private void releaseLater(LoadedPack pack) {
+        releaseScheduler.schedule(() -> {
+            pack.release();
+            log.info("Released the replaced copy of resource pack {}", pack.id());
+        });
     }
 
     /**
@@ -98,10 +206,8 @@ public final class PackRepository {
      * throw a {@link PackResolveException} (see the class javadoc for the exact guarantee); the
      * repository map is never structurally corrupted.
      *
-     * <p><b>Register-with-replace:</b> there is no atomic replace - to swap a pack's content
-     * under the same id, call {@code unregister(id)} followed by {@code register(id, ...)}. A
-     * resolve arriving between the two calls sees the pack as unregistered and throws, exactly
-     * like any other unknown pack id.
+     * <p>To swap a pack's content under the same id without a gap, use
+     * {@link #replace(PreparedPack)} instead of unregistering and registering again.
      *
      * @param packId the {@code "namespace:name"} id the pack was registered under
      * @return true when a pack with this id was registered and has been released, false when no
@@ -113,7 +219,9 @@ public final class PackRepository {
         if (removed == null) {
             return false;
         }
-        removed.release();
+        if (ownsPacks) {
+            removed.release();
+        }
         log.info("Unregistered resource pack {}", removed.id());
         return true;
     }
