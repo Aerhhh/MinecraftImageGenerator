@@ -230,9 +230,12 @@ public class MinecraftTooltipGenerator implements Generator {
         // pack and tooltipStyle are non-transient on purpose: buildSlashCommand round-trips them
         // as "pack:" and "tooltip_style:" options. The repository seam and the color remap are
         // transient: neither is a user-facing command option.
+        @Getter
         private PackId pack;
+        @Getter
         private String tooltipStyle;
         private transient PackRepository packRepository;
+        @Getter
         private transient TextColorRemap textColorRemap;
 
         public MinecraftTooltipGenerator.Builder withName(String itemName) {
