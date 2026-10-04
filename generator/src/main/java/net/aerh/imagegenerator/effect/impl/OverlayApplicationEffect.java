@@ -22,6 +22,12 @@ import java.awt.image.BufferedImage;
 @Slf4j
 public class OverlayApplicationEffect implements ImageEffect {
 
+    /**
+     * Boolean metadata key: true when the base image came from a resource pack, which skips the
+     * overlay (pack items are colored by their own tint sources).
+     */
+    public static final String PACK_VISUAL_METADATA = "packVisual";
+
     private final OverlayLoader overlayLoader;
 
     /**
@@ -38,6 +44,11 @@ public class OverlayApplicationEffect implements ImageEffect {
 
     @Override
     public EffectResult apply(EffectContext context) {
+        if (context.getMetadata(PACK_VISUAL_METADATA, Boolean.class).orElse(false)) {
+            // Pack items color themselves through their own tint sources (the color becomes the
+            // dyed color), so a vanilla overlay on top would tint them twice.
+            return EffectResult.single(context.getImage());
+        }
         String itemId = context.getItemId().toLowerCase();
         ItemOverlay itemOverlay = overlayLoader.getOverlay(itemId);
 

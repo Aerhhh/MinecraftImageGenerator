@@ -178,7 +178,8 @@ public class MinecraftNbtParser {
             builder.withItem(itemId);
         }
 
-        return builder.withData(dyeColor).isEnchanted(enchanted);
+        // The dye is the item color: the dyed color of pack items, the overlay color of vanilla ones.
+        return builder.withColor(dyeColor).isEnchanted(enchanted);
     }
 
     /**

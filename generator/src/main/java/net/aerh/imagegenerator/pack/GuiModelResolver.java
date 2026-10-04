@@ -199,8 +199,8 @@ class GuiModelResolver {
      *
      * @throws PackResolveException on an unsupported tint source type
      */
-    static List<Integer> evaluateTints(List<ItemModelNode.TintSpec> tints, CustomModelData data) {
-        return evaluateTints(tints, data, true);
+    static List<Integer> evaluateTints(List<ItemModelNode.TintSpec> tints, ItemState state) {
+        return evaluateTints(tints, state, true);
     }
 
     /**
@@ -209,11 +209,11 @@ class GuiModelResolver {
      * dye/potion/map_color sources, and those items rendered fine (untinted) before tint parsing
      * existed - a hard failure here would regress them.
      */
-    static List<Integer> evaluateTintsLenient(List<ItemModelNode.TintSpec> tints, CustomModelData data) {
-        return evaluateTints(tints, data, false);
+    static List<Integer> evaluateTintsLenient(List<ItemModelNode.TintSpec> tints, ItemState state) {
+        return evaluateTints(tints, state, false);
     }
 
-    private static List<Integer> evaluateTints(List<ItemModelNode.TintSpec> tints, CustomModelData data,
+    private static List<Integer> evaluateTints(List<ItemModelNode.TintSpec> tints, ItemState state,
                                                boolean failOnUnsupported) {
         if (tints.isEmpty()) {
             return List.of();
@@ -222,11 +222,14 @@ class GuiModelResolver {
         for (ItemModelNode.TintSpec tint : tints) {
             colors.add(switch (tint) {
                 case ItemModelNode.TintSpec.Constant constant -> constant.rgb();
-                case ItemModelNode.TintSpec.CustomModelDataTint cmd ->
-                    cmd.index() >= 0 && cmd.index() < data.colors().size()
-                        ? data.colors().get(cmd.index()) & WHITE : cmd.defaultRgb();
-                // No per-item dye data exists in this library, so the required default applies.
-                case ItemModelNode.TintSpec.Dye dye -> dye.defaultRgb();
+                case ItemModelNode.TintSpec.CustomModelDataTint cmd -> {
+                    List<Integer> dataColors = state.customModelData().colors();
+                    yield cmd.index() >= 0 && cmd.index() < dataColors.size()
+                        ? dataColors.get(cmd.index()) & WHITE : cmd.defaultRgb();
+                }
+                // Vanilla reads the dyed_color component, falling back to the required default.
+                case ItemModelNode.TintSpec.Dye dye ->
+                    state.dyedColor() != null ? state.dyedColor() : dye.defaultRgb();
                 case ItemModelNode.TintSpec.Unsupported unsupported -> {
                     if (failOnUnsupported) {
                         throw new PackResolveException(

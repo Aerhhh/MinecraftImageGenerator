@@ -36,14 +36,14 @@ class LoadedPackElementsTest {
             PackLimits.fromSystemProperties());
     }
 
-    private PackItemVisual.ElementsRaster raster(String itemRef, CustomModelData data) {
-        PackItemVisual visual = pack.resolveItemVisual(itemRef, data, SCALE).orElseThrow();
+    private PackItemVisual.ElementsRaster raster(String itemRef, ItemState state) {
+        PackItemVisual visual = pack.resolveItemVisual(itemRef, state, SCALE).orElseThrow();
         return assertInstanceOf(PackItemVisual.ElementsRaster.class, visual);
     }
 
     @Test
     void flatQuadRendersAtTargetResolution() {
-        PackItemVisual.ElementsRaster raster = raster("testpack:item/flat", CustomModelData.EMPTY);
+        PackItemVisual.ElementsRaster raster = raster("testpack:item/flat", ItemState.EMPTY);
         BufferedImage image = raster.image();
         assertEquals(64, image.getWidth());
         assertEquals(64, image.getHeight());
@@ -58,7 +58,7 @@ class LoadedPackElementsTest {
     void mirroredModelShowsTheBackFace() {
         // The (0,180,0) child inherits elements and textures from its parent; the north face
         // (backpaint) becomes visible and reads upright through the mirrored projection.
-        BufferedImage image = raster("testpack:item/mirrored", CustomModelData.EMPTY).image();
+        BufferedImage image = raster("testpack:item/mirrored", ItemState.EMPTY).image();
         assertEquals(0xFFFFFF00, image.getRGB(8, 32), "backpaint's left half is yellow");
         assertEquals(0xFFFF00FF, image.getRGB(56, 32), "backpaint's right half is magenta");
     }
@@ -66,8 +66,8 @@ class LoadedPackElementsTest {
     @Test
     void smallTiltRendersAsIdentity() {
         ImageAssertions.assertPixelsEqual(
-            raster("testpack:item/flat", CustomModelData.EMPTY).image(),
-            raster("testpack:item/tilted", CustomModelData.EMPTY).image(),
+            raster("testpack:item/flat", ItemState.EMPTY).image(),
+            raster("testpack:item/tilted", ItemState.EMPTY).image(),
             "2-degree decorative tilt");
     }
 
@@ -75,7 +75,7 @@ class LoadedPackElementsTest {
     void elementFaceTextureCropsToAnimationFirstFrame() {
         // The element texture path shares the flat sprite path's mcmeta handling: a flipbook
         // strip contributes the frames list's FIRST frame, not the whole strip.
-        BufferedImage image = raster("testpack:item/animated_quad", CustomModelData.EMPTY).image();
+        BufferedImage image = raster("testpack:item/animated_quad", ItemState.EMPTY).image();
         assertEquals(64, image.getWidth(), "canvas is the slot box, not the strip");
         assertEquals(0xFF0000FF, image.getRGB(32, 8), "frames list starts at index 2 (blue)");
         assertEquals(0xFF0000FF, image.getRGB(32, 56), "the whole quad samples the one frame");
@@ -84,7 +84,7 @@ class LoadedPackElementsTest {
     @Test
     void unsupportedGuiRotationThrows() {
         PackResolveException exception = assertThrows(PackResolveException.class,
-            () -> pack.resolveItemVisual("testpack:item/badspin", CustomModelData.EMPTY, SCALE));
+            () -> pack.resolveItemVisual("testpack:item/badspin", ItemState.EMPTY, SCALE));
         assertTrue(exception.getMessage().contains("gui rotation"));
     }
 
@@ -95,16 +95,16 @@ class LoadedPackElementsTest {
         // The slot pixel at gui (12.125, 8.125) inverse-maps to face fractions (0.36, 0.25),
         // sampling backpaint's yellow left half; gui (4.125, 8.125) falls outside the face.
         PackItemVisual visual = pack.resolveItemVisual("testpack:item/badspin",
-            CustomModelData.EMPTY, null, SCALE, true).orElseThrow();
+            ItemState.EMPTY, null, SCALE, true).orElseThrow();
         BufferedImage image = assertInstanceOf(PackItemVisual.ElementsRaster.class, visual).image();
         assertEquals(0xFFFFFF00, image.getRGB(48, 32), "backpaint's left half lands right of the pivot");
         assertEquals(0, image.getRGB(16, 32), "the rotated quad vacates the slot's left side");
         ImageAssertions.assertPixelsDiffer(
-            raster("testpack:item/mirrored", CustomModelData.EMPTY).image(), image,
+            raster("testpack:item/mirrored", ItemState.EMPTY).image(), image,
             "the true projection is not the flat mirror approximation");
 
         BufferedImage repeat = assertInstanceOf(PackItemVisual.ElementsRaster.class,
-            pack.resolveItemVisual("testpack:item/badspin", CustomModelData.EMPTY, null, SCALE, true)
+            pack.resolveItemVisual("testpack:item/badspin", ItemState.EMPTY, null, SCALE, true)
                 .orElseThrow()).image();
         ImageAssertions.assertPixelsEqual(image, repeat, "the orthographic projection is deterministic");
     }
@@ -116,11 +116,11 @@ class LoadedPackElementsTest {
         // right half - in-plane spin and foreshortening included, unlike the old flat
         // approximation which rendered the untransformed quad.
         PackItemVisual visual = pack.resolveItemVisual("testpack:item/frontspin",
-            CustomModelData.EMPTY, null, SCALE, true).orElseThrow();
+            ItemState.EMPTY, null, SCALE, true).orElseThrow();
         BufferedImage image = assertInstanceOf(PackItemVisual.ElementsRaster.class, visual).image();
         assertEquals(0xFF0000FF, image.getRGB(23, 14));
         ImageAssertions.assertPixelsDiffer(
-            raster("testpack:item/flat", CustomModelData.EMPTY).image(), image,
+            raster("testpack:item/flat", ItemState.EMPTY).image(), image,
             "the rotation visibly transforms the quad");
     }
 
@@ -129,16 +129,16 @@ class LoadedPackElementsTest {
         // The flag only affects rotations that would otherwise throw; identity, decorative
         // tilts and the exact mirror keep their strict classification.
         ImageAssertions.assertPixelsEqual(
-            raster("testpack:item/mirrored", CustomModelData.EMPTY).image(),
+            raster("testpack:item/mirrored", ItemState.EMPTY).image(),
             assertInstanceOf(PackItemVisual.ElementsRaster.class,
-                pack.resolveItemVisual("testpack:item/mirrored", CustomModelData.EMPTY, null, SCALE, true)
+                pack.resolveItemVisual("testpack:item/mirrored", ItemState.EMPTY, null, SCALE, true)
                     .orElseThrow()).image(),
             "exact mirror under the flag");
     }
 
     @Test
     void childTextureMapEntryOverridesParent() {
-        BufferedImage image = raster("testpack:item/retextured", CustomModelData.EMPTY).image();
+        BufferedImage image = raster("testpack:item/retextured", ItemState.EMPTY).image();
         assertEquals(0xFF00FF00, image.getRGB(8, 32), "child #front (green) wins over parent paint");
         assertEquals(0xFF00FF00, image.getRGB(56, 32));
     }
@@ -149,15 +149,15 @@ class LoadedPackElementsTest {
         // replaces the whole gui entry, so the child's default rotation (identity) wins and the
         // render matches the un-mirrored flat model exactly.
         ImageAssertions.assertPixelsEqual(
-            raster("testpack:item/flat", CustomModelData.EMPTY).image(),
-            raster("testpack:item/unmirrored", CustomModelData.EMPTY).image(),
+            raster("testpack:item/flat", ItemState.EMPTY).image(),
+            raster("testpack:item/unmirrored", ItemState.EMPTY).image(),
             "child display.gui override");
     }
 
     @Test
     void missingInPackParentModelFailsLoudly() {
         PackResolveException exception = assertThrows(PackResolveException.class,
-            () -> pack.resolveItemVisual("testpack:item/orphan", CustomModelData.EMPTY, SCALE));
+            () -> pack.resolveItemVisual("testpack:item/orphan", ItemState.EMPTY, SCALE));
         assertTrue(exception.getMessage().contains("nope_parent"),
             "a broken parent ref must not silently drop inherited transforms: " + exception.getMessage());
     }
@@ -167,54 +167,54 @@ class LoadedPackElementsTest {
         // The 9-model elem_deep chain parks display.gui on the 9th ancestor; silently stopping
         // after 8 hops would render at identity scale instead of failing like resolveLayer0.
         PackResolveException exception = assertThrows(PackResolveException.class,
-            () -> pack.resolveItemVisual("testpack:item/deep", CustomModelData.EMPTY, SCALE));
+            () -> pack.resolveItemVisual("testpack:item/deep", ItemState.EMPTY, SCALE));
         assertTrue(exception.getMessage().contains("exceeds depth"), exception.getMessage());
     }
 
     @Test
     void rangeDispatchPicksModelsFromFloats() {
         assertEquals(0xFF0000FF, raster("testpack:item/gauge",
-            new CustomModelData(List.of(2.0f), List.of(), List.of(), List.of())).image().getRGB(32, 32));
+            ItemState.of(new CustomModelData(List.of(2.0f), List.of(), List.of(), List.of()))).image().getRGB(32, 32));
         assertEquals(0xFF00FF00, raster("testpack:item/gauge",
-            new CustomModelData(List.of(1.5f), List.of(), List.of(), List.of())).image().getRGB(32, 32));
-        assertEquals(0xFF808080, raster("testpack:item/gauge", CustomModelData.EMPTY).image().getRGB(32, 32),
+            ItemState.of(new CustomModelData(List.of(1.5f), List.of(), List.of(), List.of()))).image().getRGB(32, 32));
+        assertEquals(0xFF808080, raster("testpack:item/gauge", ItemState.EMPTY).image().getRGB(32, 32),
             "missing float falls back");
     }
 
     @Test
     void conditionPicksModelsFromFlags() {
         assertEquals(0xFF00FF00, raster("testpack:item/flagged",
-            new CustomModelData(List.of(), List.of(true), List.of(), List.of())).image().getRGB(32, 32));
-        assertEquals(0xFFFF0000, raster("testpack:item/flagged", CustomModelData.EMPTY).image().getRGB(32, 32));
+            ItemState.of(new CustomModelData(List.of(), List.of(true), List.of(), List.of()))).image().getRGB(32, 32));
+        assertEquals(0xFFFF0000, raster("testpack:item/flagged", ItemState.EMPTY).image().getRGB(32, 32));
     }
 
     @Test
     void selectPicksModelsFromStrings() {
         assertEquals(0xFFFF0000, raster("testpack:item/named",
-            new CustomModelData(List.of(), List.of(), List.of("ruby"), List.of())).image().getRGB(32, 32));
+            ItemState.of(new CustomModelData(List.of(), List.of(), List.of("ruby"), List.of()))).image().getRGB(32, 32));
         assertEquals(0xFF0000FF, raster("testpack:item/named",
-            new CustomModelData(List.of(), List.of(), List.of("amber"), List.of())).image().getRGB(32, 32));
-        assertEquals(0xFF0000FF, raster("testpack:item/named", CustomModelData.EMPTY).image().getRGB(32, 32));
+            ItemState.of(new CustomModelData(List.of(), List.of(), List.of("amber"), List.of()))).image().getRGB(32, 32));
+        assertEquals(0xFF0000FF, raster("testpack:item/named", ItemState.EMPTY).image().getRGB(32, 32));
     }
 
     @Test
     void customModelDataTintColorsTheWhiteQuad() {
         assertEquals(0xFF00FF00, raster("testpack:item/colored",
-            new CustomModelData(List.of(), List.of(), List.of(), List.of(0x00FF00))).image().getRGB(32, 32));
-        assertEquals(0xFFFFFFFF, raster("testpack:item/colored", CustomModelData.EMPTY).image().getRGB(32, 32),
+            ItemState.of(new CustomModelData(List.of(), List.of(), List.of(), List.of(0x00FF00)))).image().getRGB(32, 32));
+        assertEquals(0xFFFFFFFF, raster("testpack:item/colored", ItemState.EMPTY).image().getRGB(32, 32),
             "missing color uses the declared white default - a no-op");
     }
 
     @Test
     void constantTintApplies() {
         assertEquals(0xFFFF8000,
-            raster("testpack:item/constant_tint", CustomModelData.EMPTY).image().getRGB(32, 32));
+            raster("testpack:item/constant_tint", ItemState.EMPTY).image().getRGB(32, 32));
     }
 
     @Test
     void unsupportedTintSourceThrows() {
         PackResolveException exception = assertThrows(PackResolveException.class,
-            () -> pack.resolveItemVisual("testpack:item/unknown_tint", CustomModelData.EMPTY, SCALE));
+            () -> pack.resolveItemVisual("testpack:item/unknown_tint", ItemState.EMPTY, SCALE));
         assertTrue(exception.getMessage().contains("team"));
         assertTrue(exception.getMessage().contains("testpack:item/unknown_tint"),
             "tint errors name the offending item like every other resolve error: " + exception.getMessage());
@@ -224,9 +224,30 @@ class LoadedPackElementsTest {
 
     @Test
     void dyeTintAppliesItsDefaultColor() {
-        // No per-item dye data exists in this library, so the REQUIRED default (0x3366FF in the
-        // fixture) always colors the quad.
-        assertEquals(0xFF3366FF, raster("testpack:item/dyed", CustomModelData.EMPTY).image().getRGB(32, 32));
+        // An undyed item uses the REQUIRED default (0x3366FF in the fixture).
+        assertEquals(0xFF3366FF, raster("testpack:item/dyed", ItemState.EMPTY).image().getRGB(32, 32));
+    }
+
+    @Test
+    void dyeTintUsesTheDyedColor() {
+        assertEquals(0xFF8932B8,
+            raster("testpack:item/dyed", new ItemState(CustomModelData.EMPTY, 0x8932B8)).image().getRGB(32, 32));
+    }
+
+    @Test
+    void blackDyedColorRendersOpaqueBlack() {
+        // The undyed alpha globe thistle case: a black tint multiplies to opaque black, it does
+        // not erase the face.
+        assertEquals(0xFF000000,
+            raster("testpack:item/dyed", new ItemState(CustomModelData.EMPTY, 0)).image().getRGB(32, 32));
+    }
+
+    @Test
+    void dyedColorLeavesOtherTintSourcesAlone() {
+        ItemState dyed = new ItemState(CustomModelData.EMPTY, 0x8932B8);
+        assertEquals(0xFFFF8000, raster("testpack:item/constant_tint", dyed).image().getRGB(32, 32));
+        assertEquals(0xFFFFFFFF, raster("testpack:item/colored", dyed).image().getRGB(32, 32),
+            "the custom_model_data tint keeps its white default");
     }
 
     @Test
@@ -235,7 +256,7 @@ class LoadedPackElementsTest {
         // flat sprites in-game - the sprite branch must apply the same tint list the elements
         // branch does.
         PackItemVisual visual = pack.resolveItemVisual("testpack:item/sprite_constant_tint",
-            CustomModelData.EMPTY, SCALE).orElseThrow();
+            ItemState.EMPTY, SCALE).orElseThrow();
         PackItemVisual.Sprite sprite = assertInstanceOf(PackItemVisual.Sprite.class, visual);
         assertEquals(0xFFFF8000, sprite.sprite().getRGB(0, 0));
         assertEquals(0xFFFF8000, pack.resolveSprite("testpack:item/sprite_constant_tint")
@@ -246,11 +267,11 @@ class LoadedPackElementsTest {
     void customModelDataTintColorsTheFlatSprite() {
         PackItemVisual.Sprite tinted = assertInstanceOf(PackItemVisual.Sprite.class,
             pack.resolveItemVisual("testpack:item/sprite_cmd_tint",
-                new CustomModelData(List.of(), List.of(), List.of(), List.of(0x00FF00)), SCALE).orElseThrow());
+                ItemState.of(new CustomModelData(List.of(), List.of(), List.of(), List.of(0x00FF00))), SCALE).orElseThrow());
         assertEquals(0xFF00FF00, tinted.sprite().getRGB(0, 0));
 
         PackItemVisual.Sprite untinted = assertInstanceOf(PackItemVisual.Sprite.class,
-            pack.resolveItemVisual("testpack:item/sprite_cmd_tint", CustomModelData.EMPTY, SCALE).orElseThrow());
+            pack.resolveItemVisual("testpack:item/sprite_cmd_tint", ItemState.EMPTY, SCALE).orElseThrow());
         assertEquals(0xFFFFFFFF, untinted.sprite().getRGB(0, 0),
             "missing color uses the declared white default - a no-op");
     }
@@ -260,7 +281,7 @@ class LoadedPackElementsTest {
         // Vanilla-style layer0 items commonly carry team/potion tint sources; they rendered
         // fine (untinted) before tints were parsed, so the sprite branch must not hard-fail.
         PackItemVisual.Sprite sprite = assertInstanceOf(PackItemVisual.Sprite.class,
-            pack.resolveItemVisual("testpack:item/sprite_team_tint", CustomModelData.EMPTY, SCALE).orElseThrow());
+            pack.resolveItemVisual("testpack:item/sprite_team_tint", ItemState.EMPTY, SCALE).orElseThrow());
         assertEquals(0xFFFFFFFF, sprite.sprite().getRGB(0, 0), "the team tint is skipped, not applied");
         assertEquals(0xFFFFFFFF, pack.resolveSprite("testpack:item/sprite_team_tint")
             .orElseThrow().getRGB(0, 0), "resolveSprite keeps rendering too");
@@ -269,15 +290,23 @@ class LoadedPackElementsTest {
     @Test
     void dyeTintColorsTheFlatSpriteWithItsDefault() {
         PackItemVisual.Sprite sprite = assertInstanceOf(PackItemVisual.Sprite.class,
-            pack.resolveItemVisual("testpack:item/sprite_dyed", CustomModelData.EMPTY, SCALE).orElseThrow());
+            pack.resolveItemVisual("testpack:item/sprite_dyed", ItemState.EMPTY, SCALE).orElseThrow());
         assertEquals(0xFF3366FF, sprite.sprite().getRGB(0, 0));
         assertEquals(0xFF3366FF, pack.resolveSprite("testpack:item/sprite_dyed")
             .orElseThrow().getRGB(0, 0), "resolveSprite tints identically");
     }
 
     @Test
+    void dyeTintColorsTheFlatSpriteWithTheDyedColor() {
+        PackItemVisual.Sprite sprite = assertInstanceOf(PackItemVisual.Sprite.class,
+            pack.resolveItemVisual("testpack:item/sprite_dyed", new ItemState(CustomModelData.EMPTY, 0x8932B8), SCALE)
+                .orElseThrow());
+        assertEquals(0xFF8932B8, sprite.sprite().getRGB(0, 0));
+    }
+
+    @Test
     void oversizedItemReportsFullExtent() {
-        PackItemVisual.ElementsRaster raster = raster("testpack:item/oversized", CustomModelData.EMPTY);
+        PackItemVisual.ElementsRaster raster = raster("testpack:item/oversized", ItemState.EMPTY);
         assertTrue(raster.oversized());
         assertEquals(128, raster.image().getWidth(), "scale 2 spans gui [-8, 24) at 4 px per GUI px");
         assertEquals(128, raster.image().getHeight());
@@ -289,7 +318,7 @@ class LoadedPackElementsTest {
 
     @Test
     void sameModelWithoutTheFlagClipsToTheSlotBox() {
-        PackItemVisual.ElementsRaster raster = raster("testpack:item/clipped", CustomModelData.EMPTY);
+        PackItemVisual.ElementsRaster raster = raster("testpack:item/clipped", ItemState.EMPTY);
         assertFalse(raster.oversized());
         assertEquals(64, raster.image().getWidth());
         assertEquals(0, raster.offsetX());
@@ -303,7 +332,7 @@ class LoadedPackElementsTest {
         // even in strict mode - element rotations are vanilla geometry, not a gui-rotation
         // approximation. The model declares no gui_light, so the vanilla side default shades
         // the south face at 0.8: white * 0.8 = 0xCC per channel.
-        BufferedImage image = raster("testpack:item/rotated", CustomModelData.EMPTY).image();
+        BufferedImage image = raster("testpack:item/rotated", ItemState.EMPTY).image();
         assertEquals(0xFFCCCCCC, image.getRGB(32, 32), "the diamond covers the center, side-shaded");
         assertEquals(0, image.getRGB(2, 2), "the original quad corner rotates away");
     }
@@ -311,14 +340,14 @@ class LoadedPackElementsTest {
     @Test
     void mixedElementsAndSpriteCompositeThrows() {
         PackResolveException exception = assertThrows(PackResolveException.class,
-            () -> pack.resolveItemVisual("testpack:item/mixed", CustomModelData.EMPTY, SCALE));
+            () -> pack.resolveItemVisual("testpack:item/mixed", ItemState.EMPTY, SCALE));
         assertTrue(exception.getMessage().contains("mixes"));
     }
 
     @Test
     void spriteItemsReturnTheClassicSpriteBranch() {
         PackItemVisual visual = pack.resolveItemVisual("testpack:item/plain_sprite",
-            CustomModelData.EMPTY, SCALE).orElseThrow();
+            ItemState.EMPTY, SCALE).orElseThrow();
         PackItemVisual.Sprite sprite = assertInstanceOf(PackItemVisual.Sprite.class, visual);
         ImageAssertions.assertPixelsEqual(pack.resolveSprite("testpack:item/plain_sprite").orElseThrow(),
             sprite.sprite(), "sprite branch");
@@ -343,7 +372,7 @@ class LoadedPackElementsTest {
 
     @Test
     void bareElementTextureRefResolvesInTheMinecraftNamespace() {
-        BufferedImage image = raster("testpack:item/bare_quad", CustomModelData.EMPTY).image();
+        BufferedImage image = raster("testpack:item/bare_quad", ItemState.EMPTY).image();
         assertEquals(0xFF00AA77, image.getRGB(32, 32),
             "the elements path reads assets/minecraft/textures/item/bare.png, not the testpack decoy");
     }
@@ -353,7 +382,7 @@ class LoadedPackElementsTest {
         // The unified rule, pinned end to end: both texture resolution paths must sample the
         // SAME texture for the same bare reference.
         BufferedImage sprite = pack.resolveSprite("testpack:item/bare_sprite").orElseThrow();
-        BufferedImage quad = raster("testpack:item/bare_quad", CustomModelData.EMPTY).image();
+        BufferedImage quad = raster("testpack:item/bare_quad", ItemState.EMPTY).image();
         assertEquals(sprite.getRGB(0, 0), quad.getRGB(32, 32));
     }
 
@@ -363,7 +392,7 @@ class LoadedPackElementsTest {
         // templates - the real-pack shape. The chain must terminate at item/generated with flat
         // layer0 semantics instead of throwing model-not-found.
         PackItemVisual visual = pack.resolveItemVisual("testpack:item/vanilla_exit",
-            CustomModelData.EMPTY, SCALE).orElseThrow();
+            ItemState.EMPTY, SCALE).orElseThrow();
         PackItemVisual.Sprite sprite = assertInstanceOf(PackItemVisual.Sprite.class, visual);
         assertEquals(0xFFFFFFFF, sprite.sprite().getRGB(0, 0));
         assertEquals(0xFFFFFFFF, pack.resolveSprite("testpack:item/vanilla_exit").orElseThrow().getRGB(0, 0),
@@ -373,7 +402,7 @@ class LoadedPackElementsTest {
     @Test
     void chainEndingAtVanillaHandheldRendersTheFlatSprite() {
         PackItemVisual visual = pack.resolveItemVisual("testpack:item/handheld_exit",
-            CustomModelData.EMPTY, SCALE).orElseThrow();
+            ItemState.EMPTY, SCALE).orElseThrow();
         assertEquals(0xFF00FF00, assertInstanceOf(PackItemVisual.Sprite.class, visual).sprite().getRGB(0, 0));
     }
 
@@ -383,7 +412,7 @@ class LoadedPackElementsTest {
         // ship, supplying its own layer0: every vanilla item model is a flat generated-family
         // model, so this renders the child sprite flat rather than throwing model-not-found.
         PackItemVisual visual = pack.resolveItemVisual("testpack:item/item_terminal_reskin",
-            CustomModelData.EMPTY, SCALE).orElseThrow();
+            ItemState.EMPTY, SCALE).orElseThrow();
         assertEquals(0xFF00FF00, assertInstanceOf(PackItemVisual.Sprite.class, visual).sprite().getRGB(0, 0));
         assertEquals(0xFF00FF00, pack.resolveSprite("testpack:item/item_terminal_reskin").orElseThrow().getRGB(0, 0),
             "resolveSprite terminates the chain identically");
@@ -402,7 +431,7 @@ class LoadedPackElementsTest {
         // No child layer0 and no shipped vanilla texture: the terminal layer is warn-skipped,
         // leaving nothing to render.
         PackResolveException exception = assertThrows(PackResolveException.class,
-            () -> pack.resolveItemVisual("testpack:item/item_terminal_no_texture", CustomModelData.EMPTY, SCALE));
+            () -> pack.resolveItemVisual("testpack:item/item_terminal_no_texture", ItemState.EMPTY, SCALE));
         assertTrue(exception.getMessage().contains("layer0"), exception.getMessage());
     }
 
@@ -419,7 +448,7 @@ class LoadedPackElementsTest {
         // Only minecraft:item/* templates terminate flat; a minecraft:block/* parent carries
         // real geometry this flat-item path cannot synthesize and must still fail loud.
         PackResolveException exception = assertThrows(PackResolveException.class,
-            () -> pack.resolveItemVisual("testpack:item/block_dead_end", CustomModelData.EMPTY, SCALE));
+            () -> pack.resolveItemVisual("testpack:item/block_dead_end", ItemState.EMPTY, SCALE));
         assertTrue(exception.getMessage().contains("block/some_block"), exception.getMessage());
     }
 
@@ -428,7 +457,7 @@ class LoadedPackElementsTest {
         // The builtin templates declare no layer0 of their own: a chain ending there without
         // one anywhere has nothing to render and must say so.
         PackResolveException exception = assertThrows(PackResolveException.class,
-            () -> pack.resolveItemVisual("testpack:item/generated_no_layer0", CustomModelData.EMPTY, SCALE));
+            () -> pack.resolveItemVisual("testpack:item/generated_no_layer0", ItemState.EMPTY, SCALE));
         assertTrue(exception.getMessage().contains("layer0"), exception.getMessage());
     }
 
@@ -462,7 +491,7 @@ class LoadedPackElementsTest {
 
     /** The center pixel of an elements render resolved with the given damage state. */
     private int damaged(String itemRef, ItemDamage damage) {
-        PackItemVisual visual = pack.resolveItemVisual(itemRef, CustomModelData.EMPTY, damage, SCALE, false)
+        PackItemVisual visual = pack.resolveItemVisual(itemRef, ItemState.EMPTY, damage, SCALE, false)
             .orElseThrow();
         return assertInstanceOf(PackItemVisual.ElementsRaster.class, visual).image().getRGB(32, 32);
     }
@@ -470,24 +499,24 @@ class LoadedPackElementsTest {
     @Test
     void unknownItemsResolveEmpty() {
         assertEquals(Optional.empty(),
-            pack.resolveItemVisual("testpack:item/nope", CustomModelData.EMPTY, SCALE));
+            pack.resolveItemVisual("testpack:item/nope", ItemState.EMPTY, SCALE));
         assertEquals(Optional.empty(),
-            pack.resolveItemVisual("bare_ref", CustomModelData.EMPTY, SCALE));
+            pack.resolveItemVisual("bare_ref", ItemState.EMPTY, SCALE));
         assertEquals(Optional.empty(),
-            pack.resolveItemVisual("other:item/flat", CustomModelData.EMPTY, SCALE));
+            pack.resolveItemVisual("other:item/flat", ItemState.EMPTY, SCALE));
     }
 
     @Test
     void renderingIsDeterministic() {
         ImageAssertions.assertPixelsEqual(
-            raster("testpack:item/oversized", CustomModelData.EMPTY).image(),
-            raster("testpack:item/oversized", CustomModelData.EMPTY).image(),
+            raster("testpack:item/oversized", ItemState.EMPTY).image(),
+            raster("testpack:item/oversized", ItemState.EMPTY).image(),
             "repeat resolve");
     }
 
     @Test
     void invalidScaleIsRejected() {
         assertThrows(IllegalArgumentException.class,
-            () -> pack.resolveItemVisual("testpack:item/flat", CustomModelData.EMPTY, 0));
+            () -> pack.resolveItemVisual("testpack:item/flat", ItemState.EMPTY, 0));
     }
 }

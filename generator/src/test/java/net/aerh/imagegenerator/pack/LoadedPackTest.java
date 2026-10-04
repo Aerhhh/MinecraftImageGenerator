@@ -135,7 +135,7 @@ class LoadedPackTest {
             () -> pack.resolveSprite("testpack:item/layered_orphan"));
         assertTrue(spriteError.getMessage().contains("nowhere"), spriteError.getMessage());
         PackResolveException visualError = assertThrows(PackResolveException.class,
-            () -> pack.resolveItemVisual("testpack:item/layered_orphan", CustomModelData.EMPTY, 4));
+            () -> pack.resolveItemVisual("testpack:item/layered_orphan", ItemState.EMPTY, 4));
         assertEquals(spriteError.getMessage(), visualError.getMessage(),
             "the sprite and item-visual APIs agree on the failure");
     }

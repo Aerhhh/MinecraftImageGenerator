@@ -14,6 +14,7 @@ import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.item.InventoryItem;
 import net.aerh.imagegenerator.pack.AnimationTimeline;
 import net.aerh.imagegenerator.pack.CustomModelData;
+import net.aerh.imagegenerator.pack.ItemState;
 import net.aerh.imagegenerator.pack.PackAnimatedVisual;
 import net.aerh.imagegenerator.pack.PackAnimation;
 import net.aerh.imagegenerator.pack.PackId;
@@ -427,7 +428,7 @@ public class MinecraftContainerGenerator implements Generator {
         if (staticRaster != null) {
             PackAnimatedVisual animation = animationCache.computeIfAbsent(
                     new ElementsRasterKey(item.getItemName(), data),
-                    key -> repository().resolveItemVisualAnimation(packId, key.itemName(), key.data(), null,
+                    key -> repository().resolveItemVisualAnimation(packId, key.itemName(), ItemState.of(key.data()), null,
                         pixelSize, fullGuiRotations))
                 .orElse(null);
             if (animation != null && animation.steps().getFirst() instanceof PackItemVisual.ElementsRaster) {
@@ -721,7 +722,7 @@ public class MinecraftContainerGenerator implements Generator {
         Optional<PackItemVisual.ElementsRaster> raster = elementsRasterCache.computeIfAbsent(
             new ElementsRasterKey(item.getItemName(), data),
             // The full-rotation flag is per generator instance, so it needs no key field.
-            key -> elementsRasterOf(repository().resolveItemVisual(packId, key.itemName(), key.data(), null,
+            key -> elementsRasterOf(repository().resolveItemVisual(packId, key.itemName(), ItemState.of(key.data()), null,
                 pixelSize, fullGuiRotations)));
         if (raster.isPresent()) {
             warnIgnoredElementsModifiers(item);

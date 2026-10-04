@@ -36,8 +36,8 @@ sealed interface ItemModelNode
 
         /**
          * The {@code minecraft:dye} source: vanilla reads the item's {@code dyed_color}
-         * component and falls back to the REQUIRED {@code default} color. This library carries
-         * no per-item dye data, so the default always applies.
+         * component and falls back to the REQUIRED {@code default} color; here the dyed color
+         * comes from {@link ItemState#dyedColor()}.
          */
         record Dye(int defaultRgb) implements TintSpec {
         }

@@ -101,6 +101,26 @@ class DisplayToolTest {
     }
 
     @Test
+    void colorDyesAPackItemThroughTheTool() throws IOException {
+        GeneratedObject result = new DisplayTool(ToolTestSupport.elementsFixtureService()).render(
+            DisplayRequest.builder().itemModel("testpack:item/dyed").color("light_blue")
+                .packId(ToolTestSupport.ELEMENTS_PACK).build(), null);
+
+        assertEquals(0xFF3AB3DA, result.getImage().getRGB(128, 128), "light_blue is vanilla's #3AB3DA");
+    }
+
+    @Test
+    void nonDyeColorOnAPackItemReachesTheUserAsAGeneratorError() throws IOException {
+        DisplayRequest request = DisplayRequest.builder().itemModel("testpack:item/dyed").color("speed")
+            .packId(ToolTestSupport.ELEMENTS_PACK).build();
+        DisplayTool tool = new DisplayTool(ToolTestSupport.elementsFixtureService());
+
+        GeneratorException exception = assertThrows(GeneratorException.class, () -> tool.render(request, null));
+
+        assertTrue(exception.getMessage().contains("use #RRGGBB or a dye name"), exception.getMessage());
+    }
+
+    @Test
     void blankOptionalStringsBecomeNull() {
         DisplayRequest request = DisplayRequest.builder().itemId("stone").itemModel("").data(" ").color("  ").skinValue("	").build();
 

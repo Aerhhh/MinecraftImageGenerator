@@ -12,6 +12,7 @@ import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.item.InventoryItem;
 import net.aerh.imagegenerator.pack.AnimationTimeline;
 import net.aerh.imagegenerator.pack.CustomModelData;
+import net.aerh.imagegenerator.pack.ItemState;
 import net.aerh.imagegenerator.pack.PackAnimatedVisual;
 import net.aerh.imagegenerator.pack.PackId;
 import net.aerh.imagegenerator.pack.PackItemVisual;
@@ -483,7 +484,7 @@ public class MinecraftInventoryGenerator implements Generator {
             return null;
         }
         PackItemVisual.ElementsRaster raster = MinecraftContainerGenerator.elementsRasterOf(
-                packRepository.resolveItemVisual(packId, item.getItemName(), CustomModelData.EMPTY, scaleFactor))
+                packRepository.resolveItemVisual(packId, item.getItemName(), ItemState.EMPTY, scaleFactor))
             .orElse(null);
         if (raster == null) {
             return null;
@@ -504,7 +505,7 @@ public class MinecraftInventoryGenerator implements Generator {
     @Nullable
     private SlotVisual animatedElementsVisual(InventoryItem item) {
         PackAnimatedVisual animation = packRepository.resolveItemVisualAnimation(
-            packId, item.getItemName(), CustomModelData.EMPTY, null, scaleFactor, false).orElse(null);
+            packId, item.getItemName(), ItemState.EMPTY, null, scaleFactor, false).orElse(null);
         if (animation == null || !(animation.steps().getFirst() instanceof PackItemVisual.ElementsRaster)) {
             return null;
         }

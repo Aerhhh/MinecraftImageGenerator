@@ -18,7 +18,9 @@ import net.aerh.imagegenerator.exception.GeneratorException;
 import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.pack.AnimationTimeline;
 import net.aerh.imagegenerator.pack.CustomModelData;
+import net.aerh.imagegenerator.pack.DyeColors;
 import net.aerh.imagegenerator.pack.ItemDamage;
+import net.aerh.imagegenerator.pack.ItemState;
 import net.aerh.imagegenerator.pack.PackAnimatedVisual;
 import net.aerh.imagegenerator.pack.PackId;
 import net.aerh.imagegenerator.pack.PackItemVisual;
@@ -37,6 +39,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.OptionalInt;
 
 @Slf4j
 @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
@@ -60,6 +63,11 @@ public class MinecraftItemGenerator implements Generator {
     private final boolean fullGuiRotations;
     private final String data;
     private final String color;
+    // The color read as a dyed color, or null when it is absent or not a dye color (vanilla
+    // overlay color names stay valid for vanilla items). Derived from color, so it adds nothing
+    // new to the render cache key.
+    @Nullable
+    private final Integer dyedColor;
     private final boolean enchanted;
     private final boolean hoverEffect;
     private final Integer durabilityPercent;
@@ -82,16 +90,17 @@ public class MinecraftItemGenerator implements Generator {
         }
 
         // Load base item texture: selected pack first, then the vanilla spritesheet
-        BufferedImage itemImage = resolveBaseTexture();
+        BaseTexture base = resolveBaseTexture();
 
         // Create initial effect context
         EffectContext.Builder contextBuilder = new EffectContext.Builder()
-            .withImage(itemImage)
+            .withImage(base.image())
             .withItemId(displayId())
             .withEnchanted(enchanted)
             .withHovered(hoverEffect)
             .putMetadata("data", data)
-            .putMetadata("color", color);
+            .putMetadata("color", color)
+            .putMetadata(OverlayApplicationEffect.PACK_VISUAL_METADATA, base.fromPack());
 
         if (durabilityPercent != null) {
             contextBuilder.putMetadata("durabilityPercent", durabilityPercent);
@@ -144,10 +153,11 @@ public class MinecraftItemGenerator implements Generator {
     private GeneratedObject renderAnimatedTextures() {
         String packRef = itemModel != null ? namespacedItemModel() : itemId;
         PackAnimatedVisual animation = packRepository.resolveItemVisualAnimation(
-            packId, packRef, customModelData, itemDamage, ELEMENTS_PX_PER_GUI_PX, fullGuiRotations).orElse(null);
+            packId, packRef, packItemState(), itemDamage, ELEMENTS_PX_PER_GUI_PX, fullGuiRotations).orElse(null);
         if (animation == null) {
             return null;
         }
+        requireDyeColorForPackVisual();
         if (enchanted) {
             log.warn("Item '{}': the enchant glint is not applied while animated pack textures drive the output",
                 displayId());
@@ -184,11 +194,16 @@ public class MinecraftItemGenerator implements Generator {
             .withEnchanted(false)
             .withHovered(hoverEffect)
             .putMetadata("data", data)
-            .putMetadata("color", color);
+            .putMetadata("color", color)
+            .putMetadata(OverlayApplicationEffect.PACK_VISUAL_METADATA, true);
         if (durabilityPercent != null) {
             contextBuilder.putMetadata("durabilityPercent", durabilityPercent);
         }
         return effectPipeline.execute(contextBuilder.build()).getImage();
+    }
+
+    /** A base item image and whether it came from the selected pack rather than vanilla. */
+    private record BaseTexture(BufferedImage image, boolean fromPack) {
     }
 
     /**
@@ -201,17 +216,18 @@ public class MinecraftItemGenerator implements Generator {
      * bare reference defaults to the {@code minecraft} namespace, and a pack miss falls back to
      * the vanilla spritesheet keyed by the reference's path.
      */
-    private BufferedImage resolveBaseTexture() {
+    private BaseTexture resolveBaseTexture() {
         boolean usingPack = PackId.isActive(packId);
         String packRef = itemModel != null ? namespacedItemModel() : itemId;
         if (usingPack) {
-            var visual = packRepository.resolveItemVisual(packId, packRef, customModelData, itemDamage,
+            var visual = packRepository.resolveItemVisual(packId, packRef, packItemState(), itemDamage,
                 ELEMENTS_PX_PER_GUI_PX, fullGuiRotations);
             if (visual.isPresent()) {
-                return switch (visual.get()) {
+                requireDyeColorForPackVisual();
+                return new BaseTexture(switch (visual.get()) {
                     case PackItemVisual.Sprite sprite -> PackSprites.scaleToCanvas(sprite.sprite(), 256);
                     case PackItemVisual.ElementsRaster raster -> raster.image();
-                };
+                }, true);
             }
         }
         String vanillaKey = itemModel != null ? vanillaKeyForItemModel() : itemId;
@@ -223,7 +239,25 @@ public class MinecraftItemGenerator implements Generator {
             }
             throw new GeneratorException("Item with ID `%s` not found", displayId());
         }
-        return vanilla;
+        return new BaseTexture(vanilla, false);
+    }
+
+    /** The item state pack renders evaluate against: the custom model data and the dyed color. */
+    private ItemState packItemState() {
+        return new ItemState(customModelData, dyedColor);
+    }
+
+    /**
+     * On a pack item the color is its dyed color, so a color that is not a dye color fails
+     * instead of silently rendering the dye default. Vanilla items keep accepting overlay
+     * color names.
+     */
+    private void requireDyeColorForPackVisual() {
+        if (color != null && !color.isBlank() && dyedColor == null) {
+            throw new GeneratorException(
+                "Color `%s` is not a dye color for pack item `%s`; use #RRGGBB or a dye name like red or light_blue",
+                color, displayId());
+        }
     }
 
     /** The item model reference with the default {@code minecraft} namespace made explicit. */
@@ -329,6 +363,12 @@ public class MinecraftItemGenerator implements Generator {
             return this;
         }
 
+        /**
+         * The item's color. On items rendered from a pack it is the {@code minecraft:dyed_color}
+         * value read by {@code dye} tint sources: {@code #RRGGBB} or a vanilla dye name (see
+         * {@link DyeColors#parse}), anything else failing at render time. On vanilla items it
+         * selects the overlay color (leather armor, potions) as before.
+         */
         public MinecraftItemGenerator.Builder withColor(String color) {
             this.color = color;
             return this;
@@ -434,8 +474,11 @@ public class MinecraftItemGenerator implements Generator {
                 customModelData = CustomModelData.EMPTY;
             }
 
+            OptionalInt dyed = DyeColors.parse(color);
+            Integer dyedColor = dyed.isPresent() ? dyed.getAsInt() : null;
+
             return new MinecraftItemGenerator(
-                itemId, itemModel, customModelData, itemDamage, fullGuiRotations, data, color,
+                itemId, itemModel, customModelData, itemDamage, fullGuiRotations, data, color, dyedColor,
                 enchanted, hoverEffect, durabilityPercent, overlayLoader, effectPipeline,
                 packId, packRepository
             );

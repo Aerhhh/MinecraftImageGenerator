@@ -132,7 +132,7 @@ class MinecraftNbtParserItemModelTest {
 
         BufferedImage dyedModel = new MinecraftItemGenerator.Builder()
             .withItemModel("testpack:item/simple")
-            .withData(String.format("#%06X", DYE_COLOR))
+            .withColor(String.format("#%06X", DYE_COLOR))
             .withPack(packId)
             .withPackRepository(repository)
             .build()
