@@ -9,7 +9,7 @@ import java.util.Map;
  * units; coordinates outside 0..16 are legal within the vanilla -16..32 bounds).
  *
  * @param rotation the element's rotation entry, or null when absent (an explicit entry with
- *                 angle 0 parses to a {@link Rotation} that renders as a no-op)
+ *                 all angles 0 parses to a {@link Rotation} that renders as a no-op)
  * @param shade    vanilla {@code shade} flag, default true; false exempts the element from
  *                 {@code gui_light: side} face shading
  * @param faces    faces by direction; every declared face rasterizes through the orthographic
@@ -28,18 +28,53 @@ record ModelElement(float fromX, float fromY, float fromZ, float toX, float toY,
     }
 
     /**
-     * A vanilla element rotation: a right-handed rotation of {@code angle} degrees about
-     * {@code axis} through {@code origin} (model units). Modern vanilla (1.21.6+) accepts any
+     * A vanilla element rotation through {@code origin} (model units), stored as right-handed
+     * per-axis angles in degrees. Vanilla 1.21.11 applies them as X, then Y, then Z
+     * ({@code rotationXYZ}, so a vertex turns about z first); the legacy {@code axis}/{@code angle}
+     * form is the special case with one non-zero angle. Modern vanilla (1.21.6+) accepts any
      * angle; older clients restricted it to 22.5-degree steps between -45 and 45.
-     * {@code rescale} scales the two axes perpendicular to the rotation axis by
+     * {@code rescale} scales the two axes perpendicular to a single rotation axis by
      * {@code 1 / cos(angle)} so a rotated full-size element keeps covering its block face
-     * (vanilla {@code FaceBakery.applyElementRotation} semantics).
+     * (vanilla {@code FaceBakery.applyElementRotation} semantics). Vanilla does not define it
+     * for rotations about several axes, so it is ignored there.
      */
-    record Rotation(float angle, Axis axis, float originX, float originY, float originZ, boolean rescale) {
+    record Rotation(float x, float y, float z, float originX, float originY, float originZ, boolean rescale) {
 
-        /** True when the entry actually moves geometry (a declared angle-0 entry is a no-op). */
+        /** The legacy single-axis form: {@code angle} degrees about {@code axis}. */
+        Rotation(float angle, Axis axis, float originX, float originY, float originZ, boolean rescale) {
+            this(axis == Axis.X ? angle : 0, axis == Axis.Y ? angle : 0, axis == Axis.Z ? angle : 0,
+                originX, originY, originZ, rescale);
+        }
+
+        /** True when the entry actually moves geometry (a declared all-zero entry is a no-op). */
         boolean isActive() {
-            return angle != 0;
+            return x != 0 || y != 0 || z != 0;
+        }
+
+        /** The only axis with a non-zero angle, or null when none or several are non-zero. */
+        @Nullable Axis singleAxis() {
+            boolean aboutX = x != 0;
+            boolean aboutY = y != 0;
+            boolean aboutZ = z != 0;
+            if (aboutX && !aboutY && !aboutZ) {
+                return Axis.X;
+            }
+            if (aboutY && !aboutX && !aboutZ) {
+                return Axis.Y;
+            }
+            if (aboutZ && !aboutX && !aboutY) {
+                return Axis.Z;
+            }
+            return null;
+        }
+
+        /** The angle in degrees about {@code axis}. */
+        float angleAbout(Axis axis) {
+            return switch (axis) {
+                case X -> x;
+                case Y -> y;
+                case Z -> z;
+            };
         }
     }
 

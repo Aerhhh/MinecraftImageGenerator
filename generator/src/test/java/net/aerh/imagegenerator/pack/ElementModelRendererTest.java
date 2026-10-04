@@ -745,6 +745,46 @@ class ElementModelRendererTest {
     }
 
     @Test
+    void perAxisRotationOnOneAxisRendersLikeTheLegacyForm() {
+        ElementModelRenderer.Raster legacy = render(quadrants(), GuiTransform.IDENTITY, 4, true,
+            rotatedQuad(new ModelElement.Rotation(30, ModelElement.Axis.Z, 8, 8, 8, true)));
+        ElementModelRenderer.Raster perAxis = render(quadrants(), GuiTransform.IDENTITY, 4, true,
+            rotatedQuad(new ModelElement.Rotation(0, 0, 30, 8, 8, 8, true)));
+        assertEquals(legacy.offsetX(), perAxis.offsetX());
+        assertEquals(legacy.offsetY(), perAxis.offsetY());
+        ImageAssertions.assertPixelsEqual(legacy.image(), perAxis.image(), "z-only per-axis rotation");
+    }
+
+    @Test
+    void multiAxisRotationAppliesTheVanillaXyzOrder() {
+        // Vanilla builds the matrix as Rx * Ry * Rz (rotationXYZ, the display-rotation
+        // convention): a vertex turns about z first, then x. For x = 45, z = 90 on a quad in
+        // the z = 8 plane, z = 90 first spins the quad within its plane and x = 45 then tilts
+        // it, so it ends foreshortened vertically (y in [2.34, 13.66]) at full width. The
+        // opposite order would foreshorten it horizontally instead.
+        ModelElement quad = new ModelElement(0, 0, 8, 16, 16, 8,
+            new ModelElement.Rotation(45, 0, 90, 8, 8, 8, false), true,
+            Map.of(ModelElement.Direction.SOUTH, face()));
+        ElementModelRenderer.Raster raster = render(quadrants(), GuiTransform.IDENTITY, 4, false, quad);
+        assertEquals(0, rgbAtGui(raster, 8.125, 1.125, 4), "above the foreshortened top edge");
+        assertEquals(0, rgbAtGui(raster, 8.125, 13.875, 4), "below the foreshortened bottom edge");
+        assertTrue((rgbAtGui(raster, 0.625, 8.125, 4) >>> 24) != 0, "the left edge keeps its full width");
+        assertTrue((rgbAtGui(raster, 15.375, 8.125, 4) >>> 24) != 0, "the right edge keeps its full width");
+    }
+
+    @Test
+    void rescaleIsIgnoredForMultiAxisRotations() {
+        // Vanilla does not document rescale for several axes, so it is not guessed at.
+        ElementModelRenderer.Raster plain = render(quadrants(), GuiTransform.IDENTITY, 4, true,
+            rotatedQuad(new ModelElement.Rotation(20, 0, 30, 8, 8, 8, false)));
+        ElementModelRenderer.Raster rescaled = render(quadrants(), GuiTransform.IDENTITY, 4, true,
+            rotatedQuad(new ModelElement.Rotation(20, 0, 30, 8, 8, 8, true)));
+        assertEquals(plain.offsetX(), rescaled.offsetX());
+        assertEquals(plain.offsetY(), rescaled.offsetY());
+        ImageAssertions.assertPixelsEqual(plain.image(), rescaled.image(), "multi-axis rescale");
+    }
+
+    @Test
     void elementRotationOriginAnchorsTheRotation() {
         // Rotating a quad spanning [0,8]x[0,8] about the model origin corner (0,0,z) by -45
         // swings it toward positive x: the far corner (8,8) lands at model (11.31, 0) = gui

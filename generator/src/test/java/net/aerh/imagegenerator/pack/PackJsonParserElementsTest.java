@@ -112,7 +112,8 @@ class PackJsonParserElementsTest {
             {"elements":[{"from":[0,0,0],"to":[16,16,1],
               "rotation":{"angle":90,"axis":"y","origin":[8,8,8]},
               "faces":{"south":{"texture":"#a"}}}]}""");
-        assertEquals(90f, ninety.elements().get(0).rotation().angle());
+        assertEquals(new ModelElement.Rotation(90, ModelElement.Axis.Y, 8, 8, 8, false),
+            ninety.elements().get(0).rotation());
     }
 
     @Test
@@ -123,6 +124,74 @@ class PackJsonParserElementsTest {
             {"elements":[{"from":[0,0,0],"to":[16,16,1],
               "rotation":{"angle":1e40,"axis":"y","origin":[8,8,8]},
               "faces":{"south":{"texture":"#a"}}}]}"""));
+    }
+
+    @Test
+    void elementRotationParsesPerAxisAngles() {
+        // 1.21.11 added x/y/z rotation in degrees, each defaulting to 0; a single-axis entry
+        // is the same rotation as the legacy axis/angle form.
+        ModelInfo yOnly = parseModel("""
+            {"elements":[{"from":[0,0,0],"to":[16,16,1],
+              "rotation":{"x":0,"y":-90,"z":0,"origin":[8,8,8]},
+              "faces":{"south":{"texture":"#a"}}}]}""");
+        ModelElement.Rotation rotation = yOnly.elements().get(0).rotation();
+        assertEquals(new ModelElement.Rotation(0, -90, 0, 8, 8, 8, false), rotation);
+        assertEquals(new ModelElement.Rotation(-90, ModelElement.Axis.Y, 8, 8, 8, false), rotation,
+            "a y-only entry equals the legacy axis/angle form");
+        assertEquals(ModelElement.Axis.Y, rotation.singleAxis());
+        assertTrue(yOnly.elements().get(0).hasActiveRotation());
+
+        ModelInfo omitted = parseModel("""
+            {"elements":[{"from":[0,0,0],"to":[16,16,1],
+              "rotation":{"z":30,"origin":[4,0,12]},
+              "faces":{"south":{"texture":"#a"}}}]}""");
+        assertEquals(new ModelElement.Rotation(0, 0, 30, 4, 0, 12, false), omitted.elements().get(0).rotation(),
+            "omitted axes default to 0");
+
+        ModelInfo multi = parseModel("""
+            {"elements":[{"from":[0,0,0],"to":[16,16,1],
+              "rotation":{"x":10,"y":20,"z":30,"origin":[8,8,8],"rescale":true},
+              "faces":{"south":{"texture":"#a"}}}]}""");
+        ModelElement.Rotation multiRotation = multi.elements().get(0).rotation();
+        assertEquals(new ModelElement.Rotation(10, 20, 30, 8, 8, 8, true), multiRotation);
+        assertNull(multiRotation.singleAxis(), "several non-zero axes have no single axis");
+
+        ModelInfo zeros = parseModel("""
+            {"elements":[{"from":[0,0,0],"to":[16,16,1],
+              "rotation":{"x":0,"origin":[8,8,8]},
+              "faces":{"south":{"texture":"#a"}}}]}""");
+        assertFalse(zeros.elements().get(0).hasActiveRotation(), "all-zero angles are a no-op");
+    }
+
+    @Test
+    void legacyRotationFieldsTakePrecedenceOverPerAxisFields() {
+        // Vanilla: when both notations are present, the older axis/angle one wins.
+        ModelInfo both = parseModel("""
+            {"elements":[{"from":[0,0,0],"to":[16,16,1],
+              "rotation":{"angle":45,"axis":"z","x":10,"y":20,"origin":[8,8,8]},
+              "faces":{"south":{"texture":"#a"}}}]}""");
+        assertEquals(new ModelElement.Rotation(45, ModelElement.Axis.Z, 8, 8, 8, false),
+            both.elements().get(0).rotation());
+    }
+
+    @Test
+    void perAxisRotationIsValidated() {
+        assertThrows(PackLoadException.class, () -> parseModel("""
+            {"elements":[{"from":[0,0,0],"to":[16,16,1],
+              "rotation":{"origin":[8,8,8]},
+              "faces":{"south":{"texture":"#a"}}}]}"""), "neither axis/angle nor x/y/z");
+        assertThrows(PackLoadException.class, () -> parseModel("""
+            {"elements":[{"from":[0,0,0],"to":[16,16,1],
+              "rotation":{"y":1e40,"origin":[8,8,8]},
+              "faces":{"south":{"texture":"#a"}}}]}"""), "non-finite angle");
+        assertThrows(PackLoadException.class, () -> parseModel("""
+            {"elements":[{"from":[0,0,0],"to":[16,16,1],
+              "rotation":{"x":"ten","origin":[8,8,8]},
+              "faces":{"south":{"texture":"#a"}}}]}"""), "non-numeric angle");
+        assertThrows(PackLoadException.class, () -> parseModel("""
+            {"elements":[{"from":[0,0,0],"to":[16,16,1],
+              "rotation":{"y":90},
+              "faces":{"south":{"texture":"#a"}}}]}"""), "missing origin");
     }
 
     @Test
