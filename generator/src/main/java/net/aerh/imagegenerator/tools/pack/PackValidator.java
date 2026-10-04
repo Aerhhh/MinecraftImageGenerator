@@ -1,6 +1,6 @@
 package net.aerh.imagegenerator.tools.pack;
 
-import net.aerh.imagegenerator.pack.CustomModelData;
+import net.aerh.imagegenerator.pack.ItemState;
 import net.aerh.imagegenerator.pack.PackFormatRange;
 import net.aerh.imagegenerator.pack.PackItemVisual;
 import net.aerh.imagegenerator.pack.PackRepository;
@@ -55,7 +55,7 @@ public final class PackValidator {
             }
 
             try {
-                Optional<PackItemVisual> visual = preview.resolveItemVisual(candidate.id(), sample, CustomModelData.EMPTY, SAMPLE_PIXELS_PER_GUI_PX);
+                Optional<PackItemVisual> visual = preview.resolveItemVisual(candidate.id(), sample, ItemState.EMPTY, SAMPLE_PIXELS_PER_GUI_PX);
                 if (visual.isEmpty() || !hasVisiblePixel(imageOf(visual.get()))) {
                     return new PackValidation.Invalid("sample item " + sample + " rendered no visible pixels");
                 }

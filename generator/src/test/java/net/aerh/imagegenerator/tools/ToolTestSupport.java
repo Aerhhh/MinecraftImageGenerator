@@ -10,14 +10,18 @@ import net.aerh.imagegenerator.tools.pack.ResourcePackService;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.function.Consumer;
 
-/** Pack services for tool tests: an empty one for vanilla renders and one with the default fixture pack. */
+/** Pack services for tool tests: an empty one for vanilla renders and one per fixture pack. */
 final class ToolTestSupport {
 
     static final PackId FIXTURE_PACK = PackId.parse("tools:fixture");
 
     /** The tooltip-only pack: style {@code themepack:ruby} plus a default tooltip override. */
     static final PackId THEMED_PACK = PackId.parse("tools:themed");
+
+    /** The elements pack ({@link FixturePacks#writeElementsPack}): 3D models and tinted items. */
+    static final PackId ELEMENTS_PACK = PackId.parse("tools:elements");
 
     private ToolTestSupport() {
     }
@@ -28,6 +32,7 @@ final class ToolTestSupport {
 
     private static ResourcePackService fixtureService;
     private static ResourcePackService themedFixtureService;
+    private static ResourcePackService elementsFixtureService;
 
     /**
      * One shared service per JVM: the pack is read-only after registration, tests never mutate it,
@@ -37,15 +42,7 @@ final class ToolTestSupport {
      */
     static synchronized ResourcePackService fixtureService() throws IOException {
         if (fixtureService == null) {
-            Path root = Files.createDirectories(Path.of("target", "pack-fixtures"));
-            Path packDir = Files.createTempDirectory(root, "tools-");
-            FixturePacks.writeDefaultPack(packDir);
-
-            ResourcePackService service = new ResourcePackService(new PackRepository());
-            service.registerConfiguredPacks(PackRegistrationConfig.of(null,
-                PackDefinition.of(FIXTURE_PACK.toString(), packDir.toString())));
-            requireRegistered(service, FIXTURE_PACK);
-            fixtureService = service;
+            fixtureService = serviceWith(FIXTURE_PACK, "tools-", FixturePacks::writeDefaultPack);
         }
         return fixtureService;
     }
@@ -56,17 +53,33 @@ final class ToolTestSupport {
      */
     static synchronized ResourcePackService themedFixtureService() throws IOException {
         if (themedFixtureService == null) {
-            Path root = Files.createDirectories(Path.of("target", "pack-fixtures"));
-            Path packDir = Files.createTempDirectory(root, "themed-");
-            FixturePacks.writeTooltipOnlyPack(packDir);
-
-            ResourcePackService service = new ResourcePackService(new PackRepository());
-            service.registerConfiguredPacks(PackRegistrationConfig.of(null,
-                PackDefinition.of(THEMED_PACK.toString(), packDir.toString())));
-            requireRegistered(service, THEMED_PACK);
-            themedFixtureService = service;
+            themedFixtureService = serviceWith(THEMED_PACK, "themed-", FixturePacks::writeTooltipOnlyPack);
         }
         return themedFixtureService;
+    }
+
+    /**
+     * One shared service per JVM whose only pack is the elements fixture ({@link #ELEMENTS_PACK}),
+     * which carries the tinted items (dye, constant and custom_model_data tints).
+     */
+    static synchronized ResourcePackService elementsFixtureService() throws IOException {
+        if (elementsFixtureService == null) {
+            elementsFixtureService = serviceWith(ELEMENTS_PACK, "elements-", FixturePacks::writeElementsPack);
+        }
+        return elementsFixtureService;
+    }
+
+    /** A new service holding one fixture pack, written by {@code writer} under target/pack-fixtures. */
+    private static ResourcePackService serviceWith(PackId pack, String dirPrefix, Consumer<Path> writer) throws IOException {
+        Path root = Files.createDirectories(Path.of("target", "pack-fixtures"));
+        Path packDir = Files.createTempDirectory(root, dirPrefix);
+        writer.accept(packDir);
+
+        ResourcePackService service = new ResourcePackService(new PackRepository());
+        service.registerConfiguredPacks(PackRegistrationConfig.of(null,
+            PackDefinition.of(pack.toString(), packDir.toString())));
+        requireRegistered(service, pack);
+        return service;
     }
 
     /** Fails loudly when a fixture pack did not register, since the service only logs that. */

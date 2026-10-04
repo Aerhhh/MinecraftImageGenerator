@@ -289,4 +289,99 @@ class MinecraftItemGeneratorModelTest {
         assertNotEquals(GeneratorCacheKey.fromGenerator(strict), GeneratorCacheKey.fromGenerator(full),
             "the full-rotation flag changes rendered pixels, so it must enter the cache key");
     }
+
+    @Test
+    void undyedPackItemUsesTheDyeDefault() {
+        BufferedImage image = packBuilder().withItem("testpack:item/dyed").build().generate().getImage();
+        assertEquals(0xFF3366FF, image.getRGB(128, 128));
+    }
+
+    @Test
+    void hexColorDyesAPackItem() {
+        BufferedImage image = packBuilder().withItem("testpack:item/dyed").withColor("#8932B8")
+            .build().generate().getImage();
+        assertEquals(0xFF8932B8, image.getRGB(128, 128));
+    }
+
+    @Test
+    void dyeNameDyesAPackItemLikeItsHex() {
+        BufferedImage byName = packBuilder().withItemModel("testpack:item/dyed").withColor("purple")
+            .build().generate().getImage();
+        BufferedImage byHex = packBuilder().withItemModel("testpack:item/dyed").withColor("#8932B8")
+            .build().generate().getImage();
+        ImageAssertions.assertPixelsEqual(byHex, byName, "purple is #8932B8");
+    }
+
+    @Test
+    void dyeDyesFlatSpritePackItemsToo() {
+        BufferedImage image = packBuilder().withItem("testpack:item/sprite_dyed").withColor("red")
+            .build().generate().getImage();
+        assertEquals(0xFFB02E26, image.getRGB(128, 128));
+    }
+
+    @Test
+    void blankColorLeavesThePackItemUndyed() {
+        BufferedImage blank = packBuilder().withItem("testpack:item/dyed").withColor("  ")
+            .build().generate().getImage();
+        assertEquals(0xFF3366FF, blank.getRGB(128, 128));
+    }
+
+    @Test
+    void nonDyeColorOnAPackItemFailsClearly() {
+        GeneratorException exception = assertThrows(GeneratorException.class,
+            () -> packBuilder().withItem("testpack:item/dyed").withColor("speed").build().generate());
+        assertTrue(exception.getMessage().contains("`speed` is not a dye color"), exception.getMessage());
+        assertTrue(exception.getMessage().contains("testpack:item/dyed"), exception.getMessage());
+    }
+
+    @Test
+    void nonDyeColorFailsEvenWhenThePackItemHasNoDyeTint() {
+        // The color is the item's dyed color whatever its model reads, so a typo never passes
+        // silently on one pack item and fails on another.
+        assertThrows(GeneratorException.class,
+            () -> packBuilder().withItem("testpack:item/flat").withColor("not a dye").build().generate());
+    }
+
+    @Test
+    void nonDyeColorOnAnAnimatedPackItemFailsClearly() {
+        assertThrows(GeneratorException.class,
+            () -> packBuilder().withItem("testpack:item/animated_quad").withColor("speed").build().generate());
+    }
+
+    @Test
+    void dyeColorOnAPackItemWithoutADyeTintChangesNothing() {
+        BufferedImage plain = packBuilder().withItem("testpack:item/flat").build().generate().getImage();
+        BufferedImage colored = packBuilder().withItem("testpack:item/flat").withColor("red")
+            .build().generate().getImage();
+        ImageAssertions.assertPixelsEqual(plain, colored, "flat has no dye tint");
+    }
+
+    @Test
+    void vanillaItemsKeepAcceptingOverlayColorNames() {
+        // "speed" is a potion overlay option, not a dye: vanilla items still route the color to
+        // the overlay exactly as the data option does.
+        BufferedImage viaColor = new MinecraftItemGenerator.Builder().withItem("potion").withColor("speed")
+            .build().generate().getImage();
+        BufferedImage viaData = new MinecraftItemGenerator.Builder().withItem("potion").withData("speed")
+            .build().generate().getImage();
+        ImageAssertions.assertPixelsEqual(viaData, viaColor, "color and data feed the overlay alike");
+    }
+
+    @Test
+    void packMissFallsBackToVanillaWithTheOverlayColor() {
+        // A pack that lacks the item hands it to vanilla, where a non-dye overlay name is fine.
+        BufferedImage fallback = packBuilder().withItem("potion").withColor("speed").build().generate().getImage();
+        BufferedImage vanilla = new MinecraftItemGenerator.Builder().withItem("potion").withColor("speed")
+            .build().generate().getImage();
+        ImageAssertions.assertPixelsEqual(vanilla, fallback, "vanilla fallback keeps its overlay");
+    }
+
+    @Test
+    void cacheKeysDifferAcrossDyeColors() {
+        MinecraftItemGenerator red = packBuilder().withItem("testpack:item/dyed").withColor("red").build();
+        MinecraftItemGenerator blue = packBuilder().withItem("testpack:item/dyed").withColor("blue").build();
+        MinecraftItemGenerator undyed = packBuilder().withItem("testpack:item/dyed").build();
+        assertNotEquals(GeneratorCacheKey.fromGenerator(red), GeneratorCacheKey.fromGenerator(blue));
+        assertNotEquals(GeneratorCacheKey.fromGenerator(red), GeneratorCacheKey.fromGenerator(undyed));
+    }
 }

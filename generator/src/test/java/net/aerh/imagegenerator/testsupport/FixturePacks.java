@@ -780,7 +780,7 @@ public final class FixturePacks {
      *     default white).</li>
      * <li>{@code constant_tint}: white quad with a constant tint 0xFF8000.</li>
      * <li>{@code dyed}: white quad with a minecraft:dye tint (default 0x3366FF) - the default
-     *     color applies, since no per-item dye data exists in this library.</li>
+     *     applies unless the item state carries a dyed color.</li>
      * <li>{@code unknown_tint}: white quad with a minecraft:team tint - resolve throws.</li>
      * <li>{@code oversized}: flat model with display.gui scale 2 and oversized_in_gui true
      *     (32x32 GUI px centered on the slot). {@code clipped}: same model without the

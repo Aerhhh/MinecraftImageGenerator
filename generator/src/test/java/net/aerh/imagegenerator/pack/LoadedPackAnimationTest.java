@@ -33,7 +33,7 @@ class LoadedPackAnimationTest {
 
         // The "animated" fixture: frametime 3, frames [2, 0, 1] over a red/green/blue flipbook.
         PackAnimatedVisual animation = pack.resolveItemVisualAnimation(
-            "testpack:item/animated", CustomModelData.EMPTY, null, 16, false).orElseThrow();
+            "testpack:item/animated", ItemState.EMPTY, null, 16, false).orElseThrow();
 
         assertEquals(3, animation.steps().size());
         assertEquals(List.of(3, 3, 3), animation.stepTicks());
@@ -51,7 +51,7 @@ class LoadedPackAnimationTest {
         LoadedPack pack = load(packDir);
 
         PackAnimatedVisual animation = pack.resolveItemVisualAnimation(
-            "testpack:item/animated_hold", CustomModelData.EMPTY, null, 16, false).orElseThrow();
+            "testpack:item/animated_hold", ItemState.EMPTY, null, 16, false).orElseThrow();
 
         assertEquals(List.of(2, 2, 100), animation.stepTicks());
         PackItemVisual.Sprite first = assertInstanceOf(PackItemVisual.Sprite.class, animation.steps().get(0));
@@ -66,9 +66,9 @@ class LoadedPackAnimationTest {
         LoadedPack pack = load(packDir);
 
         assertEquals(Optional.empty(), pack.resolveItemVisualAnimation(
-            "testpack:item/simple", CustomModelData.EMPTY, null, 16, false));
+            "testpack:item/simple", ItemState.EMPTY, null, 16, false));
         assertEquals(Optional.empty(), pack.resolveItemVisualAnimation(
-            "testpack:item/unknown_item", CustomModelData.EMPTY, null, 16, false));
+            "testpack:item/unknown_item", ItemState.EMPTY, null, 16, false));
     }
 
     @Test
@@ -79,8 +79,8 @@ class LoadedPackAnimationTest {
         // The animated_badmeta fixture lists frame 99 of a 2-frame flipbook: the animated
         // resolution warns and resolves empty; the static resolution keeps working.
         assertEquals(Optional.empty(), pack.resolveItemVisualAnimation(
-            "testpack:item/animated_badmeta", CustomModelData.EMPTY, null, 16, false));
-        assertTrue(pack.resolveItemVisual("testpack:item/animated_badmeta", CustomModelData.EMPTY, 16).isPresent());
+            "testpack:item/animated_badmeta", ItemState.EMPTY, null, 16, false));
+        assertTrue(pack.resolveItemVisual("testpack:item/animated_badmeta", ItemState.EMPTY, 16).isPresent());
     }
 
     @Test
@@ -92,13 +92,13 @@ class LoadedPackAnimationTest {
         // full-animation parse, but the STATIC load must keep the pre-full-model first-frame crop
         // (a 16x16 sprite), not fall back to the raw uncropped 16x32 flipbook sheet.
         PackItemVisual.Sprite sprite = assertInstanceOf(PackItemVisual.Sprite.class,
-            pack.resolveItemVisual("testpack:item/animated_badtime", CustomModelData.EMPTY, 16).orElseThrow());
+            pack.resolveItemVisual("testpack:item/animated_badtime", ItemState.EMPTY, 16).orElseThrow());
         assertEquals(16, sprite.sprite().getHeight(), "the malformed mcmeta still yields the first-frame crop");
         assertEquals(0xFF00AAAA, sprite.sprite().getRGB(8, 8), "frame 0 (teal), not the squashed full sheet");
 
         // The strict animated resolution still rejects the same mcmeta and falls back to static.
         assertEquals(Optional.empty(), pack.resolveItemVisualAnimation(
-            "testpack:item/animated_badtime", CustomModelData.EMPTY, null, 16, false));
+            "testpack:item/animated_badtime", ItemState.EMPTY, null, 16, false));
     }
 
     @Test
@@ -108,7 +108,7 @@ class LoadedPackAnimationTest {
 
         // The animated_quad fixture: a full-slot quad over the [2, 0, 1] flipbook, frametime 3.
         PackAnimatedVisual animation = pack.resolveItemVisualAnimation(
-            "testpack:item/animated_quad", CustomModelData.EMPTY, null, 4, false).orElseThrow();
+            "testpack:item/animated_quad", ItemState.EMPTY, null, 4, false).orElseThrow();
 
         assertEquals(List.of(3, 3, 3), animation.stepTicks());
         int[] expected = {0xFF0000FF, 0xFFFF0000, 0xFF00FF00};

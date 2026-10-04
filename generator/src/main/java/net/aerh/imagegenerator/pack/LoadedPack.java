@@ -658,13 +658,14 @@ final class LoadedPack {
             return Optional.empty();
         }
         return Optional.of(composeSpriteLayers(itemRef,
-            resolveGuiModels(itemRef, entry, CustomModelData.EMPTY, null), CustomModelData.EMPTY,
+            resolveGuiModels(itemRef, entry, CustomModelData.EMPTY, null), ItemState.EMPTY,
             textureCache::get));
     }
 
     /**
      * Resolves an item reference to its GUI visual, evaluating {@code custom_model_data}
-     * dispatch nodes and tint sources against {@code data}:
+     * dispatch nodes and tint sources (including {@code dye} sources, which read the dyed
+     * color) against {@code state}:
      *
      * <ul>
      * <li>Models whose resolved chains carry no elements compose exactly like
@@ -698,32 +699,32 @@ final class LoadedPack {
      *                              rotations beyond identity and the mirror without the
      *                              full-rotation opt-in)
      */
-    public Optional<PackItemVisual> resolveItemVisual(String itemRef, CustomModelData data, int pixelsPerGuiPx) {
-        return resolveItemVisual(itemRef, data, null, pixelsPerGuiPx, false);
+    public Optional<PackItemVisual> resolveItemVisual(String itemRef, ItemState state, int pixelsPerGuiPx) {
+        return resolveItemVisual(itemRef, state, null, pixelsPerGuiPx, false);
     }
 
     /**
-     * Like {@link #resolveItemVisual(String, CustomModelData, int)} with two extra evaluation
+     * Like {@link #resolveItemVisual(String, ItemState, int)} with two extra evaluation
      * inputs: {@code damage} feeds {@code range_dispatch} nodes with
      * {@code property: minecraft:damage} (null evaluates the property at 0), and
      * {@code fullGuiRotations} renders {@code display.gui} rotations beyond identity and the
      * mirror through the true orthographic projection instead of failing (see
      * {@link ElementModelRenderer} for the projection semantics).
      */
-    public Optional<PackItemVisual> resolveItemVisual(String itemRef, CustomModelData data,
+    public Optional<PackItemVisual> resolveItemVisual(String itemRef, ItemState state,
                                                       @Nullable ItemDamage damage, int pixelsPerGuiPx,
                                                       boolean fullGuiRotations) {
         ItemEntry entry = lookupItem(itemRef);
         if (entry == null) {
             return Optional.empty();
         }
-        ResolvedModels resolved = resolveModels(itemRef, entry, data, damage);
+        ResolvedModels resolved = resolveModels(itemRef, entry, state, damage);
         if (!resolved.elements()) {
             return Optional.of(new PackItemVisual.Sprite(
-                composeSpriteLayers(itemRef, resolved.models(), data, textureCache::get)));
+                composeSpriteLayers(itemRef, resolved.models(), state, textureCache::get)));
         }
         ElementModelRenderer.Raster raster = ElementModelRenderer.render(
-            buildModelInstances(itemRef, resolved, data), pixelsPerGuiPx, entry.oversizedInGui(), fullGuiRotations,
+            buildModelInstances(itemRef, resolved, state), pixelsPerGuiPx, entry.oversizedInGui(), fullGuiRotations,
             this::loadElementTexture, "item `" + itemRef + "` in pack `" + id + "`");
         return Optional.of(new PackItemVisual.ElementsRaster(
             raster.image(), raster.offsetX(), raster.offsetY(), entry.oversizedInGui()));
@@ -731,7 +732,7 @@ final class LoadedPack {
 
     /**
      * Resolves an item ref across its own animation timeline: the item's model dispatch and
-     * chains resolve exactly like {@link #resolveItemVisual(String, CustomModelData, ItemDamage,
+     * chains resolve exactly like {@link #resolveItemVisual(String, ItemState, ItemDamage,
      * int, boolean)}, every texture the resolved visual uses is probed for an animation mcmeta,
      * and each timeline step renders the same visual with each animated texture showing its
      * frame at that step. Detection covers every DECLARED element face - a never-visible
@@ -742,14 +743,14 @@ final class LoadedPack {
      * @throws PackResolveException when the item exists but cannot be rendered (the exact
      *                              failure modes of the static resolution)
      */
-    public Optional<PackAnimatedVisual> resolveItemVisualAnimation(String itemRef, CustomModelData data,
+    public Optional<PackAnimatedVisual> resolveItemVisualAnimation(String itemRef, ItemState state,
                                                                    @Nullable ItemDamage damage, int pixelsPerGuiPx,
                                                                    boolean fullGuiRotations) {
         ItemEntry entry = lookupItem(itemRef);
         if (entry == null) {
             return Optional.empty();
         }
-        ResolvedModels resolved = resolveModels(itemRef, entry, data, damage);
+        ResolvedModels resolved = resolveModels(itemRef, entry, state, damage);
         String context = "item `" + itemRef + "` in pack `" + id + "`";
         Map<String, PackAnimation> animated = collectAnimatedTextures(itemRef, resolved, context);
         if (animated.isEmpty()) {
@@ -759,7 +760,7 @@ final class LoadedPack {
             animated.values().stream().map(PackAnimation::frameTicks).toList());
         List<String> animatedPaths = List.copyOf(animated.keySet());
         List<ElementModelRenderer.ModelInstance> instances =
-            resolved.elements() ? buildModelInstances(itemRef, resolved, data) : null;
+            resolved.elements() ? buildModelInstances(itemRef, resolved, state) : null;
         List<PackItemVisual> steps = new ArrayList<>(timeline.steps().size());
         for (AnimationTimeline.Step step : timeline.steps()) {
             Map<String, BufferedImage> framesByPath = new HashMap<>();
@@ -771,7 +772,7 @@ final class LoadedPack {
                 path -> framesByPath.containsKey(path) ? framesByPath.get(path) : textureCache.get(path);
             if (!resolved.elements()) {
                 steps.add(new PackItemVisual.Sprite(
-                    composeSpriteLayers(itemRef, resolved.models(), data, lookup)));
+                    composeSpriteLayers(itemRef, resolved.models(), state, lookup)));
             } else {
                 ElementModelRenderer.Raster raster = ElementModelRenderer.render(
                     instances, pixelsPerGuiPx, entry.oversizedInGui(), fullGuiRotations,
@@ -837,9 +838,9 @@ final class LoadedPack {
                                   boolean elements) {
     }
 
-    private ResolvedModels resolveModels(String itemRef, ItemEntry entry, CustomModelData data,
+    private ResolvedModels resolveModels(String itemRef, ItemEntry entry, ItemState state,
                                          @Nullable ItemDamage damage) {
-        List<GuiModelResolver.GuiModel> models = resolveGuiModels(itemRef, entry, data, damage);
+        List<GuiModelResolver.GuiModel> models = resolveGuiModels(itemRef, entry, state.customModelData(), damage);
         List<ChainData> chains = new ArrayList<>(models.size());
         boolean anyElements = false;
         boolean allElements = !models.isEmpty();
@@ -860,16 +861,16 @@ final class LoadedPack {
         return new ResolvedModels(List.copyOf(models), List.copyOf(chains), anyElements);
     }
 
-    /** The renderer inputs of an elements-resolved item; tints evaluate against {@code data}. */
+    /** The renderer inputs of an elements-resolved item; tints evaluate against {@code state}. */
     private List<ElementModelRenderer.ModelInstance> buildModelInstances(String itemRef, ResolvedModels resolved,
-                                                                         CustomModelData data) {
+                                                                         ItemState state) {
         List<ElementModelRenderer.ModelInstance> instances = new ArrayList<>(resolved.models().size());
         for (int i = 0; i < resolved.models().size(); i++) {
             ChainData chain = resolved.chains().get(i);
             instances.add(new ElementModelRenderer.ModelInstance(
                 chain.elements(), chain.textures(),
                 chain.guiTransform() != null ? chain.guiTransform() : GuiTransform.IDENTITY,
-                evaluateElementTints(itemRef, resolved.models().get(i).tints(), data),
+                evaluateElementTints(itemRef, resolved.models().get(i).tints(), state),
                 chain.guiLight()));
         }
         return instances;
@@ -924,9 +925,9 @@ final class LoadedPack {
      * with the item and pack; see {@link #resolveGuiModels}.
      */
     private List<Integer> evaluateElementTints(String itemRef, List<ItemModelNode.TintSpec> tints,
-                                               CustomModelData data) {
+                                               ItemState state) {
         try {
-            return GuiModelResolver.evaluateTints(tints, data);
+            return GuiModelResolver.evaluateTints(tints, state);
         } catch (PackResolveException e) {
             throw withItemContext(itemRef, e);
         }
@@ -953,10 +954,10 @@ final class LoadedPack {
      * mutated (the first layer is copied, tints copy too), so shared frame instances are safe.
      */
     private BufferedImage composeSpriteLayers(String itemRef, List<GuiModelResolver.GuiModel> models,
-                                              CustomModelData data, Function<String, BufferedImage> textures) {
+                                              ItemState state, Function<String, BufferedImage> textures) {
         BufferedImage sprite = null;
         for (GuiModelResolver.GuiModel model : models) {
-            List<Integer> tints = GuiModelResolver.evaluateTintsLenient(model.tints(), data);
+            List<Integer> tints = GuiModelResolver.evaluateTintsLenient(model.tints(), state);
             List<String> layerPaths = resolveGeneratedLayerPaths(model.modelRef());
             for (int index = 0; index < layerPaths.size(); index++) {
                 BufferedImage layer = textures.apply(layerPaths.get(index));

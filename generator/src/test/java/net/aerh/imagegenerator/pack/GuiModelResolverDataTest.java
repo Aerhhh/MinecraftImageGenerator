@@ -228,35 +228,69 @@ class GuiModelResolverDataTest {
     @Test
     void constantTintEvaluates() {
         List<ItemModelNode.TintSpec> tints = List.of(new ItemModelNode.TintSpec.Constant(0xFF8000));
-        assertEquals(List.of(0xFF8000), GuiModelResolver.evaluateTints(tints, CustomModelData.EMPTY));
+        assertEquals(List.of(0xFF8000), GuiModelResolver.evaluateTints(tints, ItemState.EMPTY));
     }
 
     @Test
     void customModelDataTintReadsColorsList() {
         List<ItemModelNode.TintSpec> tints = List.of(new ItemModelNode.TintSpec.CustomModelDataTint(1, 0x111111));
-        assertEquals(List.of(0x00FF00), GuiModelResolver.evaluateTints(tints, colors(0xFF0000, 0x00FF00)));
+        assertEquals(List.of(0x00FF00), GuiModelResolver.evaluateTints(tints, ItemState.of(colors(0xFF0000, 0x00FF00))));
     }
 
     @Test
     void customModelDataTintMissingColorUsesDeclaredDefault() {
         List<ItemModelNode.TintSpec> tints = List.of(new ItemModelNode.TintSpec.CustomModelDataTint(5, 0x123456));
-        assertEquals(List.of(0x123456), GuiModelResolver.evaluateTints(tints, colors(0xFF0000)));
+        assertEquals(List.of(0x123456), GuiModelResolver.evaluateTints(tints, ItemState.of(colors(0xFF0000))));
     }
 
     @Test
     void dyeTintEvaluatesToItsDefault() {
-        // No per-item dye data exists in this library, so the required default always applies -
-        // on the strict AND the lenient path.
+        // An undyed item uses the required default, on the strict AND the lenient path.
         List<ItemModelNode.TintSpec> tints = List.of(new ItemModelNode.TintSpec.Dye(0x3366FF));
-        assertEquals(List.of(0x3366FF), GuiModelResolver.evaluateTints(tints, CustomModelData.EMPTY));
-        assertEquals(List.of(0x3366FF), GuiModelResolver.evaluateTintsLenient(tints, CustomModelData.EMPTY));
+        assertEquals(List.of(0x3366FF), GuiModelResolver.evaluateTints(tints, ItemState.EMPTY));
+        assertEquals(List.of(0x3366FF), GuiModelResolver.evaluateTintsLenient(tints, ItemState.EMPTY));
+    }
+
+    @Test
+    void dyeTintReadsTheDyedColor() {
+        List<ItemModelNode.TintSpec> tints = List.of(new ItemModelNode.TintSpec.Dye(0x3366FF));
+        ItemState dyed = new ItemState(CustomModelData.EMPTY, 0xB02E26);
+        assertEquals(List.of(0xB02E26), GuiModelResolver.evaluateTints(tints, dyed));
+        assertEquals(List.of(0xB02E26), GuiModelResolver.evaluateTintsLenient(tints, dyed));
+    }
+
+    @Test
+    void blackDyedColorOverridesTheDefault() {
+        // 0 is a real dyed color (black), not "no dye": it must not fall back to the default.
+        List<ItemModelNode.TintSpec> tints = List.of(new ItemModelNode.TintSpec.Dye(0x3366FF));
+        assertEquals(List.of(0x000000), GuiModelResolver.evaluateTints(tints, new ItemState(CustomModelData.EMPTY, 0)));
+    }
+
+    @Test
+    void dyedColorOnlyFeedsDyeSources() {
+        List<ItemModelNode.TintSpec> tints = List.of(
+            new ItemModelNode.TintSpec.Constant(0xFF8000),
+            new ItemModelNode.TintSpec.CustomModelDataTint(0, 0x123456),
+            new ItemModelNode.TintSpec.CustomModelDataTint(3, 0x654321),
+            new ItemModelNode.TintSpec.Dye(0x3366FF));
+        ItemState state = new ItemState(colors(0x00FF00), 0xB02E26);
+        assertEquals(List.of(0xFF8000, 0x00FF00, 0x654321, 0xB02E26), GuiModelResolver.evaluateTints(tints, state),
+            "constant and custom_model_data sources ignore the dye; the missing index keeps its default");
+    }
+
+    @Test
+    void everyDyeSourceInOneListReadsTheSameDyedColor() {
+        List<ItemModelNode.TintSpec> tints = List.of(
+            new ItemModelNode.TintSpec.Dye(0x111111), new ItemModelNode.TintSpec.Dye(0x222222));
+        assertEquals(List.of(0x8932B8, 0x8932B8),
+            GuiModelResolver.evaluateTints(tints, new ItemState(CustomModelData.EMPTY, 0x8932B8)));
     }
 
     @Test
     void unsupportedTintSourceThrowsOnStrictEvaluation() {
         List<ItemModelNode.TintSpec> tints = List.of(new ItemModelNode.TintSpec.Unsupported("team"));
         PackResolveException exception = assertThrows(PackResolveException.class,
-            () -> GuiModelResolver.evaluateTints(tints, CustomModelData.EMPTY));
+            () -> GuiModelResolver.evaluateTints(tints, ItemState.EMPTY));
         assertTrue(exception.getMessage().contains("team"));
     }
 
@@ -268,7 +302,7 @@ class GuiModelResolverDataTest {
             new ItemModelNode.TintSpec.Unsupported("team"),
             new ItemModelNode.TintSpec.Constant(0xFF8000));
         assertEquals(List.of(0xFFFFFF, 0xFF8000),
-            GuiModelResolver.evaluateTintsLenient(tints, CustomModelData.EMPTY),
+            GuiModelResolver.evaluateTintsLenient(tints, ItemState.EMPTY),
             "unsupported entries turn white; supported entries in the same list still evaluate");
     }
 

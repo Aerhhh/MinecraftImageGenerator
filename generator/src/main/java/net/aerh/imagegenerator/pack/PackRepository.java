@@ -229,7 +229,7 @@ public final class PackRepository {
     /**
      * Resolves an item ref against a registered pack - the classic flat layer0 sprite path.
      * Items with elements-based models resolve through
-     * {@link #resolveItemVisual(PackId, String, CustomModelData, int)} instead.
+     * {@link #resolveItemVisual(PackId, String, ItemState, int)} instead.
      *
      * @return empty when the pack does not contain the item (callers fall back to vanilla)
      * @throws PackResolveException when the pack is not registered, or the item exists but is broken
@@ -240,7 +240,7 @@ public final class PackRepository {
 
     /**
      * Resolves an item ref against a registered pack to its GUI visual, evaluating
-     * {@code custom_model_data} dispatch nodes and tint sources against {@code data}. Flat
+     * {@code custom_model_data} dispatch nodes and tint sources against {@code state}. Flat
      * layer0 models return a {@link PackItemVisual.Sprite} at native texture resolution
      * (identical to {@link #resolve(PackId, String)}); elements models rasterize through the
      * GUI projection directly at {@code pixelsPerGuiPx} canvas px per GUI px and return a
@@ -254,12 +254,12 @@ public final class PackRepository {
      *                              the mirror without the full-rotation opt-in)
      */
     public Optional<PackItemVisual> resolveItemVisual(PackId packId, String itemRef,
-                                                      CustomModelData data, int pixelsPerGuiPx) {
-        return resolveItemVisual(packId, itemRef, data, null, pixelsPerGuiPx, false);
+                                                      ItemState state, int pixelsPerGuiPx) {
+        return resolveItemVisual(packId, itemRef, state, null, pixelsPerGuiPx, false);
     }
 
     /**
-     * Like {@link #resolveItemVisual(PackId, String, CustomModelData, int)} with two extra
+     * Like {@link #resolveItemVisual(PackId, String, ItemState, int)} with two extra
      * evaluation inputs:
      *
      * <ul>
@@ -278,16 +278,16 @@ public final class PackRepository {
      *                              cannot be rendered
      */
     public Optional<PackItemVisual> resolveItemVisual(PackId packId, String itemRef,
-                                                      CustomModelData data, @Nullable ItemDamage damage,
+                                                      ItemState state, @Nullable ItemDamage damage,
                                                       int pixelsPerGuiPx, boolean fullGuiRotations) {
-        Objects.requireNonNull(data, "data");
+        Objects.requireNonNull(state, "state");
         return requireRegistered(packId)
-            .resolveItemVisual(itemRef, data, damage, pixelsPerGuiPx, fullGuiRotations);
+            .resolveItemVisual(itemRef, state, damage, pixelsPerGuiPx, fullGuiRotations);
     }
 
     /**
      * Resolves an item ref across its own animation timeline: the visual resolves exactly like
-     * {@link #resolveItemVisual(PackId, String, CustomModelData, ItemDamage, int, boolean)},
+     * {@link #resolveItemVisual(PackId, String, ItemState, ItemDamage, int, boolean)},
      * and when at least one texture it uses carries an animation mcmeta the result is one
      * visual per timeline step with per-step tick durations (the least common multiple of the
      * animated texture cycles, capped per {@link AnimationTimeline}).
@@ -298,11 +298,11 @@ public final class PackRepository {
      *                              cannot be rendered
      */
     public Optional<PackAnimatedVisual> resolveItemVisualAnimation(PackId packId, String itemRef,
-                                                                   CustomModelData data, @Nullable ItemDamage damage,
+                                                                   ItemState state, @Nullable ItemDamage damage,
                                                                    int pixelsPerGuiPx, boolean fullGuiRotations) {
-        Objects.requireNonNull(data, "data");
+        Objects.requireNonNull(state, "state");
         return requireRegistered(packId)
-            .resolveItemVisualAnimation(itemRef, data, damage, pixelsPerGuiPx, fullGuiRotations);
+            .resolveItemVisualAnimation(itemRef, state, damage, pixelsPerGuiPx, fullGuiRotations);
     }
 
     /**
