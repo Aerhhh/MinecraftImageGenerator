@@ -493,8 +493,7 @@ class ElementModelRenderer {
 
         for (ModelElement element : model.elements()) {
             ModelElement.Rotation elementRotation = element.hasActiveRotation() ? element.rotation() : null;
-            double[][] elementMatrix = elementRotation == null ? null
-                : rotationMatrixAboutAxis(elementRotation.axis(), elementRotation.angle());
+            double[][] elementMatrix = elementRotation == null ? null : elementRotationMatrix(elementRotation);
             for (ModelElement.Direction direction : ModelElement.Direction.values()) {
                 ModelElement.Face face = element.faces().get(direction);
                 if (face == null) {
@@ -575,10 +574,24 @@ class ElementModelRenderer {
     }
 
     /**
+     * The element rotation's matrix. A single-axis rotation goes through
+     * {@link #rotationMatrixAboutAxis}, which keeps quarter turns exact; several axes compose in
+     * vanilla's X, Y, Z order, the same convention as display rotations.
+     */
+    private static double[][] elementRotationMatrix(ModelElement.Rotation rotation) {
+        ModelElement.Axis singleAxis = rotation.singleAxis();
+        if (singleAxis != null) {
+            return rotationMatrixAboutAxis(singleAxis, rotation.angleAbout(singleAxis));
+        }
+        return rotationMatrixXyz(rotation.x(), rotation.y(), rotation.z());
+    }
+
+    /**
      * Applies the element rotation to a model-space point: rotate the offset from the rotation
      * origin, then scale the two perpendicular axes by 1/cos(angle) when {@code rescale} is set
-     * (the scale is uniform in the plane perpendicular to the axis, so applying it after the
-     * rotation matches vanilla's {@code FaceBakery} exactly).
+     * on a single-axis rotation (the scale is uniform in the plane perpendicular to the axis,
+     * so applying it after the rotation matches vanilla's {@code FaceBakery} exactly).
+     * Rotations about several axes are never rescaled.
      */
     private static double[] applyElementRotation(double[] point, ModelElement.Rotation rotation,
                                                  double[][] matrix) {
@@ -588,9 +601,10 @@ class ElementModelRenderer {
         double rx = matrix[0][0] * x + matrix[0][1] * y + matrix[0][2] * z;
         double ry = matrix[1][0] * x + matrix[1][1] * y + matrix[1][2] * z;
         double rz = matrix[2][0] * x + matrix[2][1] * y + matrix[2][2] * z;
-        if (rotation.rescale()) {
-            double factor = 1.0 / Math.cos(Math.toRadians(rotation.angle()));
-            switch (rotation.axis()) {
+        ModelElement.Axis singleAxis = rotation.singleAxis();
+        if (rotation.rescale() && singleAxis != null) {
+            double factor = 1.0 / Math.cos(Math.toRadians(rotation.angleAbout(singleAxis)));
+            switch (singleAxis) {
                 case X -> {
                     ry *= factor;
                     rz *= factor;
