@@ -5,5 +5,6 @@ before_install:
   - sdk default java 25.0.1-tem
 install:
   # JitPack keeps $HOME between builds and has served a half-installed Maven from
-  # ~/.m2/wrapper, so the wrapper downloads Maven into the checkout every build.
-  - bash -c 'source "$HOME/.sdkman/bin/sdkman-init.sh" && export JAVA_HOME="$HOME/.sdkman/candidates/java/current" MAVEN_USER_HOME="$PWD/.jitpack-maven" MVNW_VERBOSE=true && ./mvnw -B clean install -DskipTests'
+  # ~/.m2/wrapper, so the wrapper downloads Maven into a fresh temp dir every build.
+  # It stays outside the checkout so the editorconfig check doesn't lint Maven's own files.
+  - bash -c 'source "$HOME/.sdkman/bin/sdkman-init.sh" && export JAVA_HOME="$HOME/.sdkman/candidates/java/current" MAVEN_USER_HOME="$(mktemp -d)" MVNW_VERBOSE=true && ./mvnw -B clean install -DskipTests'
