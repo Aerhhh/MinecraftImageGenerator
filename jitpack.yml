@@ -4,7 +4,7 @@ before_install:
   - sdk install java 25.0.1-tem
   - sdk default java 25.0.1-tem
 install:
-  # JitPack keeps $HOME between builds and has served a half-installed Maven from
-  # ~/.m2/wrapper, so the wrapper downloads Maven into a fresh temp dir every build.
-  # It stays outside the checkout so the editorconfig check doesn't lint Maven's own files.
-  - bash -c 'source "$HOME/.sdkman/bin/sdkman-init.sh" && export JAVA_HOME="$HOME/.sdkman/candidates/java/current" MAVEN_USER_HOME="$(mktemp -d)" MVNW_VERBOSE=true && ./mvnw -B clean install -DskipTests'
+  # Maven installed under ~/.m2 or /tmp has failed to start on JitPack ("could not find
+  # Launcher"), while a copy inside the checkout starts reliably. pom.xml excludes this
+  # dir from the editorconfig check.
+  - bash -c 'source "$HOME/.sdkman/bin/sdkman-init.sh" && export JAVA_HOME="$HOME/.sdkman/candidates/java/current" MAVEN_USER_HOME="$PWD/.jitpack-maven" MVNW_VERBOSE=true && ./mvnw -B clean install -DskipTests'

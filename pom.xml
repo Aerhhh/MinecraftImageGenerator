@@ -110,6 +110,12 @@
                 <groupId>org.ec4j.maven</groupId>
                 <artifactId>editorconfig-maven-plugin</artifactId>
                 <version>0.2.0</version>
+                <configuration>
+                    <excludes>
+                        <!-- Maven distribution the wrapper downloads during JitPack builds -->
+                        <exclude>.jitpack-maven/**</exclude>
+                    </excludes>
+                </configuration>
                 <executions>
                     <execution>
                         <id>check</id>
