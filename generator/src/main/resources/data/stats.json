@@ -450,6 +450,14 @@
         "color": "DARK_AQUA",
         "subColor": null,
         "parseType": "NORMAL"
+    },    {
+        "icon": "☯",
+        "name": "global_wisdom",
+        "stat": "Global Wisdom",
+        "display": "☯ Global Wisdom",
+        "color": "DARK_AQUA",
+        "subColor": null,
+        "parseType": "NORMAL"
     },
     {
         "icon": "ф",
