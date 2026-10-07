@@ -118,7 +118,11 @@ public class MinecraftTooltipGenerator implements Generator {
     public MinecraftTooltip parseLore(String input, TooltipSettings settings) {
         log.debug("Parsing lore for item: {} with TooltipSettings: {}", name, settings);
 
-        ParseContext parseContext = ParseContext.of(packId);
+        // Resolve placeholders through the registered pack's lineage, so a pack registered as a
+        // variant of another picks up that pack's overrides too.
+        ParseContext parseContext = PackId.isActive(packId)
+            ? ParseContext.of(repository().lineageOf(packId))
+            : ParseContext.empty();
 
         MinecraftTooltip.Builder builder = MinecraftTooltip.builder()
             .withPadding(settings.getPadding())

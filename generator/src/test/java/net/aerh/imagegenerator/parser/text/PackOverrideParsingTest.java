@@ -1,6 +1,7 @@
 package net.aerh.imagegenerator.parser.text;
 
 import net.aerh.imagegenerator.pack.PackId;
+import net.aerh.imagegenerator.pack.PackLineage;
 import net.aerh.imagegenerator.parser.ParseContext;
 import net.aerh.imagegenerator.text.wrapper.TextWrapper;
 import org.junit.jupiter.api.Test;
@@ -16,6 +17,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class PackOverrideParsingTest {
 
     private static final ParseContext HYPIXEL = ParseContext.of(PackId.parse("hypixel:skyblock"));
+    private static final ParseContext ALPHA_VARIANT = ParseContext.of(
+        new PackLineage(PackId.parse("hypixel:alpha"), PackId.parse("hypixel:skyblock")));
+    private static final ParseContext ALPHA_STANDALONE = ParseContext.of(PackId.parse("hypixel:alpha"));
 
     @Test
     void iconParserUsesOverrideForActivePack() {
@@ -91,8 +95,43 @@ class PackOverrideParsingTest {
 
     @Test
     void vanillaPackNormalizesToNoOverrides() {
-        assertNull(ParseContext.of(PackId.VANILLA).packId());
+        assertNull(ParseContext.of(PackId.VANILLA).pack());
         assertEquals("\u23E3", new IconParser().parse("%%zone%%", ParseContext.of(PackId.VANILLA)));
+    }
+
+    @Test
+    void vanillaOrMissingLineageNormalizesToNoOverrides() {
+        assertNull(ParseContext.of(PackLineage.of(PackId.VANILLA)).pack());
+        assertNull(ParseContext.of((PackLineage) null).pack());
+        assertNull(ParseContext.of((PackId) null).pack());
+    }
+
+    @Test
+    void packIdContextHasNoVariant() {
+        assertEquals(PackLineage.of(PackId.parse("hypixel:skyblock")), HYPIXEL.pack());
+    }
+
+    @Test
+    void variantContextUsesTheBasePacksOverrides() {
+        assertEquals("\uE067", new IconParser().parse("%%zone%%", ALPHA_VARIANT));
+        assertEquals("\u23E3", new IconParser().parse("%%zone%%", ALPHA_STANDALONE));
+
+        String strength = new StatParser().parse("%%strength%%", ALPHA_VARIANT);
+        assertTrue(strength.contains("\uE00D Strength"), strength);
+
+        assertEquals("&9[&c\uE010&9]&r", new GemstoneParser().parse("%%gem_ruby:fine%%", ALPHA_VARIANT));
+        String flavor = new FlavorParser().parse("%%undead_item%%", ALPHA_VARIANT);
+        assertTrue(flavor.contains("This armor piece is undead \uE084!"), flavor);
+    }
+
+    @Test
+    void variantContextRendersTheReportedLoreLikeTheBasePack() {
+        // The lore from the bug report: the zone icon before "Mining Zones" fell back to the
+        // vanilla glyph on the alpha pack.
+        String lore = "While in %%zone%% &6Mining Zones&7, detects anomalies";
+        IconParser parser = new IconParser();
+        assertEquals(parser.parse(lore, HYPIXEL), parser.parse(lore, ALPHA_VARIANT));
+        assertTrue(parser.parse(lore, ALPHA_VARIANT).contains("\uE067"));
     }
 
     @Test

@@ -165,6 +165,29 @@ class LoadedPackTest {
     }
 
     @Test
+    void emissiveAlphaNormalizedForAVariantOfTheHypixelSkyblockPack() {
+        LoadedPack alphaPack = new LoadedPack(new PackLineage(PackId.parse("hypixel:alpha"), PackId.parse("hypixel:skyblock")),
+            PackSource.directory(packDir, PackLimits.fromSystemProperties()),
+            PackLimits.fromSystemProperties());
+        BufferedImage sprite = alphaPack.resolveSprite("testpack:item/emissive").orElseThrow();
+        assertEquals(0xFFFFAA00, sprite.getRGB(0, 0), "a variant inherits the Hypixel emissive convention");
+    }
+
+    @Test
+    void emissiveAlphaPreservedForAVariantOfAnUnrelatedPack() {
+        LoadedPack variant = new LoadedPack(new PackLineage(PackId.parse("hypixel:alpha"), PackId.parse("other:pack")),
+            PackSource.directory(packDir, PackLimits.fromSystemProperties()),
+            PackLimits.fromSystemProperties());
+        BufferedImage sprite = variant.resolveSprite("testpack:item/emissive").orElseThrow();
+        assertEquals((252 << 24) | 0xFFAA00, sprite.getRGB(0, 0));
+    }
+
+    @Test
+    void lineageDefaultsToTheOwnIdWithoutAVariant() {
+        assertEquals(PackLineage.of(pack.id()), pack.lineage());
+    }
+
+    @Test
     void unknownItemResolvesEmpty() {
         assertEquals(Optional.empty(), pack.resolveSprite("testpack:item/nope"));
     }

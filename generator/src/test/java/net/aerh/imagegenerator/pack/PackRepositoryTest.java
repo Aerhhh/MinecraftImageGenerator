@@ -355,6 +355,112 @@ class PackRepositoryTest {
         }
     }
 
+    @Test
+    void preparedVariantPackKeepsItsLineageWhenRegistered() {
+        PackId id = repository.register(PackRepository.prepare("hypixel:alpha", "hypixel:skyblock", fixtureSource(),
+            PackLimits.fromSystemProperties()));
+
+        assertEquals(new PackLineage(id, PackId.parse("hypixel:skyblock")), repository.lineageOf(id));
+    }
+
+    @Test
+    void variantOfIsNotRequiredToBeRegistered() {
+        PackId id = repository.register(PackRepository.prepare("hypixel:alpha", "hypixel:skyblock", fixtureSource(),
+            PackLimits.fromSystemProperties()));
+
+        assertEquals(Set.of(id), repository.registeredPacks(), "only the variant itself is registered");
+        assertTrue(repository.resolve(id, "testpack:item/simple").isPresent());
+    }
+
+    @Test
+    void nullVariantOfMeansNoVariant() {
+        PackId plain = repository.register(PackRepository.prepare("test:plain", null, fixtureSource(),
+            PackLimits.fromSystemProperties()));
+
+        assertEquals(PackLineage.of(plain), repository.lineageOf(plain));
+    }
+
+    @Test
+    void blankVariantOfFailsAndClosesTheSource() {
+        // Like the pack id itself, the repository takes variantOf strictly; config normalisation
+        // (trim, lowercase, blank means none) belongs to the caller.
+        AtomicInteger closeCount = new AtomicInteger();
+        PackSource source = new CountingCloseSource(fixtureSource(), closeCount);
+
+        assertThrows(IllegalArgumentException.class,
+            () -> PackRepository.prepare("hypixel:alpha", "  ", source, PackLimits.fromSystemProperties()));
+        assertEquals(1, closeCount.get());
+    }
+
+    @Test
+    void registerWithoutVariantHasAPlainLineage() {
+        PackId id = repository.register("test:pack", fixtureSource());
+
+        assertEquals(PackLineage.of(id), repository.lineageOf(id));
+    }
+
+    @Test
+    void lineageOfAnUnregisteredPackIsItsOwnIdOnly() {
+        PackId unregistered = PackId.parse("not:registered");
+
+        assertEquals(PackLineage.of(unregistered), repository.lineageOf(unregistered));
+    }
+
+    @Test
+    void malformedVariantOfFailsAndClosesTheSource() {
+        AtomicInteger closeCount = new AtomicInteger();
+        PackSource source = new CountingCloseSource(fixtureSource(), closeCount);
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+            () -> PackRepository.prepare("hypixel:alpha", "no-colon", source, PackLimits.fromSystemProperties()));
+
+        assertTrue(exception.getMessage().contains("no-colon"), exception.getMessage());
+        assertEquals(1, closeCount.get());
+    }
+
+    @Test
+    void selfVariantOfFailsAndClosesTheSource() {
+        AtomicInteger closeCount = new AtomicInteger();
+        PackSource source = new CountingCloseSource(fixtureSource(), closeCount);
+
+        assertThrows(IllegalArgumentException.class,
+            () -> PackRepository.prepare("hypixel:alpha", "hypixel:alpha", source, PackLimits.fromSystemProperties()));
+        assertEquals(1, closeCount.get());
+    }
+
+    @Test
+    void vanillaVariantOfFailsAndClosesTheSource() {
+        AtomicInteger closeCount = new AtomicInteger();
+        PackSource source = new CountingCloseSource(fixtureSource(), closeCount);
+
+        assertThrows(IllegalArgumentException.class,
+            () -> PackRepository.prepare("hypixel:alpha", "minecraft:minecraft", source, PackLimits.fromSystemProperties()));
+        assertEquals(1, closeCount.get());
+    }
+
+    @Test
+    void replacingAPackSwapsItsLineage() {
+        PackRepository immediate = new PackRepository(PackReleaseScheduler.immediate());
+        PackId id = immediate.register(PackRepository.prepare("hypixel:alpha", null, fixtureSource(),
+            PackLimits.fromSystemProperties()));
+        assertEquals(PackLineage.of(id), immediate.lineageOf(id));
+
+        immediate.replace(PackRepository.prepare("hypixel:alpha", "hypixel:skyblock", fixtureSource(),
+            PackLimits.fromSystemProperties()));
+
+        assertEquals(new PackLineage(id, PackId.parse("hypixel:skyblock")), immediate.lineageOf(id));
+    }
+
+    @Test
+    void preparedPackExposesItsLineage() {
+        try (PreparedPack prepared = PackRepository.prepare("hypixel:alpha", "hypixel:skyblock", fixtureSource(),
+            PackLimits.fromSystemProperties())) {
+            assertEquals(new PackLineage(PackId.parse("hypixel:alpha"), PackId.parse("hypixel:skyblock")), prepared.lineage());
+            assertEquals(prepared.lineage(), prepared.previewRepository().lineageOf(prepared.id()),
+                "a preview resolves the same lineage the published pack will have");
+        }
+    }
+
     /** Delegating PackSource that counts close() calls, for asserting failed-registration cleanup. */
     private static final class CountingCloseSource implements PackSource {
 

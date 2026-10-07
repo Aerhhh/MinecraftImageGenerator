@@ -5,6 +5,7 @@ import net.aerh.imagegenerator.data.Rarity;
 import net.aerh.imagegenerator.exception.GeneratorException;
 import net.aerh.imagegenerator.pack.PackId;
 import net.aerh.imagegenerator.pack.PackLimits;
+import net.aerh.imagegenerator.pack.PackLineage;
 import net.aerh.imagegenerator.pack.PackRepository;
 import net.aerh.imagegenerator.pack.PackSource;
 import net.aerh.imagegenerator.pack.PreparedPack;
@@ -285,8 +286,9 @@ public class ResourcePackService {
     /**
      * Loads a pack file, validates it against {@code expectations} and, only if it passes,
      * swaps it in under the definition's id (or registers it if the id is not live yet). The
-     * definition's theme is applied to the new pack, so tooltip styles and color remaps carry over.
-     * A rejected pack never touches the live one.
+     * definition's theme and variantOf are applied to the new pack, so tooltip styles, color
+     * remaps and inherited placeholder overrides carry over. A rejected pack never touches the
+     * live one.
      *
      * <p>Callers must not run reloads or registrations concurrently for the same pack id. Index
      * publication (item refs, theme, default adoption) is serialised, so concurrent work on
@@ -295,7 +297,7 @@ public class ResourcePackService {
      * @return {@link PackReloadResult.Applied} when the new pack is live,
      *     {@link PackReloadResult.Rejected} with a reason when the pack failed to load or
      *     validate, or {@link PackReloadResult.NotAttempted} with a reason when the definition's
-     *     own configuration (its theme) is invalid, so the pack was never tried
+     *     own configuration (its theme or variantOf) is invalid, so the pack was never tried
      * @throws IllegalArgumentException when the definition's id is not a valid pack id, or when
      *     the pack's registration changes between the registered check and the swap (a concurrent
      *     register or unregister). A concurrent unregister can also surface as a
@@ -311,9 +313,16 @@ public class ResourcePackService {
             return new PackReloadResult.NotAttempted("the pack's theme configuration is invalid: " + exception.getMessage());
         }
 
+        String variantOf;
+        try {
+            variantOf = parseVariantOf(definition, packId);
+        } catch (IllegalArgumentException exception) {
+            return new PackReloadResult.NotAttempted(exception.getMessage());
+        }
+
         LoadedCandidate candidate;
         try {
-            candidate = loadCandidate(packId, zip, PackLimits.fromSystemProperties());
+            candidate = loadCandidate(packId, variantOf, zip, PackLimits.fromSystemProperties());
         } catch (RuntimeException exception) {
             return new PackReloadResult.Rejected("the pack failed to load: " + describe(exception));
         }
@@ -350,10 +359,10 @@ public class ResourcePackService {
      * Opens a pack file, indexes its item refs while this service still owns the source, then
      * loads it into a {@link PreparedPack}. On failure nothing is left open.
      */
-    private LoadedCandidate loadCandidate(PackId packId, Path path, PackLimits limits) {
+    private LoadedCandidate loadCandidate(PackId packId, @Nullable String variantOf, Path path, PackLimits limits) {
         PackSource source = Files.isDirectory(path) ? PackSource.directory(path, limits) : PackSource.zip(path, limits);
         List<String> itemRefs = indexItemRefs(packId, source);
-        return new LoadedCandidate(PackRepository.prepare(packId.toString(), source, limits), itemRefs);
+        return new LoadedCandidate(PackRepository.prepare(packId.toString(), variantOf, source, limits), itemRefs);
     }
 
     /** Makes a newly live pack's item refs and theme visible to queries and autocomplete. */
@@ -412,8 +421,18 @@ public class ResourcePackService {
             return;
         }
 
+        // Same reasoning for variantOf: registering without it would silently drop the pack's
+        // placeholder overrides.
+        String variantOf;
+        try {
+            variantOf = parseVariantOf(definition, packId);
+        } catch (IllegalArgumentException exception) {
+            log.error("Skipping resource pack '{}' because {}", packId, exception.getMessage());
+            return;
+        }
+
         PackLimits limits = PackLimits.fromSystemProperties();
-        LoadedCandidate candidate = loadCandidate(packId, path, limits);
+        LoadedCandidate candidate = loadCandidate(packId, variantOf, path, limits);
 
         try {
             packRepository.register(candidate.prepared());
@@ -427,6 +446,33 @@ public class ResourcePackService {
 
         log.info("Registered resource pack '{}' from '{}' with {} item definitions and {} tooltip styles",
             packId, path.toAbsolutePath(), itemRefs.size(), packRepository.tooltipStyles(packId).size());
+        if (variantOf != null) {
+            log.info("Resource pack '{}' is a variant of '{}' and uses its placeholder overrides", packId, variantOf);
+        }
+    }
+
+    /**
+     * Normalises and validates a definition's {@code variantOf}: trimmed and lowercased like pack
+     * ids, with null or blank meaning none.
+     *
+     * @return the normalised id, or null when the pack is not a variant
+     * @throws IllegalArgumentException when the value is not a valid pack id, is the vanilla pack
+     *                                  or is the pack's own id
+     */
+    @Nullable
+    private static String parseVariantOf(PackDefinition definition, PackId packId) {
+        String configured = definition.variantOf();
+        if (configured == null || configured.isBlank()) {
+            return null;
+        }
+
+        String normalised = configured.trim().toLowerCase(Locale.ROOT);
+        try {
+            new PackLineage(packId, PackId.parse(normalised));
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalArgumentException("its variantOf '" + configured + "' is invalid: " + exception.getMessage(), exception);
+        }
+        return normalised;
     }
 
     /**

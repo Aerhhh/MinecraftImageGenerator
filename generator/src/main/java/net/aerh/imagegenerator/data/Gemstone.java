@@ -6,7 +6,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import net.aerh.imagegenerator.pack.PackId;
+import net.aerh.imagegenerator.pack.PackLineage;
 import net.hypixel.nerdbot.marmalade.json.serializer.ColorDeserializer;
 import net.hypixel.nerdbot.marmalade.registry.DataRegistry;
 import org.jetbrains.annotations.Nullable;
@@ -73,15 +73,16 @@ public class Gemstone {
     private Map<String, String> packOverrides;
 
     /**
-     * Resolves the icon character for the given pack: the exact-pack-ID override when one exists,
-     * otherwise the base {@link #icon}.
+     * Resolves the icon character for the given pack: the override found through the pack's
+     * lineage (its own id, then the pack it is a variant of) when one exists, otherwise the base
+     * {@link #icon}.
      *
-     * @param packId the active pack, or {@code null} for none
+     * @param pack the active pack's lineage, or {@code null} for none
      *
      * @return the icon character to render
      */
-    public String getIcon(@Nullable PackId packId) {
-        String override = resolveOverride(packId);
+    public String getIcon(@Nullable PackLineage pack) {
+        String override = resolveOverride(pack);
         return override != null ? override : icon;
     }
 
@@ -90,12 +91,12 @@ public class Gemstone {
      * active it is derived by swapping the base icon character inside {@link #formattedIcon} so
      * the hand-tuned color codes are preserved.
      *
-     * @param packId the active pack, or {@code null} for none
+     * @param pack the active pack's lineage, or {@code null} for none
      *
      * @return the formatted icon to render
      */
-    public String getFormattedIcon(@Nullable PackId packId) {
-        String override = resolveOverride(packId);
+    public String getFormattedIcon(@Nullable PackLineage pack) {
+        String override = resolveOverride(pack);
         if (override == null || formattedIcon == null || icon == null || icon.isEmpty()) {
             return formattedIcon;
         }
@@ -103,11 +104,8 @@ public class Gemstone {
     }
 
     @Nullable
-    private String resolveOverride(@Nullable PackId packId) {
-        if (packId != null && packOverrides != null) {
-            return packOverrides.get(packId.toString());
-        }
-        return null;
+    private String resolveOverride(@Nullable PackLineage pack) {
+        return pack == null ? null : pack.findOverride(packOverrides);
     }
 
     public static Gemstone byName(String name) {

@@ -6,7 +6,7 @@ import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import lib.minecraft.text.ChatColor;
-import net.aerh.imagegenerator.pack.PackId;
+import net.aerh.imagegenerator.pack.PackLineage;
 import net.hypixel.nerdbot.marmalade.registry.DataRegistry;
 import org.jetbrains.annotations.Nullable;
 
@@ -68,16 +68,17 @@ public class Flavor implements FormattableEntry {
     private Map<String, String> packOverrides;
 
     /**
-     * Resolves the icon character for the given pack: the exact-pack-ID override when one exists,
-     * otherwise the base {@link #icon}.
+     * Resolves the icon character for the given pack: the override found through the pack's
+     * lineage (its own id, then the pack it is a variant of) when one exists, otherwise the base
+     * {@link #icon}.
      *
-     * @param packId the active pack, or {@code null} for none
+     * @param pack the active pack's lineage, or {@code null} for none
      *
      * @return the icon character to render
      */
     @Override
-    public String getIcon(@Nullable PackId packId) {
-        String override = resolveOverride(packId);
+    public String getIcon(@Nullable PackLineage pack) {
+        String override = resolveOverride(pack);
         return override != null ? override : icon;
     }
 
@@ -86,34 +87,31 @@ public class Flavor implements FormattableEntry {
      * occurrence of the base icon character is swapped, covering entries whose text embeds the
      * icon beyond the leading position (e.g. "X This armor piece is undead X!").
      *
-     * @param packId the active pack, or {@code null} for none
+     * @param pack the active pack's lineage, or {@code null} for none
      *
      * @return the display text
      */
     @Override
-    public String getDisplay(@Nullable PackId packId) {
-        return swapIcon(display, resolveOverride(packId));
+    public String getDisplay(@Nullable PackLineage pack) {
+        return swapIcon(display, resolveOverride(pack));
     }
 
     /**
      * Resolves the stat text for the given pack, swapping embedded base icon characters the same
-     * way as {@link #getDisplay(PackId)}.
+     * way as {@link #getDisplay(PackLineage)}.
      *
-     * @param packId the active pack, or {@code null} for none
+     * @param pack the active pack's lineage, or {@code null} for none
      *
      * @return the stat text
      */
     @Override
-    public String getStat(@Nullable PackId packId) {
-        return swapIcon(stat, resolveOverride(packId));
+    public String getStat(@Nullable PackLineage pack) {
+        return swapIcon(stat, resolveOverride(pack));
     }
 
     @Nullable
-    private String resolveOverride(@Nullable PackId packId) {
-        if (packId != null && packOverrides != null) {
-            return packOverrides.get(packId.toString());
-        }
-        return null;
+    private String resolveOverride(@Nullable PackLineage pack) {
+        return pack == null ? null : pack.findOverride(packOverrides);
     }
 
     private String swapIcon(String text, @Nullable String override) {

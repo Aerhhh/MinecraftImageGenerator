@@ -22,6 +22,22 @@ class PackDefinitionTest {
         assertEquals("/app/packs/hypixel-skyblock.zip", definition.path());
         assertTrue(definition.tooltipStyles().isEmpty());
         assertTrue(definition.textColorRemap().isEmpty());
+        assertNull(definition.variantOf());
+    }
+
+    @Test
+    void themeOnlyConstructorHasNoVariant() {
+        PackDefinition definition = new PackDefinition("a:b", "p", Map.of(), Map.of());
+
+        assertNull(definition.variantOf());
+    }
+
+    @Test
+    void variantOfIsKeptAsConfigured() {
+        // Normalisation (trim, lowercase, blank means none) happens when the service registers the pack.
+        PackDefinition definition = new PackDefinition("hypixel:alpha", "p", Map.of(), Map.of(), " Hypixel:SkyBlock ");
+
+        assertEquals(" Hypixel:SkyBlock ", definition.variantOf());
     }
 
     @Test

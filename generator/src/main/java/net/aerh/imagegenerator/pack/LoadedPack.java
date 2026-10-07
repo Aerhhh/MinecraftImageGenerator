@@ -86,7 +86,8 @@ final class LoadedPack {
      * Pack ids whose textures use alpha 252 as an "opaque full-bright" emissive marker (a
      * Hypixel SkyBlock shader convention). Only these packs get the alpha normalized to fully
      * opaque at decode time; other packs may ship legitimate alpha-252 pixels that must be
-     * preserved. Add a pack id here if another pack is confirmed to use the same convention.
+     * preserved. Add a pack id here if another pack is confirmed to use the same convention; a
+     * pack registered as a {@link PackLineage#variantOf() variant} of a listed pack inherits it.
      */
     private static final Set<String> EMISSIVE_ALPHA_PACK_IDS = Set.of("hypixel:skyblock");
 
@@ -98,6 +99,7 @@ final class LoadedPack {
         private String framePath;
     }
 
+    private final PackLineage lineage;
     private final PackId id;
     private final PackSource source;
     private final PackLimits limits;
@@ -162,10 +164,15 @@ final class LoadedPack {
     };
 
     LoadedPack(PackId id, PackSource source, PackLimits limits) {
-        this.id = id;
+        this(PackLineage.of(id), source, limits);
+    }
+
+    LoadedPack(PackLineage lineage, PackSource source, PackLimits limits) {
+        this.lineage = lineage;
+        this.id = lineage.id();
         this.source = source;
         this.limits = limits;
-        this.normalizeEmissiveAlpha = EMISSIVE_ALPHA_PACK_IDS.contains(id.toString());
+        this.normalizeEmissiveAlpha = lineage.isAnyOf(EMISSIVE_ALPHA_PACK_IDS);
         this.movementTintRule = MovementShaderDetector.detect(source).orElse(null);
         this.textureCache = Caffeine.newBuilder()
             .maximumWeight(limits.textureCacheMaxBytes())
@@ -190,6 +197,11 @@ final class LoadedPack {
 
     public PackId id() {
         return id;
+    }
+
+    /** The pack's own id plus the pack it is a variant of, if any. */
+    public PackLineage lineage() {
+        return lineage;
     }
 
     /**

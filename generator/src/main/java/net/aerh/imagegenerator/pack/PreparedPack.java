@@ -33,6 +33,11 @@ public final class PreparedPack implements AutoCloseable {
         return pack.id();
     }
 
+    /** The pack's own id plus the pack it is a variant of, if any. */
+    public PackLineage lineage() {
+        return pack.lineage();
+    }
+
     public Set<String> assetNamespaces() {
         return pack.assetNamespaces();
     }

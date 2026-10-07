@@ -117,11 +117,27 @@ public final class PackRepository {
      * @throws IllegalArgumentException on a malformed or reserved vanilla id
      */
     public static PreparedPack prepare(String packId, PackSource source, PackLimits limits) {
+        return prepare(packId, null, source, limits);
+    }
+
+    /**
+     * Like {@link #prepare(String, PackSource, PackLimits)}, for a pack that is a variant of
+     * another: pack-specific data keyed by {@code variantOf} (placeholder {@code packOverrides},
+     * the emissive alpha convention) also applies to this pack, after anything keyed by its own
+     * id. The {@code variantOf} pack does not have to be registered.
+     *
+     * @param variantOf the {@code "namespace:name"} id this pack is a variant of, or null for none.
+     *                  Parsed as strictly as {@code packId}: no trimming, case folding or blanks
+     * @throws IllegalArgumentException on a malformed or reserved vanilla id, or a
+     *                                  {@code variantOf} that is malformed, vanilla or the pack's
+     *                                  own id (the source is closed first)
+     */
+    public static PreparedPack prepare(String packId, @Nullable String variantOf, PackSource source, PackLimits limits) {
         Objects.requireNonNull(source, "source");
         Objects.requireNonNull(limits, "limits");
         try {
-            PackId id = PackId.parse(packId);
-            LoadedPack loaded = new LoadedPack(id, source, limits);
+            PackLineage lineage = new PackLineage(PackId.parse(packId), variantOf == null ? null : PackId.parse(variantOf));
+            LoadedPack loaded = new LoadedPack(lineage, source, limits);
             return new PreparedPack(loaded, PackFormatRange.read(source));
         } catch (RuntimeException e) {
             closeQuietly(source);
@@ -448,6 +464,17 @@ public final class PackRepository {
 
     public Set<PackId> registeredPacks() {
         return Set.copyOf(packs.keySet());
+    }
+
+    /**
+     * The lineage a pack was registered with, used to resolve pack-specific placeholder data.
+     * Unlike the resolve methods this does not throw for an unregistered pack: parsing lore needs
+     * no pack content, so an unregistered id gets {@link PackLineage#of(PackId) its own id only},
+     * the same overrides it would have had before variants existed.
+     */
+    public PackLineage lineageOf(PackId packId) {
+        LoadedPack pack = packs.get(packId);
+        return pack == null ? PackLineage.of(packId) : pack.lineage();
     }
 
     /**

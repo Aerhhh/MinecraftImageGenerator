@@ -49,7 +49,7 @@ public class IconParser implements StringParser {
     }
 
     private String parseIcon(Icon icon, String extra, ParseContext context) {
-        String character = icon.getIcon(context.packId());
+        String character = icon.getIcon(context.pack());
 
         if (extra == null) {
             return character;
@@ -104,17 +104,17 @@ public class IconParser implements StringParser {
     private String resolveIconCharacter(String target, ParseContext context) {
         Stat stat = Stat.byName(target);
         if (stat != null) {
-            return stat.getIcon(context.packId());
+            return stat.getIcon(context.pack());
         }
 
         Icon icon = Icon.byName(target);
         if (icon != null) {
-            return icon.getIcon(context.packId());
+            return icon.getIcon(context.pack());
         }
 
         Flavor flavor = Flavor.byName(target);
         if (flavor != null) {
-            return flavor.getIcon(context.packId());
+            return flavor.getIcon(context.pack());
         }
 
         return null;

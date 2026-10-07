@@ -5,7 +5,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import net.aerh.imagegenerator.pack.PackId;
+import net.aerh.imagegenerator.pack.PackLineage;
 import net.hypixel.nerdbot.marmalade.registry.DataRegistry;
 import org.jetbrains.annotations.Nullable;
 
@@ -55,27 +55,24 @@ public class Icon {
     private String icon;
     /**
      * Pack-conditional replacement characters keyed by pack ID string (e.g. {@code "hypixel:skyblock"}).
-     * When the keyed pack is active, {@link #getIcon(PackId)} returns the override instead of {@link #icon}.
+     * When the keyed pack, or a pack registered as a variant of it, is active,
+     * {@link #getIcon(PackLineage)} returns the override instead of {@link #icon}.
      */
     @Nullable
     private Map<String, String> packOverrides;
 
     /**
-     * Resolves the icon character for the given pack: the exact-pack-ID override when one exists,
-     * otherwise the base {@link #icon}.
+     * Resolves the icon character for the given pack: the override found through the pack's
+     * lineage (its own id, then the pack it is a variant of) when one exists, otherwise the base
+     * {@link #icon}.
      *
-     * @param packId the active pack, or {@code null} for none
+     * @param pack the active pack's lineage, or {@code null} for none
      *
      * @return the icon character to render
      */
-    public String getIcon(@Nullable PackId packId) {
-        if (packId != null && packOverrides != null) {
-            String override = packOverrides.get(packId.toString());
-            if (override != null) {
-                return override;
-            }
-        }
-        return icon;
+    public String getIcon(@Nullable PackLineage pack) {
+        String override = pack == null ? null : pack.findOverride(packOverrides);
+        return override != null ? override : icon;
     }
 
     public static Icon byName(String name) {
