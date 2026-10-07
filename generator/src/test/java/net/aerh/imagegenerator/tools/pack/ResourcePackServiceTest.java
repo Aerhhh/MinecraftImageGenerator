@@ -3,6 +3,7 @@ package net.aerh.imagegenerator.tools.pack;
 import net.aerh.imagegenerator.data.Rarity;
 import net.aerh.imagegenerator.exception.GeneratorException;
 import net.aerh.imagegenerator.pack.PackId;
+import net.aerh.imagegenerator.pack.PackLineage;
 import net.aerh.imagegenerator.pack.PackRepository;
 import net.aerh.imagegenerator.text.TextColorRemap;
 import org.junit.jupiter.api.BeforeEach;
@@ -469,6 +470,106 @@ class ResourcePackServiceTest {
         service.registerConfiguredPacks(config(PACK_ID, packDefinition(PACK_ID, zip)));
 
         assertEquals(List.of("testpack:fancy"), service.tooltipStyleChoices(null));
+    }
+
+    @Test
+    void variantOfIsAppliedToTheRegisteredPack() throws IOException {
+        Path zip = createFixturePackZip("alpha.zip");
+
+        service.registerConfiguredPacks(config(null, variantDefinition("hypixel:alpha", zip, "hypixel:skyblock")));
+
+        PackId alpha = PackId.parse("hypixel:alpha");
+        assertEquals(new PackLineage(alpha, PackId.parse("hypixel:skyblock")), repository.lineageOf(alpha));
+    }
+
+    @Test
+    void variantOfIsTrimmedAndLowercasedLikeThePackId() throws IOException {
+        Path zip = createFixturePackZip("alpha.zip");
+
+        service.registerConfiguredPacks(config(null, variantDefinition("hypixel:alpha", zip, "  Hypixel:SkyBlock ")));
+
+        assertEquals(PackId.parse("hypixel:skyblock"), repository.lineageOf(PackId.parse("hypixel:alpha")).variantOf());
+    }
+
+    @Test
+    void blankOrMissingVariantOfMeansNoVariant() throws IOException {
+        Path blank = createFixturePackZip("blank.zip");
+        Path missing = createFixturePackZip("missing.zip");
+
+        service.registerConfiguredPacks(config(null,
+            variantDefinition("nerdbot:blank", blank, "   "),
+            packDefinition("nerdbot:missing", missing)));
+
+        PackId blankId = PackId.parse("nerdbot:blank");
+        PackId missingId = PackId.parse("nerdbot:missing");
+        assertEquals(PackLineage.of(blankId), repository.lineageOf(blankId));
+        assertEquals(PackLineage.of(missingId), repository.lineageOf(missingId));
+    }
+
+    @Test
+    void malformedVariantOfSkipsThePackAndOthersStillRegister() throws IOException {
+        Path bad = createFixturePackZip("bad.zip");
+        Path good = createFixturePackZip("good.zip");
+
+        service.registerConfiguredPacks(config(null,
+            variantDefinition("nerdbot:bad", bad, "not a pack id"),
+            packDefinition(PACK_ID, good)));
+
+        assertEquals(java.util.Set.of(PackId.parse(PACK_ID)), repository.registeredPacks(),
+            "a typo in variantOf must not silently register the pack without its overrides");
+    }
+
+    @Test
+    void selfVariantOfSkipsThePack() throws IOException {
+        Path bad = createFixturePackZip("bad.zip");
+
+        service.registerConfiguredPacks(config(null, variantDefinition("nerdbot:bad", bad, "NerdBot:Bad")));
+
+        assertTrue(repository.registeredPacks().isEmpty());
+    }
+
+    @Test
+    void vanillaVariantOfSkipsThePack() throws IOException {
+        Path bad = createFixturePackZip("bad.zip");
+
+        service.registerConfiguredPacks(config(null, variantDefinition("nerdbot:bad", bad, "minecraft:minecraft")));
+
+        assertTrue(repository.registeredPacks().isEmpty());
+    }
+
+    @Test
+    void reloadAppliesTheDefinitionsVariantOf() throws IOException {
+        Path first = createFixturePackZip("first.zip");
+        Path second = createFixturePackZip("second.zip");
+        PackId alpha = PackId.parse("hypixel:alpha");
+        service.registerConfiguredPacks(config(null, packDefinition("hypixel:alpha", first)));
+        assertEquals(PackLineage.of(alpha), repository.lineageOf(alpha));
+
+        PackReloadResult result = service.reloadPack(variantDefinition("hypixel:alpha", second, "hypixel:skyblock"),
+            second, new PackExpectations(88, 0.0, List.of()));
+
+        assertTrue(result instanceof PackReloadResult.Applied, String.valueOf(result));
+        assertEquals(new PackLineage(alpha, PackId.parse("hypixel:skyblock")), repository.lineageOf(alpha));
+    }
+
+    @Test
+    void reloadWithAnInvalidVariantOfIsNotAttemptedAndKeepsTheLivePack() throws IOException {
+        Path first = createFixturePackZip("first.zip");
+        Path second = createFixturePackZip("second.zip");
+        PackId alpha = PackId.parse("hypixel:alpha");
+        service.registerConfiguredPacks(config(null, variantDefinition("hypixel:alpha", first, "hypixel:skyblock")));
+
+        PackReloadResult result = service.reloadPack(variantDefinition("hypixel:alpha", second, "hypixel:alpha"),
+            second, new PackExpectations(88, 0.0, List.of()));
+
+        assertTrue(result instanceof PackReloadResult.NotAttempted notAttempted
+            && notAttempted.reason().contains("variantOf"), String.valueOf(result));
+        assertEquals(new PackLineage(alpha, PackId.parse("hypixel:skyblock")), repository.lineageOf(alpha),
+            "the live pack keeps its lineage");
+    }
+
+    private static PackDefinition variantDefinition(String id, Path path, String variantOf) {
+        return new PackDefinition(id, path.toString(), Map.of(), Map.of(), variantOf);
     }
 
     private static PackRegistrationConfig config(String defaultPack, PackDefinition... packs) {

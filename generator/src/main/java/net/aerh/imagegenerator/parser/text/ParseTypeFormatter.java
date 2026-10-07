@@ -57,7 +57,7 @@ public final class ParseTypeFormatter {
     /**
      * Expands a {@link ParseType} format template using the given entry's properties, optional
      * extra details, and pack context. Icon and display placeholders resolve pack-conditionally
-     * via {@link FormattableEntry#getIcon(net.aerh.imagegenerator.pack.PackId)}.
+     * via {@link FormattableEntry#getIcon(net.aerh.imagegenerator.pack.PackLineage)}.
      *
      * @param entry        the stat or flavor entry providing colors, icons, etc.
      * @param parseType    the parse type whose format template to expand
@@ -78,9 +78,9 @@ public final class ParseTypeFormatter {
         Map<String, String> placeholders = new HashMap<>(BASE_PLACEHOLDERS);
         placeholders.put("color", String.valueOf(entry.getColor().codeChar()));
         placeholders.put("subColor", String.valueOf(entry.getSecondaryColor().codeChar()));
-        String icon = entry.getIcon(context.packId());
-        String stat = entry.getStat(context.packId());
-        String display = entry.getDisplay(context.packId());
+        String icon = entry.getIcon(context.pack());
+        String stat = entry.getStat(context.pack());
+        String display = entry.getDisplay(context.pack());
         placeholders.put("icon", icon != null ? icon : "");
         placeholders.put("stat", stat != null ? stat : "");
         placeholders.put("display", display != null ? display : "");

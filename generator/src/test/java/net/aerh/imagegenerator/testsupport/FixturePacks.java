@@ -1202,6 +1202,24 @@ public final class FixturePacks {
     }
 
     /**
+     * Writes a pack for PACK GLYPH OVERRIDE tests: {@code minecraft:default} maps U+E067 (the
+     * SkyBlock pack's zone glyph, which the bundled {@code zone} icon overrides to under
+     * {@code hypixel:skyblock}) to a solid 0xFFFF0000 7x7 cell, so a render shows red only when
+     * the override character was chosen.
+     */
+    public static Path writeZoneGlyphPack(Path root) {
+        try {
+            packMcmeta(root, "zone glyph test fixture");
+            fontTexture(root, NAMESPACE, "zone.png", solid(7, 7, 0xFFFF0000));
+            fontJson(root, "minecraft", "default", """
+                {"providers":[{"type":"bitmap","file":"testpack:font/zone.png","height":7,"ascent":7,"chars":["\\uE067"]}]}""");
+            return root;
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to write zone glyph fixture pack", e);
+        }
+    }
+
+    /**
      * Writes a font pack that ALSO ships the custom movement text shader chain, so pack loading
      * detects the no-tint rule (marker green 235, blue table {@code 0,4,...,72}) and applies it to
      * the pack's glyphs. Everything is synthetic and generated at test runtime.

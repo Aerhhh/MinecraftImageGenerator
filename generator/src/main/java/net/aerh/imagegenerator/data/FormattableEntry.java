@@ -1,7 +1,7 @@
 package net.aerh.imagegenerator.data;
 
 import lib.minecraft.text.ChatColor;
-import net.aerh.imagegenerator.pack.PackId;
+import net.aerh.imagegenerator.pack.PackLineage;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -28,11 +28,11 @@ public interface FormattableEntry {
      * Resolves the icon character for the given pack. Entries without pack-conditional data
      * (e.g. {@link Flavor}) fall through to the base icon.
      *
-     * @param packId the active pack, or {@code null} for none
+     * @param pack the active pack's lineage, or {@code null} for none
      *
      * @return the icon character to render
      */
-    default String getIcon(@Nullable PackId packId) {
+    default String getIcon(@Nullable PackLineage pack) {
         return getIcon();
     }
 
@@ -40,11 +40,11 @@ public interface FormattableEntry {
      * Resolves the display text for the given pack. Entries without pack-conditional data
      * fall through to the stored display.
      *
-     * @param packId the active pack, or {@code null} for none
+     * @param pack the active pack's lineage, or {@code null} for none
      *
      * @return the display text
      */
-    default String getDisplay(@Nullable PackId packId) {
+    default String getDisplay(@Nullable PackLineage pack) {
         return getDisplay();
     }
 
@@ -53,11 +53,11 @@ public interface FormattableEntry {
      * character (e.g. flavor lines like "This armor piece is undead X!") override this to swap
      * the embedded character; the default falls through to the stored stat text.
      *
-     * @param packId the active pack, or {@code null} for none
+     * @param pack the active pack's lineage, or {@code null} for none
      *
      * @return the stat text
      */
-    default String getStat(@Nullable PackId packId) {
+    default String getStat(@Nullable PackLineage pack) {
         return getStat();
     }
 }

@@ -258,6 +258,21 @@ PackId emberveil = PackRepository.global().register(
 - What `maxEntries` counts depends on the source type: a zip counts every central-directory record (regular files *and* directory entries), a directory source counts only regular files under `assets/`. Size the limit comfortably above the pack's record count.
 - Sheet-shaped textures (font glyph sheets, animated tooltip sprite strips) decode under the separate `sheetTextureMaxDim` cap (default 8192); item and general GUI textures keep the strict `maxTextureDim` image-bomb guard.
 
+### Pack variants
+
+Placeholder icons like `%%zone%%` swap to a pack's own glyph through `packOverrides` entries keyed by pack id (for example `"hypixel:skyblock": ""`). A second build of the same pack registered under its own id, such as an alpha build, matches none of those keys. Prepare it as a variant of the original so it uses them too:
+
+```java
+PackId alpha = PackRepository.global().register(PackRepository.prepare(
+    "hypixel:alpha", "hypixel:skyblock",
+    PackSource.zip(Path.of("packs/hypixel-alpha.zip"), limits),
+    limits));
+```
+
+- Overrides are looked up under the pack's own id first, then under its `variantOf` id, so a glyph that differs in the variant can still get its own key.
+- The variant also inherits pack-id conventions such as the emissive alpha normalization.
+- The `variantOf` pack does not have to be registered; only one level is followed. `ResourcePackService` users set `variantOf` on the `PackDefinition`.
+
 ### Pack fonts in text
 
 Each text segment resolves against a font id: its explicit pack font id when set, otherwise the resource location of its built-in font (`minecraft:default` for ordinary text, `minecraft:alt` for `&g`, `minecraft:illageralt` for `&h`). A pack that overrides `minecraft:default` therefore restyles ordinary tooltip text automatically - just render with `withPack(...)`:

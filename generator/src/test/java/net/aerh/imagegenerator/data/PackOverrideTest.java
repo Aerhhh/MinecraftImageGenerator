@@ -1,6 +1,7 @@
 package net.aerh.imagegenerator.data;
 
 import net.aerh.imagegenerator.pack.PackId;
+import net.aerh.imagegenerator.pack.PackLineage;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -11,8 +12,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  */
 class PackOverrideTest {
 
-    private static final PackId HYPIXEL = PackId.parse("hypixel:skyblock");
-    private static final PackId OTHER = PackId.parse("other:pack");
+    private static final PackId SKYBLOCK_ID = PackId.parse("hypixel:skyblock");
+    private static final PackLineage HYPIXEL = PackLineage.of(SKYBLOCK_ID);
+    private static final PackLineage OTHER = PackLineage.of(PackId.parse("other:pack"));
+    /** A pack registered under its own id that reuses the SkyBlock pack's glyph overrides, like the alpha pack. */
+    private static final PackLineage ALPHA_VARIANT = new PackLineage(PackId.parse("hypixel:alpha"), SKYBLOCK_ID);
+    private static final PackLineage ALPHA_STANDALONE = PackLineage.of(PackId.parse("hypixel:alpha"));
 
     private static final String ZONE_BASE = "\u23E3";      // the classic zone symbol
     private static final String ZONE_PACK = "\uE067";      // the pack's zone/area glyph
@@ -130,6 +135,60 @@ class PackOverrideTest {
         assertEquals("This armor piece is undead " + MOB_UNDEAD + "!", undeadItem.getStat(HYPIXEL));
         assertEquals(MOB_UNDEAD + " This armor piece is undead " + MOB_UNDEAD + "!", undeadItem.getDisplay(HYPIXEL));
         assertEquals(UNDEAD_BASE + " This armor piece is undead " + UNDEAD_BASE + "!", undeadItem.getDisplay(OTHER));
+    }
+
+    @Test
+    void variantPackUsesTheBasePacksIconOverride() {
+        Icon zone = Icon.byName("zone");
+        assertEquals(ZONE_PACK, zone.getIcon(ALPHA_VARIANT));
+        assertEquals(ZONE_BASE, zone.getIcon(ALPHA_STANDALONE),
+            "without variantOf the alpha id matches no override key");
+    }
+
+    @Test
+    void variantPackUsesTheBasePacksStatOverrideAndDerivedDisplay() {
+        Stat strength = Stat.byName("strength");
+        assertEquals(STRENGTH_PACK, strength.getIcon(ALPHA_VARIANT));
+        assertEquals(STRENGTH_PACK + " Strength", strength.getDisplay(ALPHA_VARIANT));
+        assertEquals(STRENGTH_BASE + " Strength", strength.getDisplay(ALPHA_STANDALONE));
+    }
+
+    @Test
+    void variantPackUsesTheBasePacksGemstoneOverride() {
+        Gemstone ruby = Gemstone.byName("gem_ruby");
+        assertEquals(RUBY_PACK, ruby.getIcon(ALPHA_VARIANT));
+        assertEquals("&c" + RUBY_PACK, ruby.getFormattedIcon(ALPHA_VARIANT));
+        assertEquals("&c" + RUBY_BASE, ruby.getFormattedIcon(ALPHA_STANDALONE));
+    }
+
+    @Test
+    void variantPackUsesTheBasePacksFlavorOverride() {
+        Flavor undeadItem = Flavor.byName("undead_item");
+        assertEquals(MOB_UNDEAD, undeadItem.getIcon(ALPHA_VARIANT));
+        assertEquals("This armor piece is undead " + MOB_UNDEAD + "!", undeadItem.getStat(ALPHA_VARIANT));
+        assertEquals(MOB_UNDEAD + " This armor piece is undead " + MOB_UNDEAD + "!", undeadItem.getDisplay(ALPHA_VARIANT));
+        assertEquals("This armor piece is undead " + UNDEAD_BASE + "!", undeadItem.getStat(ALPHA_STANDALONE));
+    }
+
+    @Test
+    void everyBundledOverrideResolvesTheSameForTheVariantAsForTheBasePack() {
+        for (Icon icon : Icon.getIcons()) {
+            assertEquals(icon.getIcon(HYPIXEL), icon.getIcon(ALPHA_VARIANT), "icon " + icon.getName());
+        }
+        for (Stat stat : Stat.getStats()) {
+            assertEquals(stat.getIcon(HYPIXEL), stat.getIcon(ALPHA_VARIANT), "stat icon " + stat.getName());
+            assertEquals(stat.getDisplay(HYPIXEL), stat.getDisplay(ALPHA_VARIANT), "stat display " + stat.getName());
+        }
+        for (Flavor flavor : Flavor.getFlavors()) {
+            assertEquals(flavor.getIcon(HYPIXEL), flavor.getIcon(ALPHA_VARIANT), "flavor icon " + flavor.getName());
+            assertEquals(flavor.getStat(HYPIXEL), flavor.getStat(ALPHA_VARIANT), "flavor stat " + flavor.getName());
+            assertEquals(flavor.getDisplay(HYPIXEL), flavor.getDisplay(ALPHA_VARIANT), "flavor display " + flavor.getName());
+        }
+        for (Gemstone gemstone : Gemstone.getGemstones()) {
+            assertEquals(gemstone.getIcon(HYPIXEL), gemstone.getIcon(ALPHA_VARIANT), "gemstone icon " + gemstone.getName());
+            assertEquals(gemstone.getFormattedIcon(HYPIXEL), gemstone.getFormattedIcon(ALPHA_VARIANT),
+                "gemstone formatted icon " + gemstone.getName());
+        }
     }
 
     @Test
