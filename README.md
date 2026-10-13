@@ -667,3 +667,28 @@ The project includes a GitHub Actions workflow for generating and updating Minec
 - Rendering items at configurable sizes (requires .NET 10)
 - Generating sprite atlases with coordinate metadata
 - Generating item overlays for colored variants (armor, potions, etc.)
+
+### Configurable tooling outputs and atlas pages
+
+`MinecraftAssetTool` accepts `--work-dir=<path>`, `--output-dir=<path>` and
+`--renderer-dir=<path>`. Set these separately for each Minecraft version when
+calling the tooling from another build system. The same paths can be set with
+`generator.tooling.workDir`, `generator.tooling.outputDir` and
+`generator.tooling.rendererDir` JVM system properties. Existing default paths remain unchanged.
+
+`--size` controls the rendered image size and the default item-atlas tile size.
+`--tile-size` overrides just the tile size. `--atlas-width`, `--atlas-height`
+and `--padding` control page bounds and transparent gutters. Standalone
+`SpritesheetGenerator` supports these atlas options and `--input`.
+
+```text
+MinecraftAssetTool --download --render --spritesheet --no-clean --version=26.3
+  --work-dir=build/26.3/work --output-dir=build/26.3/generated
+  --size=64 --atlas-width=2048 --atlas-height=2048 --padding=1
+```
+
+The first page keeps its original PNG filename; additional pages use `-1`,
+`-2`, etc. Coordinate JSON remains an array with `name`, `x`, `y`, and `size`,
+plus `page`, `atlas` (PNG filename), `atlasWidth`, and `atlasHeight` for each entry.
+Paging and padding are opt-in. The generator library's bundled single-page
+resources retain their existing default layout.

@@ -1,6 +1,8 @@
 package net.aerh.imagegenerator.tooling.minecraft;
 
 import net.aerh.imagegenerator.tooling.ToolingConstants;
+import net.aerh.imagegenerator.tooling.ToolingArguments;
+import net.aerh.imagegenerator.tooling.spritesheet.AtlasLayout;
 import net.aerh.imagegenerator.tooling.spritesheet.OverlayColorConfigGenerator;
 import net.aerh.imagegenerator.tooling.spritesheet.OverlayGenerator;
 import net.aerh.imagegenerator.tooling.spritesheet.SpritesheetGenerator;
@@ -49,12 +51,17 @@ public class MinecraftAssetTool {
 
     private String minecraftVersion = null;
     private int renderSize = 256;
+    private Integer tileSize;
+    private int atlasWidth = 4096;
+    private int atlasHeight = Integer.MAX_VALUE;
+    private int atlasPadding;
     private boolean keepJar = true;
     private boolean forceReclone = false;
     private boolean forceRebuild = false;
     private boolean cleanBuildDir = true;
 
     public static void main(String[] args) {
+        ToolingArguments.configureDirectories(args);
         MinecraftAssetTool tool = new MinecraftAssetTool();
 
         for (String arg : args) {
@@ -85,6 +92,14 @@ public class MinecraftAssetTool {
                 default -> {
                     if (arg.startsWith("--version=")) {
                         tool.minecraftVersion = arg.substring("--version=".length());
+                    } else if (arg.startsWith("--tile-size=")) {
+                        tool.tileSize = Integer.parseInt(arg.substring("--tile-size=".length()));
+                    } else if (arg.startsWith("--atlas-width=")) {
+                        tool.atlasWidth = Integer.parseInt(arg.substring("--atlas-width=".length()));
+                    } else if (arg.startsWith("--atlas-height=")) {
+                        tool.atlasHeight = Integer.parseInt(arg.substring("--atlas-height=".length()));
+                    } else if (arg.startsWith("--padding=")) {
+                        tool.atlasPadding = Integer.parseInt(arg.substring("--padding=".length()));
                     } else if (arg.startsWith("--size=")) {
                         tool.renderSize = Integer.parseInt(arg.substring("--size=".length()));
                     }
@@ -126,7 +141,14 @@ public class MinecraftAssetTool {
         System.out.println();
         System.out.println("Options:");
         System.out.println("  --version=<ver>      Minecraft version (default: latest release)");
-        System.out.println("  --size=<pixels>      Render size in pixels (default: 256)");
+        System.out.println("  --size=<pixels>      Render and default atlas tile size (default: 256)");
+        System.out.println("  --tile-size=<px>     Override atlas tile size");
+        System.out.println("  --atlas-width=<px>   Maximum atlas page width (default: 4096)");
+        System.out.println("  --atlas-height=<px>  Maximum atlas page height (default: unlimited)");
+        System.out.println("  --padding=<px>       Transparent gutter on every side of each tile");
+        System.out.println("  --work-dir=<path>    Extracted assets, rendered images and caches");
+        System.out.println("  --output-dir=<path>  Generated spritesheets and JSON directory");
+        System.out.println("  --renderer-dir=<p>   MinecraftRenderer checkout directory");
         System.out.println("  --skip-download      Skip download step (use cached assets)");
         System.out.println("  --skip-render        Skip render step (use existing renders)");
         System.out.println("  --force-clone        Force re-clone MinecraftRenderer repository");
@@ -259,7 +281,8 @@ public class MinecraftAssetTool {
         System.out.println("\n[Spritesheet] Generating spritesheets...");
         System.out.println("-".repeat(40));
 
-        SpritesheetGenerator.main(new String[]{"--input=" + ToolingConstants.RENDERED_ITEMS});
+        new SpritesheetGenerator(ToolingConstants.RENDERED_ITEMS.toString(),
+            new AtlasLayout(tileSize != null ? tileSize : renderSize, atlasWidth, atlasHeight, atlasPadding)).generate();
     }
 
     private void runOverlaysStep() throws IOException {
