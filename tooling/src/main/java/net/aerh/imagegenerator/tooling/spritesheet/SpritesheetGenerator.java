@@ -83,8 +83,7 @@ public class SpritesheetGenerator extends AtlasGenerator {
         File[] files = folder.listFiles(f -> f.isFile() && f.getName().toLowerCase().endsWith(".png"));
 
         if (files == null) {
-            System.err.println("No textures found in: " + folder.getAbsolutePath());
-            return textures;
+            throw new IllegalStateException("Texture input directory cannot be read: " + folder);
         }
 
         System.out.println("Loading textures from: " + folder.getAbsolutePath());
@@ -103,8 +102,7 @@ public class SpritesheetGenerator extends AtlasGenerator {
 
             BufferedImage image = loadImage(file);
             if (image == null) {
-                System.err.println("Failed to load: " + file.getName());
-                continue;
+                throw new IllegalStateException("Failed to load texture: " + file);
             }
 
             try {
@@ -117,8 +115,7 @@ public class SpritesheetGenerator extends AtlasGenerator {
 
                 textures.add(new AtlasEntry(name, processed));
             } catch (Exception e) {
-                System.err.println("Failed to process: " + file.getName());
-                e.printStackTrace();
+                throw new IllegalStateException("Failed to process texture: " + file, e);
             }
         }
 

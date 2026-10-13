@@ -49,6 +49,8 @@ public class MinecraftAssetTool {
 
     private String minecraftVersion = null;
     private int renderSize = 256;
+    private String rendererCommit;
+    private boolean updateRenderer = true;
     private boolean keepJar = true;
     private boolean forceReclone = false;
     private boolean forceRebuild = false;
@@ -77,6 +79,7 @@ public class MinecraftAssetTool {
                 }
                 case "--force-clone" -> tool.forceReclone = true;
                 case "--force-build" -> tool.forceRebuild = true;
+                case "--no-update-renderer" -> tool.updateRenderer = false;
                 case "--no-clean" -> tool.cleanBuildDir = false;
                 case "--help" -> {
                     printHelp();
@@ -85,6 +88,8 @@ public class MinecraftAssetTool {
                 default -> {
                     if (arg.startsWith("--version=")) {
                         tool.minecraftVersion = arg.substring("--version=".length());
+                    } else if (arg.startsWith("--renderer-commit=")) {
+                        tool.rendererCommit = arg.substring("--renderer-commit=".length());
                     } else if (arg.startsWith("--size=")) {
                         tool.renderSize = Integer.parseInt(arg.substring("--size=".length()));
                     }
@@ -129,6 +134,8 @@ public class MinecraftAssetTool {
         System.out.println("  --size=<pixels>      Render size in pixels (default: 256)");
         System.out.println("  --skip-download      Skip download step (use cached assets)");
         System.out.println("  --skip-render        Skip render step (use existing renders)");
+        System.out.println("  --renderer-commit=<sha>  Pin MinecraftRenderer to a full commit SHA");
+        System.out.println("  --no-update-renderer    Reuse the existing renderer checkout without pulling");
         System.out.println("  --force-clone        Force re-clone MinecraftRenderer repository");
         System.out.println("  --force-build        Force rebuild MinecraftRenderer");
         System.out.println("  --no-clean           Keep build directory after completion");
@@ -226,14 +233,12 @@ public class MinecraftAssetTool {
         System.out.println("[Download] Extracted " + count + " files");
     }
 
-    private void runRenderStep() throws IOException, InterruptedException {
+    protected void runRenderStep() throws IOException, InterruptedException {
         System.out.println("\n[Render] Running MinecraftRenderer...");
         System.out.println("-".repeat(40));
 
         if (!isDotNetAvailable()) {
-            System.out.println("WARNING: .NET SDK not found. Skipping render step.");
-            System.out.println("Install .NET SDK 10.0+ from https://dotnet.microsoft.com/download");
-            return;
+            throw new IOException(".NET SDK 10.0+ is required for rendering");
         }
 
         if (Files.exists(ToolingConstants.RENDERED_ITEMS)) {
@@ -241,17 +246,16 @@ public class MinecraftAssetTool {
             ToolingConstants.deleteDirectory(ToolingConstants.RENDERED_ITEMS);
         }
 
-        ItemRenderer renderer = new ItemRenderer();
+        ItemRenderer renderer = createRenderer();
+        renderer.setRevision(rendererCommit);
+        renderer.setUpdateExisting(updateRenderer);
         renderer.setDebug(debug);
 
         try {
             renderer.setup(forceReclone, forceRebuild);
             renderer.renderAllItems(ToolingConstants.RENDERED_ITEMS, minecraftVersion, renderSize);
         } catch (Exception e) {
-            System.out.println("WARNING: Renderer failed: " + e.getMessage());
-            if (debug) {
-                e.printStackTrace();
-            }
+            throw new IOException("Renderer failed", e);
         }
     }
 
@@ -280,7 +284,11 @@ public class MinecraftAssetTool {
         }
     }
 
-    private boolean isDotNetAvailable() {
+    protected ItemRenderer createRenderer() {
+        return new ItemRenderer();
+    }
+
+    protected boolean isDotNetAvailable() {
         try {
             ProcessBuilder pb = new ProcessBuilder("dotnet", "--version");
             pb.redirectErrorStream(true);

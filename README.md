@@ -667,3 +667,16 @@ The project includes a GitHub Actions workflow for generating and updating Minec
 - Rendering items at configurable sizes (requires .NET 10)
 - Generating sprite atlases with coordinate metadata
 - Generating item overlays for colored variants (armor, potions, etc.)
+
+### Reproducible renderer setup and build failures
+
+Pass `--renderer-commit=<full SHA>` to `MinecraftAssetTool` to fetch and check out
+a specific MinecraftRenderer commit. Pinned checkouts are not automatically
+updated, and changing their commit rebuilds the renderer. Git checkout does not
+force away local modifications. `--no-update-renderer` reuses an existing checkout
+without pulling when no commit is pinned; the existing unpinned default remains unchanged.
+
+Missing .NET, renderer setup/render failures, individual batch render failures,
+empty atlases, invalid PNG input and output-write failures fail the CLI with a
+nonzero exit status. Build integrations can therefore stop instead of packaging
+partial or stale resources. Renderer setup builds only the net10.0 library project.

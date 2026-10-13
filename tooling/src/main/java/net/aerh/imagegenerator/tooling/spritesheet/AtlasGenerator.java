@@ -47,8 +47,7 @@ public abstract class AtlasGenerator {
         System.out.println("Loaded " + entries.size() + " textures.");
 
         if (entries.isEmpty()) {
-            System.err.println("No textures to pack!");
-            return;
+            throw new IllegalStateException("No textures to pack!");
         }
 
         BufferedImage atlas = packAtlas(entries);
@@ -90,28 +89,27 @@ public abstract class AtlasGenerator {
 
     protected void saveAtlas(BufferedImage atlas) {
         File outputFile = new File(atlasOutputPath);
-        File parentDir = outputFile.getParentFile();
+        File parentDir = outputFile.getAbsoluteFile().getParentFile();
         if (!parentDir.exists() && !parentDir.mkdirs()) {
-            System.err.println("Failed to create directory: " + parentDir.getAbsolutePath());
-            return;
+            throw new IllegalStateException("Failed to create directory: " + parentDir.getAbsolutePath());
         }
 
         try {
             System.out.println("Saving atlas to: " + outputFile.getAbsolutePath());
-            ImageIO.write(atlas, "png", outputFile);
+            if (!ImageIO.write(atlas, "png", outputFile)) {
+                throw new IOException("No PNG writer available");
+            }
             System.out.println("Atlas saved successfully!");
         } catch (IOException e) {
-            System.err.println("Failed to save atlas: " + e.getMessage());
-            e.printStackTrace();
+            throw new IllegalStateException("Failed to save atlas: " + outputFile, e);
         }
     }
 
     protected void saveCoordinatesJson(List<AtlasEntry> entries) {
         File jsonFile = new File(jsonOutputPath);
-        File parentDir = jsonFile.getParentFile();
+        File parentDir = jsonFile.getAbsoluteFile().getParentFile();
         if (!parentDir.exists() && !parentDir.mkdirs()) {
-            System.err.println("Failed to create directory: " + parentDir.getAbsolutePath());
-            return;
+            throw new IllegalStateException("Failed to create directory: " + parentDir.getAbsolutePath());
         }
 
         JsonArray jsonArray = new JsonArray();
@@ -123,8 +121,7 @@ public abstract class AtlasGenerator {
             GSON.toJson(jsonArray, writer);
             System.out.println("Coordinates JSON saved to: " + jsonFile.getAbsolutePath());
         } catch (IOException e) {
-            System.err.println("Failed to save coordinates JSON: " + e.getMessage());
-            e.printStackTrace();
+            throw new IllegalStateException("Failed to save coordinates JSON: " + jsonFile, e);
         }
     }
 

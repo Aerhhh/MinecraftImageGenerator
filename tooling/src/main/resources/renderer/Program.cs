@@ -87,3 +87,5 @@ for (var i = 0; i < allNames.Count; i++)
 
 Console.WriteLine($"\n\n[{new string('█', barWidth)}] 100.0% | Complete!\n");
 Console.WriteLine($"Rendered: {rendered} | Failed: {failed}");
+
+if (failed > 0 || rendered == 0) Environment.Exit(1);

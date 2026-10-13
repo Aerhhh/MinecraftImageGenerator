@@ -27,6 +27,19 @@ public class ItemRenderer {
 
     private final Path repoPath;
     private boolean debug;
+    private String revision;
+    private boolean updateExisting = true;
+
+    public void setRevision(String revision) {
+        if (revision != null && !revision.matches("[0-9a-fA-F]{40}")) {
+            throw new IllegalArgumentException("Renderer commit must be a full 40-character SHA");
+        }
+        this.revision = revision;
+    }
+
+    public void setUpdateExisting(boolean updateExisting) {
+        this.updateExisting = updateExisting;
+    }
 
     public ItemRenderer() {
         this(ToolingConstants.RENDERER_CLONE);
@@ -72,10 +85,11 @@ public class ItemRenderer {
             cloneRepository();
         } else {
             System.out.println("Repository already cloned at: " + repoPath);
-            pullLatest();
+            if (revision == null && updateExisting) pullLatest();
         }
 
-        if (forceRebuild || !isBuilt()) {
+        boolean revisionChanged = revision != null && checkoutRevision();
+        if (forceRebuild || revisionChanged || !isBuilt()) {
             buildProject();
         } else {
             System.out.println("Project already built.");
@@ -85,7 +99,7 @@ public class ItemRenderer {
     /**
      * Checks if required tools are available.
      */
-    private void checkPrerequisites() throws IOException, InterruptedException {
+    protected void checkPrerequisites() throws IOException, InterruptedException {
         if (!isCommandAvailable("git", "--version")) {
             throw new IllegalStateException("Git is not installed or not in PATH. Please install Git.");
         }
@@ -127,7 +141,7 @@ public class ItemRenderer {
      * Checks if the project has been built.
      */
     public boolean isBuilt() {
-        return Files.exists(repoPath.resolve("CreateAtlases/bin"));
+        return Files.isRegularFile(repoPath.resolve("MinecraftRenderer/bin/Release/net10.0/MinecraftRenderer.dll"));
     }
 
     /**
@@ -154,25 +168,49 @@ public class ItemRenderer {
         ProcessBuilder pb = new ProcessBuilder("git", "pull", "--ff-only");
         pb.directory(repoPath.toFile());
 
-        try {
-            runProcess(pb, "Failed to pull latest changes");
-        } catch (IOException e) {
-            System.out.println("Warning: Could not pull latest changes: " + e.getMessage());
-        }
+        runProcess(pb, "Failed to pull latest changes");
     }
 
     /**
      * Builds the .NET project.
      */
-    private void buildProject() throws IOException, InterruptedException {
+    private boolean checkoutRevision() throws IOException, InterruptedException {
+        String previous = capture("rev-parse", "HEAD");
+        ProcessBuilder exists = git("cat-file", "-e", revision + "^{commit}");
+        exists.redirectErrorStream(true);
+        Process probe = exists.start();
+        probe.getInputStream().readAllBytes();
+        if (probe.waitFor() != 0) {
+            runProcess(git("fetch", "--depth=1", "origin", revision), "Failed to fetch renderer commit");
+        }
+        // Do not force checkout: caller changes must not be silently overwritten.
+        runProcess(git("checkout", "--detach", revision), "Failed to checkout renderer commit");
+        return !previous.equalsIgnoreCase(capture("rev-parse", "HEAD"));
+    }
+
+    private ProcessBuilder git(String... args) {
+        java.util.List<String> command = new java.util.ArrayList<>();
+        command.add("git");
+        command.addAll(java.util.List.of(args));
+        return new ProcessBuilder(command).directory(repoPath.toFile());
+    }
+
+    private String capture(String... args) throws IOException, InterruptedException {
+        Process process = git(args).redirectErrorStream(true).start();
+        String output = new String(process.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
+        if (process.waitFor() != 0) throw new IOException("Cannot read renderer revision: " + output);
+        return output;
+    }
+
+    protected void buildProject() throws IOException, InterruptedException {
         System.out.println("Building MinecraftRenderer...");
 
-        ProcessBuilder restorePb = new ProcessBuilder("dotnet", "restore");
+        ProcessBuilder restorePb = new ProcessBuilder("dotnet", "restore", "MinecraftRenderer/MinecraftRenderer.csproj");
         restorePb.directory(repoPath.toFile());
         runProcess(restorePb, "Failed to restore .NET dependencies");
 
         ProcessBuilder buildPb = new ProcessBuilder(
-            "dotnet", "build",
+            "dotnet", "build", "MinecraftRenderer/MinecraftRenderer.csproj", "--framework", "net10.0",
             "--configuration", "Release",
             "--no-restore"
         );
