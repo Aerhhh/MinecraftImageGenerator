@@ -1,86 +1,58 @@
 package net.aerh.imagegenerator.spritesheet;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
 import lombok.experimental.UtilityClass;
-import lombok.extern.slf4j.Slf4j;
 import net.hypixel.nerdbot.marmalade.functional.Pair;
 
-import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
-@Slf4j
+/**
+ * Static facade over a single {@link SpritesheetLoader} for the bundled vanilla texture atlas under
+ * {@code /minecraft/assets}.
+ * <p>
+ * The loader is created when this class is first used and decodes atlas pages lazily, so the first call that touches
+ * a page pays for decoding it. Use {@link SpritesheetLoader} directly to load an atlas from another resource path.
+ */
 @UtilityClass
 public class Spritesheet {
 
-    private static final Map<String, BufferedImage> IMAGE_MAP = new HashMap<>();
-    private static final String ATLAS_PATH = "/minecraft/assets/spritesheets/minecraft_texture_atlas.png";
-    private static final String COORDINATES_PATH = "/minecraft/assets/json/atlas_coordinates.json";
-    private static final Gson GSON = new Gson();
-    private static BufferedImage textureAtlas;
+    private static final SpritesheetLoader LOADER = new SpritesheetLoader();
 
-    static {
-        try (InputStream atlasStream = Spritesheet.class.getResourceAsStream(ATLAS_PATH)) {
-            if (atlasStream == null) {
-                throw new IOException("Texture atlas image not found: " + ATLAS_PATH);
-            }
-            // Load the texture atlas image
-            log.info("Loading texture atlas image");
-            textureAtlas = ImageIO.read(atlasStream);
-            log.info("Loaded texture atlas image (size: {}x{})", textureAtlas.getWidth(), textureAtlas.getHeight());
-        } catch (IOException exception) {
-            log.error("Failed to load texture atlas image", exception);
-        }
-
-        try (InputStream coordinatesStream = Spritesheet.class.getResourceAsStream(COORDINATES_PATH)) {
-            if (coordinatesStream == null) {
-                throw new IOException("Texture atlas coordinates file not found: " + COORDINATES_PATH);
-            }
-            log.info("Loading texture atlas coordinates from JSON file");
-
-            // Load the texture atlas coordinates
-            JsonArray jsonCoordinates = GSON.fromJson(new InputStreamReader(coordinatesStream), JsonArray.class);
-
-            for (JsonElement jsonElement : jsonCoordinates) {
-                JsonObject itemData = jsonElement.getAsJsonObject();
-                String name = itemData.get("name").getAsString();
-                int x = itemData.get("x").getAsInt();
-                int y = itemData.get("y").getAsInt();
-                int size = itemData.get("size").getAsInt();
-                BufferedImage image = textureAtlas.getSubimage(x, y, size, size);
-
-                log.debug("Loaded texture: {} at ({}, {}) with size {}x{}", name, x, y, size, size);
-                IMAGE_MAP.put(name, image);
-            }
-
-            log.info("Finished loading texture atlas coordinates from JSON file ({} textures loaded)", IMAGE_MAP.size());
-        } catch (IOException exception) {
-            log.error("Failed to load texture atlas coordinates", exception);
-        }
-    }
-
-
+    /**
+     * Get a texture by name.
+     *
+     * @param textureId Texture name as listed in the coordinates file
+     *
+     * @return The texture, or null if the name is null or not listed
+     *
+     * @see SpritesheetLoader#getTexture(String)
+     */
     public static BufferedImage getTexture(String textureId) {
-        return IMAGE_MAP.get(textureId);
+        return LOADER.getTexture(textureId);
     }
 
+    /**
+     * Find every texture whose name contains {@code textureId}. The match is case-sensitive.
+     *
+     * @param textureId Substring to look for in texture names
+     *
+     * @return Matching textures paired with their names; empty if nothing matches
+     *
+     * @see SpritesheetLoader#searchForTexture(String)
+     */
     public static List<Pair<String, BufferedImage>> searchForTexture(String textureId) {
-        return IMAGE_MAP.entrySet().stream()
-            .filter(entry -> entry.getKey().contains(textureId))
-            .map(entry -> Pair.of(entry.getKey(), entry.getValue()))
-            .collect(Collectors.toList());
+        return LOADER.searchForTexture(textureId);
     }
 
+    /**
+     * Get every texture keyed by name. This decodes every atlas page.
+     *
+     * @return An unmodifiable map of texture name to texture
+     *
+     * @see SpritesheetLoader#getImageMap()
+     */
     public static Map<String, BufferedImage> getImageMap() {
-        return IMAGE_MAP;
+        return LOADER.getImageMap();
     }
 }

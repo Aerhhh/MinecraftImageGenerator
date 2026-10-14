@@ -81,7 +81,6 @@
                     <version>3.6.0</version>
                     <configuration>
                         <excludedGroups>${surefire.excludedGroups}</excludedGroups>
-                        <argLine>-javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar</argLine>
                     </configuration>
                 </plugin>
             </plugins>

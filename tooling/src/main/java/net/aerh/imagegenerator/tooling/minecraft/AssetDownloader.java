@@ -2,7 +2,8 @@ package net.aerh.imagegenerator.tooling.minecraft;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import net.aerh.imagegenerator.tooling.ToolingConstants;
+import net.aerh.imagegenerator.tooling.ToolingSupport;
+import net.aerh.imagegenerator.tooling.ToolingPaths;
 import net.hypixel.nerdbot.marmalade.http.HttpClient;
 
 import java.io.IOException;
@@ -28,6 +29,7 @@ public class AssetDownloader {
     private static final String VERSION_MANIFEST_URL = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json";
     private static final String ASSETS_PREFIX = "assets/minecraft/";
 
+    private final ToolingPaths paths;
     private final String version;
     private final Path outputPath;
     private final boolean keepJar;
@@ -37,20 +39,21 @@ public class AssetDownloader {
     /**
      * Creates a new AssetDownloader for downloading and extracting Minecraft assets.
      *
-     * @param version    the Minecraft version to download, or null to use the latest release
-     * @param outputPath the directory where assets will be extracted
-     * @param keepJar    if true, keep the downloaded JAR file after extraction
-     * @param clean      if true, delete the output directory before extraction
+     * @param paths   where the JAR and mappings caches live and where assets are extracted
+     * @param version the Minecraft version to download, or null to use the latest release
+     * @param keepJar if true, keep the downloaded JAR file after extraction
+     * @param clean   if true, delete the output directory before extraction
      */
-    public AssetDownloader(String version, Path outputPath, boolean keepJar, boolean clean) {
+    public AssetDownloader(ToolingPaths paths, String version, boolean keepJar, boolean clean) {
+        this.paths = paths;
         this.version = version;
-        this.outputPath = outputPath;
+        this.outputPath = paths.minecraftAssets();
         this.keepJar = keepJar;
         this.clean = clean;
     }
 
     public void setDebug(boolean debug) {
-        ToolingConstants.setDebugEnabled(debug);
+        ToolingSupport.setDebugEnabled(debug);
     }
 
     /**
@@ -74,7 +77,7 @@ public class AssetDownloader {
         System.out.println("Downloading Minecraft " + resolvedVersion + " assets...");
 
         String clientJarUrl = getClientJarUrl(resolvedVersion);
-        ToolingConstants.printDebug("Client JAR URL: " + clientJarUrl);
+        ToolingSupport.printDebug("Client JAR URL: " + clientJarUrl);
 
         Path jarPath = downloadClientJar(clientJarUrl, resolvedVersion);
         System.out.println("Downloaded client JAR: " + jarPath);
@@ -84,12 +87,13 @@ public class AssetDownloader {
             Path mappingsPath = downloadMappings(mappingsUrl, resolvedVersion);
             System.out.println("Downloaded mappings: " + mappingsPath);
         } else {
-            ToolingConstants.printDebug("No mappings available for this version");
+            System.out.println("No mappings published for " + resolvedVersion
+                + " (none exist for 26.1 and later, whose JARs carry real class names).");
         }
 
         if (clean && Files.exists(outputPath)) {
             System.out.println("Cleaning output directory: " + outputPath);
-            ToolingConstants.deleteDirectory(outputPath);
+            ToolingSupport.deleteDirectory(outputPath);
         }
 
         int count = extractAssets(jarPath);
@@ -97,7 +101,7 @@ public class AssetDownloader {
 
         if (!keepJar) {
             Files.deleteIfExists(jarPath);
-            ToolingConstants.printDebug("Deleted JAR file");
+            ToolingSupport.printDebug("Deleted JAR file");
         }
 
         return count;
@@ -134,7 +138,7 @@ public class AssetDownloader {
 
             if (versionId.equals(targetVersion)) {
                 String versionUrl = versionEntry.get("url").getAsString();
-                ToolingConstants.printDebug("Version manifest URL: " + versionUrl);
+                ToolingSupport.printDebug("Version manifest URL: " + versionUrl);
 
                 JsonObject versionMeta = HttpClient.getJson(versionUrl).orElseThrow();
                 JsonObject client = versionMeta.getAsJsonObject("downloads").getAsJsonObject("client");
@@ -178,9 +182,9 @@ public class AssetDownloader {
      * Downloads the client mappings file, or returns the cached path if already downloaded.
      */
     private Path downloadMappings(String url, String versionId) throws IOException, InterruptedException {
-        Files.createDirectories(ToolingConstants.MAPPINGS_CACHE);
+        Files.createDirectories(paths.mappingsCache());
 
-        Path mappingsPath = ToolingConstants.getMappingsPath(versionId);
+        Path mappingsPath = paths.mappingsPath(versionId);
 
         if (Files.exists(mappingsPath)) {
             System.out.println("Using cached mappings: " + mappingsPath);
@@ -212,9 +216,9 @@ public class AssetDownloader {
      * Downloads the client JAR file with progress reporting, or returns the cached path if already downloaded.
      */
     private Path downloadClientJar(String url, String versionId) throws IOException, InterruptedException {
-        Files.createDirectories(ToolingConstants.JAR_CACHE);
+        Files.createDirectories(paths.jarCache());
 
-        Path jarPath = ToolingConstants.getJarPath(versionId);
+        Path jarPath = paths.jarPath(versionId);
 
         if (Files.exists(jarPath)) {
             System.out.println("Using cached JAR: " + jarPath);
@@ -241,7 +245,7 @@ public class AssetDownloader {
             .orElse(-1);
 
         try (InputStream in = response.body()) {
-            Path tempFile = ToolingConstants.JAR_CACHE.resolve("download-" + System.currentTimeMillis() + ".tmp");
+            Path tempFile = paths.jarCache().resolve("download-" + System.currentTimeMillis() + ".tmp");
             long totalRead = 0;
             byte[] buffer = new byte[8_192];
             int read;

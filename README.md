@@ -664,31 +664,47 @@ MinecraftImageGenerator/
 The project includes a GitHub Actions workflow for generating and updating Minecraft item spritesheets and overlays. This is triggered manually via `workflow_dispatch` and supports:
 
 - Downloading Minecraft assets for any version
-- Rendering items at configurable sizes (requires .NET 10)
+- Rendering every block and item icon at a configurable size
 - Generating sprite atlases with coordinate metadata
 - Generating item overlays for colored variants (armor, potions, etc.)
 
+The render step draws the icons in-process with
+[asset-renderer](https://github.com/minecraft-library/asset-renderer), an Apache-2.0 Java library that reads
+the client JAR the download step cached. It needs nothing beyond the JDK, and the tooling pins it to a commit
+in `tooling/pom.xml` because the library has no tagged releases.
+
 ### Configurable tooling outputs and atlas pages
 
-`MinecraftAssetTool` accepts `--work-dir=<path>`, `--output-dir=<path>` and
-`--renderer-dir=<path>`. Set these separately for each Minecraft version when
-calling the tooling from another build system. The same paths can be set with
-`generator.tooling.workDir`, `generator.tooling.outputDir` and
-`generator.tooling.rendererDir` JVM system properties. Existing default paths remain unchanged.
+By default the tooling keeps its scratch files under `tooling/build` and writes
+spritesheets and JSON into `generator/src/main/resources/minecraft/assets`.
+`MinecraftAssetTool`, `SpritesheetGenerator` and `OverlayGenerator` all accept
+`--work-dir=<path>` and `--output-dir=<path>` to move those, which is handy when
+another build drives the tooling once per Minecraft version. The same two
+settings can be given as the JVM system properties `generator.tooling.workDir`
+and `generator.tooling.outputDir`, which is the way to pass them through the
+Maven profiles. A flag wins over a property.
 
-`--size` controls the rendered image size and the default item-atlas tile size.
-`--tile-size` overrides just the tile size. `--atlas-width`, `--atlas-height`
-and `--padding` control page bounds and transparent gutters. Standalone
-`SpritesheetGenerator` supports these atlas options and `--input`.
+`--size` sets the render size only. Atlas tiles stay at 256px unless you pass
+`--tile-size`. `--atlas-width`, `--atlas-height` and `--padding` bound each page
+and add a transparent gutter around every tile. All of these are checked before
+any download or render starts, so a bad value fails immediately. The overlay
+generator reads its definitions from a file bundled with the tooling; pass
+`--overlay-definitions=<file>` to use your own instead.
 
 ```text
-MinecraftAssetTool --download --render --spritesheet --no-clean --version=26.3
+MinecraftAssetTool --download --render --spritesheet --version=26.3
   --work-dir=build/26.3/work --output-dir=build/26.3/generated
-  --size=64 --atlas-width=2048 --atlas-height=2048 --padding=1
+  --tile-size=64 --atlas-width=2048 --atlas-height=2048 --padding=1
 ```
 
-The first page keeps its original PNG filename; additional pages use `-1`,
-`-2`, etc. Coordinate JSON remains an array with `name`, `x`, `y`, and `size`,
-plus `page`, `atlas` (PNG filename), `atlasWidth`, and `atlasHeight` for each entry.
-Paging and padding are opt-in. The generator library's bundled single-page
-resources retain their existing default layout.
+When the tiles do not fit on one page, the first page keeps its file name and
+later pages get `-1`, `-2` and so on before the extension. Every coordinates
+entry carries `page` and `atlas` (the PNG file name) alongside `name`, `x`, `y`
+and `size`. Numbered pages left behind by an earlier, larger run are deleted.
+The generator library reads the `atlas` field, so a paged atlas placed in its
+resources loads without any other change.
+
+The tool deletes `tooling/build` at the end of a run, as it always has. A work
+directory you chose yourself is kept unless you pass `--clean`, and `--no-clean`
+keeps the default one too. Cleanup refuses to run when the work directory
+contains the current directory or the output directory.

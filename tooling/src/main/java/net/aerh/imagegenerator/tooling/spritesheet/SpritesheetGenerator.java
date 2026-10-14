@@ -1,8 +1,8 @@
 package net.aerh.imagegenerator.tooling.spritesheet;
 
 import com.google.gson.JsonObject;
-import net.aerh.imagegenerator.tooling.ToolingConstants;
-import net.aerh.imagegenerator.tooling.ToolingArguments;
+import net.aerh.imagegenerator.tooling.CliArgs;
+import net.aerh.imagegenerator.tooling.ToolingPaths;
 import net.aerh.imagegenerator.tooling.minecraft.TrimPaletteExtractor;
 import net.hypixel.nerdbot.marmalade.image.ImageUtil;
 
@@ -10,6 +10,8 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -17,51 +19,51 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Generates a texture atlas from individual PNG textures.
+ * Generates the item texture atlas from a directory of individual PNG renders.
  */
 public class SpritesheetGenerator extends AtlasGenerator {
 
-    private static final int ATLAS_WIDTH = IMAGE_SIZE * 16;
+    public static final String INPUT_FLAG = "--input";
+
     private static final String[] ARMOR_TYPES = {"helmet", "chestplate", "leggings", "boots"};
 
-    private final String inputPath;
+    private final Path inputDir;
+    private final Path minecraftAssets;
     private Set<String> trimMaterials;
 
-    public SpritesheetGenerator(String inputPath) {
-        this(inputPath, new AtlasLayout(IMAGE_SIZE, ATLAS_WIDTH, Integer.MAX_VALUE, 0));
+    /**
+     * Packs the renders found in {@link ToolingPaths#renderedItems()}.
+     */
+    public SpritesheetGenerator(ToolingPaths paths, AtlasLayout layout) {
+        this(paths.renderedItems(), paths, layout);
     }
 
-    public SpritesheetGenerator(String inputPath, AtlasLayout layout) {
+    public SpritesheetGenerator(Path inputDir, ToolingPaths paths, AtlasLayout layout) {
         super(
             layout,
-            ToolingConstants.GENERATOR_SPRITESHEETS + "/minecraft_texture_atlas.png",
-            ToolingConstants.GENERATOR_JSON + "/atlas_coordinates.json"
+            paths.spritesheets().resolve("minecraft_texture_atlas.png"),
+            paths.json().resolve("atlas_coordinates.json")
         );
-        this.inputPath = inputPath;
+        this.inputDir = inputDir;
+        this.minecraftAssets = paths.minecraftAssets();
     }
 
     public static void main(String[] args) {
-        ToolingArguments.configureDirectories(args);
-        String inputPath = ToolingConstants.RENDERED_ITEMS.toString();
-        int tileSize = IMAGE_SIZE, width = ATLAS_WIDTH, height = Integer.MAX_VALUE, padding = 0;
+        try {
+            CliArgs.checkKnown(args, Set.of(), Set.of(
+                INPUT_FLAG, AtlasLayout.TILE_SIZE_FLAG, AtlasLayout.ATLAS_WIDTH_FLAG, AtlasLayout.ATLAS_HEIGHT_FLAG,
+                AtlasLayout.PADDING_FLAG, ToolingPaths.WORK_DIR_FLAG, ToolingPaths.OUTPUT_DIR_FLAG
+            ));
+            ToolingPaths paths = ToolingPaths.fromArgs(args);
+            AtlasLayout layout = AtlasLayout.fromArgs(args, AtlasLayout.DEFAULT);
+            Path inputDir = CliArgs.pathValue(args, INPUT_FLAG).orElse(paths.renderedItems());
 
-        for (String arg : args) {
-            if (arg.startsWith("--input=")) {
-                inputPath = arg.substring("--input=".length());
-            } else if (arg.startsWith("--tile-size=")) {
-                tileSize = Integer.parseInt(arg.substring("--tile-size=".length()));
-            } else if (arg.startsWith("--atlas-width=")) {
-                width = Integer.parseInt(arg.substring("--atlas-width=".length()));
-            } else if (arg.startsWith("--atlas-height=")) {
-                height = Integer.parseInt(arg.substring("--atlas-height=".length()));
-            } else if (arg.startsWith("--padding=")) {
-                padding = Integer.parseInt(arg.substring("--padding=".length()));
-            }
+            new SpritesheetGenerator(inputDir, paths, layout).generate();
+            System.out.println("Texture atlas generation complete!");
+        } catch (IllegalArgumentException | UncheckedIOException e) {
+            System.err.println("Error: " + e.getMessage());
+            System.exit(1);
         }
-
-        SpritesheetGenerator generator = new SpritesheetGenerator(inputPath, new AtlasLayout(tileSize, width, height, padding));
-        generator.generate();
-        System.out.println("Texture atlas generation complete!");
     }
 
     private boolean isArmorTrimVariant(String name) {
@@ -79,13 +81,17 @@ public class SpritesheetGenerator extends AtlasGenerator {
             );
     }
 
+    /**
+     * Reads the trim material names so renders of trimmed armour can be left out of the atlas. Assets without
+     * any palettes give an empty set; a palette layout that is present but broken ends the run, because packing
+     * every trim variant by mistake is exactly what the filter exists to prevent.
+     */
     private void loadTrimMaterials() {
         try {
-            trimMaterials = TrimPaletteExtractor.extractAllPalettes().keySet();
+            trimMaterials = TrimPaletteExtractor.load(minecraftAssets).materials().keySet();
             System.out.println("Loaded " + trimMaterials.size() + " trim materials from assets.");
-        } catch (Exception e) {
-            System.err.println("Failed to load trim materials: " + e.getMessage());
-            trimMaterials = Set.of();
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to load trim materials: " + e.getMessage(), e);
         }
     }
 
@@ -94,7 +100,7 @@ public class SpritesheetGenerator extends AtlasGenerator {
         loadTrimMaterials();
 
         List<AtlasEntry> textures = new ArrayList<>();
-        File folder = new File(inputPath);
+        File folder = inputDir.toFile();
         File[] files = folder.listFiles(f -> f.isFile() && f.getName().toLowerCase().endsWith(".png"));
 
         if (files == null) {
