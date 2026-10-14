@@ -45,9 +45,8 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      # MinecraftRenderer builds on SixLabors ImageSharp 4, which needs a license key to compile.
-      # Store the key as a repository secret; without it the render step stops with a one-line explanation.
-      SIXLABORS_LICENSE_KEY: ${{ secrets.SIXLABORS_LICENSE_KEY }}
+      # The render step draws every block and item in the Maven JVM, so give it room for the renderer's context.
+      MAVEN_OPTS: -Xmx4g
 
     steps:
       - name: Checkout code
@@ -55,18 +54,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up JDK 21
+      - name: Set up JDK 25
         uses: actions/setup-java@v6.0.1
         with:
           java-version: '25'
           distribution: 'temurin'
           cache: maven
-
-      - name: Set up .NET SDK
-        if: inputs.pipeline == 'full' || inputs.pipeline == 'render-only'
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: '10.0.x'
 
       - name: Build Tooling Module
         run: mvn -pl tooling -am compile -DskipTests -q

@@ -3,6 +3,8 @@ package net.aerh.imagegenerator.tooling;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
 
@@ -21,56 +23,46 @@ class ToolingPathsTest {
         ToolingPaths paths = ToolingPaths.defaults();
         assertEquals(Path.of("tooling/build"), paths.workDir());
         assertEquals(Path.of("generator/src/main/resources/minecraft/assets"), paths.outputDir());
-        assertEquals(Path.of("tooling/build/MinecraftRenderer"), paths.rendererDir());
     }
 
     @Test
     void derivedPathsHangOffTheWorkAndOutputDirectories() {
-        ToolingPaths paths = new ToolingPaths(Path.of("w"), Path.of("o"), Path.of("r"));
+        ToolingPaths paths = new ToolingPaths(Path.of("w"), Path.of("o"));
         assertEquals(Path.of("w/minecraft-assets"), paths.minecraftAssets());
         assertEquals(Path.of("w/rendered-items"), paths.renderedItems());
         assertEquals(Path.of("w/minecraft-jars"), paths.jarCache());
         assertEquals(Path.of("w/minecraft-mappings"), paths.mappingsCache());
+        assertEquals(Path.of("w/asset-renderer"), paths.rendererCache());
         assertEquals(Path.of("o/spritesheets"), paths.spritesheets());
         assertEquals(Path.of("o/json"), paths.json());
     }
 
     @Test
     void cachedJarAndMappingsFilesAreNamedByVersion() {
-        ToolingPaths paths = new ToolingPaths(Path.of("w"), Path.of("o"), Path.of("r"));
+        ToolingPaths paths = new ToolingPaths(Path.of("w"), Path.of("o"));
         assertEquals(Path.of("w/minecraft-jars/minecraft-1.21.4-client.jar"), paths.jarPath("1.21.4"));
         assertEquals(Path.of("w/minecraft-mappings/minecraft-1.21.4-client.txt"), paths.mappingsPath("1.21.4"));
     }
 
     @Test
-    void flagsOverrideEveryDirectory() {
-        String[] args = {"--work-dir=build/w", "--output-dir=build/o", "--renderer-dir=build/r"};
+    void flagsOverrideBothDirectories() {
+        String[] args = {"--work-dir=build/w", "--output-dir=build/o"};
         ToolingPaths paths = ToolingPaths.fromArgs(args);
         assertEquals(Path.of("build/w"), paths.workDir());
         assertEquals(Path.of("build/o"), paths.outputDir());
-        assertEquals(Path.of("build/r"), paths.rendererDir());
-    }
-
-    @Test
-    void rendererDirectoryFollowsACustomWorkDirectoryWhenNotGiven() {
-        ToolingPaths paths = ToolingPaths.fromArgs(new String[]{"--work-dir=build/w"});
-        assertEquals(Path.of("build/w/MinecraftRenderer"), paths.rendererDir());
     }
 
     @Test
     void systemPropertiesApplyWhenFlagsAreAbsent() {
         System.setProperty(ToolingPaths.WORK_DIR_PROPERTY, "prop/w");
         System.setProperty(ToolingPaths.OUTPUT_DIR_PROPERTY, "prop/o");
-        System.setProperty(ToolingPaths.RENDERER_DIR_PROPERTY, "prop/r");
         try {
             ToolingPaths paths = ToolingPaths.fromArgs(new String[]{});
             assertEquals(Path.of("prop/w"), paths.workDir());
             assertEquals(Path.of("prop/o"), paths.outputDir());
-            assertEquals(Path.of("prop/r"), paths.rendererDir());
         } finally {
             System.clearProperty(ToolingPaths.WORK_DIR_PROPERTY);
             System.clearProperty(ToolingPaths.OUTPUT_DIR_PROPERTY);
-            System.clearProperty(ToolingPaths.RENDERER_DIR_PROPERTY);
         }
     }
 
@@ -85,13 +77,6 @@ class ToolingPathsTest {
     }
 
     @Test
-    void anEmptyDirectoryFlagIsRejected() {
-        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
-            () -> ToolingPaths.fromArgs(new String[]{"--output-dir="}));
-        assertEquals("--output-dir must not be empty", error.getMessage());
-    }
-
-    @Test
     void aBlankSystemPropertyCountsAsUnset() {
         System.setProperty(ToolingPaths.WORK_DIR_PROPERTY, "  ");
         try {
@@ -99,6 +84,13 @@ class ToolingPathsTest {
         } finally {
             System.clearProperty(ToolingPaths.WORK_DIR_PROPERTY);
         }
+    }
+
+    @Test
+    void anEmptyDirectoryFlagIsRejected() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> ToolingPaths.fromArgs(new String[]{"--output-dir="}));
+        assertEquals("--output-dir must not be empty", error.getMessage());
     }
 
     @Test
@@ -143,22 +135,35 @@ class ToolingPathsTest {
     }
 
     @Test
-    void cleanupIsRefusedWhenACustomRendererDirectoryIsInsideTheWorkDirectory() {
-        ToolingPaths paths = ToolingPaths.fromArgs(new String[]{"--work-dir=build/w", "--renderer-dir=build/w/renderer"});
-        Optional<String> refusal = paths.cleanupRefusal(root.resolve("project"));
-        assertTrue(refusal.isPresent());
-        assertTrue(refusal.get().contains("renderer dir"), refusal.get());
+    void cachedClientVersionIsReadFromTheOnlyCachedJar() throws IOException {
+        ToolingPaths paths = new ToolingPaths(root.resolve("w"), root.resolve("o"));
+        Files.createDirectories(paths.jarCache());
+        Files.writeString(paths.jarCache().resolve("minecraft-26.3-client.jar"), "x");
+        Files.writeString(paths.jarCache().resolve("download-123.tmp"), "x");
+
+        assertEquals(Optional.of("26.3"), paths.cachedClientVersion());
     }
 
     @Test
-    void cleanupIsAllowedWhenTheRendererDirectoryIsAtItsDefaultLocationInsideTheWorkDirectory() {
-        ToolingPaths paths = ToolingPaths.fromArgs(new String[]{"--work-dir=build/w", "--renderer-dir=build/w/MinecraftRenderer"});
-        assertEquals(Optional.empty(), paths.cleanupRefusal(root.resolve("project")));
+    void cachedClientVersionIsEmptyWhenNothingIsCached() throws IOException {
+        ToolingPaths paths = new ToolingPaths(root.resolve("w"), root.resolve("o"));
+        assertEquals(Optional.empty(), paths.cachedClientVersion());
+
+        Files.createDirectories(paths.jarCache());
+        assertEquals(Optional.empty(), paths.cachedClientVersion());
     }
 
     @Test
-    void cleanupIsAllowedWhenTheRendererDirectoryIsOutsideTheWorkDirectory() {
-        ToolingPaths paths = ToolingPaths.fromArgs(new String[]{"--work-dir=build/w", "--renderer-dir=renderer"});
-        assertEquals(Optional.empty(), paths.cleanupRefusal(root.resolve("project")));
+    void severalCachedJarsNeedAnExplicitVersion() throws IOException {
+        ToolingPaths paths = new ToolingPaths(root.resolve("w"), root.resolve("o"));
+        Files.createDirectories(paths.jarCache());
+        Files.writeString(paths.jarCache().resolve("minecraft-26.2-client.jar"), "x");
+        Files.writeString(paths.jarCache().resolve("minecraft-26.3-client.jar"), "x");
+
+        IOException error = assertThrows(IOException.class, paths::cachedClientVersion);
+
+        assertTrue(error.getMessage().contains("26.2"), error.getMessage());
+        assertTrue(error.getMessage().contains("26.3"), error.getMessage());
+        assertTrue(error.getMessage().contains("--version"), error.getMessage());
     }
 }

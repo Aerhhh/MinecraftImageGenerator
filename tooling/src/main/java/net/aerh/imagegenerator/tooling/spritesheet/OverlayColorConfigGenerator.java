@@ -16,10 +16,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.stream.Stream;
 
 /**
  * Generates overlay_colors.json by extracting colors and trim palette PNGs
@@ -75,7 +72,7 @@ public class OverlayColorConfigGenerator {
     }
 
     private ExtractedColors extractColorsFromJar() throws IOException {
-        String resolvedVersion = version != null ? version : cachedVersion(paths.jarCache()).orElse(null);
+        String resolvedVersion = version != null ? version : paths.cachedClientVersion().orElse(null);
 
         if (resolvedVersion == null) {
             System.err.println("  ERROR: No cached JAR found. Run 'MinecraftAssetTool --download' first.");
@@ -107,38 +104,6 @@ public class OverlayColorConfigGenerator {
             e.printStackTrace();
             return null;
         }
-    }
-
-    /**
-     * The version of the one client JAR in the cache, or empty when none is cached.
-     *
-     * @throws IOException if several versions are cached, since picking one silently would be a guess
-     */
-    static Optional<String> cachedVersion(Path jarCache) throws IOException {
-        if (!Files.isDirectory(jarCache)) {
-            return Optional.empty();
-        }
-
-        List<String> versions;
-        try (Stream<Path> files = Files.list(jarCache)) {
-            versions = files
-                .map(file -> file.getFileName().toString())
-                .filter(name -> name.startsWith("minecraft-") && name.endsWith("-client.jar"))
-                .map(name -> name.substring("minecraft-".length(), name.length() - "-client.jar".length()))
-                .sorted()
-                .toList();
-        }
-
-        if (versions.isEmpty()) {
-            return Optional.empty();
-        }
-
-        if (versions.size() > 1) {
-            throw new IOException("Several client JARs are cached (" + String.join(", ", versions)
-                + "); pass --version to choose one");
-        }
-
-        return Optional.of(versions.get(0));
     }
 
     private TrimPalettes extractTrimPalettes() throws IOException {

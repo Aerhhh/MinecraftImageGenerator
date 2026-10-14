@@ -52,7 +52,7 @@ public class SpritesheetGenerator extends AtlasGenerator {
         try {
             CliArgs.checkKnown(args, Set.of(), Set.of(
                 INPUT_FLAG, AtlasLayout.TILE_SIZE_FLAG, AtlasLayout.ATLAS_WIDTH_FLAG, AtlasLayout.ATLAS_HEIGHT_FLAG,
-                AtlasLayout.PADDING_FLAG, ToolingPaths.WORK_DIR_FLAG, ToolingPaths.OUTPUT_DIR_FLAG, ToolingPaths.RENDERER_DIR_FLAG
+                AtlasLayout.PADDING_FLAG, ToolingPaths.WORK_DIR_FLAG, ToolingPaths.OUTPUT_DIR_FLAG
             ));
             ToolingPaths paths = ToolingPaths.fromArgs(args);
             AtlasLayout layout = AtlasLayout.fromArgs(args, AtlasLayout.DEFAULT);

@@ -4,51 +4,15 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.aerh.imagegenerator.tooling.minecraft.TrimPaletteExtractor.TrimPalettes;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OverlayColorConfigGeneratorTest {
-
-    @TempDir
-    Path jarCache;
-
-    @Test
-    void cachedVersionIsReadFromTheOnlyCachedJar() throws IOException {
-        Files.writeString(jarCache.resolve("minecraft-26.3-client.jar"), "x");
-        Files.writeString(jarCache.resolve("download-123.tmp"), "x");
-
-        assertEquals(Optional.of("26.3"), OverlayColorConfigGenerator.cachedVersion(jarCache));
-    }
-
-    @Test
-    void cachedVersionIsEmptyWhenNothingIsCached() throws IOException {
-        assertEquals(Optional.empty(), OverlayColorConfigGenerator.cachedVersion(jarCache.resolve("missing")));
-        assertEquals(Optional.empty(), OverlayColorConfigGenerator.cachedVersion(jarCache));
-    }
-
-    @Test
-    void severalCachedJarsNeedAnExplicitVersion() throws IOException {
-        Files.writeString(jarCache.resolve("minecraft-26.2-client.jar"), "x");
-        Files.writeString(jarCache.resolve("minecraft-26.3-client.jar"), "x");
-
-        IOException error = assertThrows(IOException.class, () -> OverlayColorConfigGenerator.cachedVersion(jarCache));
-
-        assertTrue(error.getMessage().contains("26.2"), error.getMessage());
-        assertTrue(error.getMessage().contains("26.3"), error.getMessage());
-        assertTrue(error.getMessage().contains("--version"), error.getMessage());
-    }
 
     private static final int[] GREYS = {
         0xfff1f1f1, 0xffe1e1e1, 0xffd0d0d0, 0xffbcbcbc, 0xffa5a5a5, 0xff898989, 0xff636363, 0xff000000

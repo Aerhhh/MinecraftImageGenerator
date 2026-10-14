@@ -145,7 +145,7 @@ class OverlayGeneratorTest {
     }
 
     private ToolingPaths paths() {
-        return new ToolingPaths(root.resolve("work"), root.resolve("out"), root.resolve("renderer"));
+        return new ToolingPaths(root.resolve("work"), root.resolve("out"));
     }
 
     private Map<String, JsonObject> entriesByName() throws IOException {

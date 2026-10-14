@@ -52,12 +52,12 @@ public class MinecraftAssetTool {
 
     private static final Set<String> FLAGS = Set.of(
         "--all", "--pipeline", "--download", "--render", "--spritesheet", "--overlays", "--skip-download",
-        "--skip-render", "--debug", "--force-clone", "--force-build", "--clean", "--no-clean", "--help"
+        "--skip-render", "--debug", "--clean", "--no-clean", "--help"
     );
     private static final Set<String> VALUED_FLAGS = Set.of(
         VERSION_FLAG, SIZE_FLAG, AtlasLayout.TILE_SIZE_FLAG, AtlasLayout.ATLAS_WIDTH_FLAG,
         AtlasLayout.ATLAS_HEIGHT_FLAG, AtlasLayout.PADDING_FLAG, ToolingPaths.WORK_DIR_FLAG,
-        ToolingPaths.OUTPUT_DIR_FLAG, ToolingPaths.RENDERER_DIR_FLAG, OverlayGenerator.DEFINITIONS_FLAG
+        ToolingPaths.OUTPUT_DIR_FLAG, OverlayGenerator.DEFINITIONS_FLAG
     );
 
     private boolean runDownload = false;
@@ -71,8 +71,6 @@ public class MinecraftAssetTool {
     private String minecraftVersion = null;
     private int renderSize = DEFAULT_RENDER_SIZE;
     private boolean keepJar = true;
-    private boolean forceReclone = false;
-    private boolean forceRebuild = false;
     /** Null until {@code --clean} or {@code --no-clean} decides; the default then depends on the work directory. */
     private Boolean cleanWorkDir = null;
 
@@ -155,8 +153,6 @@ public class MinecraftAssetTool {
                     tool.debug = true;
                     ToolingSupport.setDebugEnabled(true);
                 }
-                case "--force-clone" -> tool.forceReclone = true;
-                case "--force-build" -> tool.forceRebuild = true;
                 case "--clean" -> tool.cleanWorkDir = true;
                 case "--no-clean" -> tool.cleanWorkDir = false;
                 default -> {
@@ -185,7 +181,7 @@ public class MinecraftAssetTool {
         System.out.println("Steps (can combine multiple):");
         System.out.println("  --all, --pipeline    Run complete pipeline (download + render + spritesheet + overlays)");
         System.out.println("  --download           Download Minecraft assets from Mojang");
-        System.out.println("  --render             Render items/blocks using MinecraftRenderer (.NET)");
+        System.out.println("  --render             Render every block and item icon from the client JAR");
         System.out.println("  --spritesheet        Generate spritesheet from rendered images");
         System.out.println("  --overlays           Generate overlay spritesheet and color configs from assets");
         System.out.println();
@@ -199,13 +195,10 @@ public class MinecraftAssetTool {
         System.out.println("  --work-dir=<path>    Extracted assets, rendered images and caches (default: tooling/build)");
         System.out.println("  --output-dir=<path>  Generated spritesheets and JSON directory");
         System.out.println("                       (default: generator/src/main/resources/minecraft/assets)");
-        System.out.println("  --renderer-dir=<p>   MinecraftRenderer checkout directory (default: <work-dir>/MinecraftRenderer)");
         System.out.println("  --overlay-definitions=<file>");
         System.out.println("                       Overlay definitions JSON to use instead of the bundled one");
         System.out.println("  --skip-download      Skip download step (use cached assets)");
         System.out.println("  --skip-render        Skip render step (use existing renders)");
-        System.out.println("  --force-clone        Force re-clone MinecraftRenderer repository");
-        System.out.println("  --force-build        Force rebuild MinecraftRenderer");
         System.out.println("  --clean              Delete the work directory after completion");
         System.out.println("                       (the default for tooling/build; a custom --work-dir is kept unless asked)");
         System.out.println("  --no-clean           Keep the work directory after completion");
@@ -226,8 +219,7 @@ public class MinecraftAssetTool {
         System.out.println("  mvn compile -P generate-spritesheet -pl tooling");
         System.out.println();
         System.out.println("Prerequisites:");
-        System.out.println("  - .NET SDK 10.0+ for rendering (https://dotnet.microsoft.com/download)");
-        System.out.println("  - Git for cloning MinecraftRenderer");
+        System.out.println("  - A JDK and network access to Mojang's servers; icons are rendered in this JVM");
     }
 
     public void run() throws Exception {
@@ -313,7 +305,6 @@ public class MinecraftAssetTool {
             + (layout.maxHeight() == AtlasLayout.UNLIMITED ? "unlimited" : layout.maxHeight()) + ", padding " + layout.padding() + "px");
         System.out.println("  Work dir: " + paths.workDir());
         System.out.println("  Output dir: " + paths.outputDir());
-        System.out.println("  Renderer dir: " + paths.rendererDir());
         System.out.println("  Overlay definitions: " + (overlayDefinitions != null ? overlayDefinitions : "bundled"));
         System.out.println("  Clean work dir after run: " + (cleansWorkDir() ? "yes" : "no"));
         System.out.println("  Steps: " + stepsSummary());
@@ -335,18 +326,21 @@ public class MinecraftAssetTool {
     }
 
     /**
-     * Renders every item with MinecraftRenderer. A missing .NET SDK skips the step with a warning, since the
-     * other steps can still be useful; a renderer that is present but fails ends the run, because packing a
-     * missing or stale set of renders afterwards would look like success.
+     * Renders every block and item icon in this JVM from the cached client JAR. When no version was given and
+     * no JAR is cached yet, the download step runs first so the render has something to read; a render that
+     * fails ends the run, because packing a missing or stale set of icons afterwards would look like success.
      */
     private void runRenderStep() throws Exception {
-        System.out.println("\n[Render] Running MinecraftRenderer...");
+        System.out.println("\n[Render] Rendering block and item icons...");
         System.out.println("-".repeat(40));
 
-        if (!isDotNetAvailable()) {
-            System.out.println("WARNING: .NET SDK not found. Skipping render step.");
-            System.out.println("Install .NET SDK 10.0+ from https://dotnet.microsoft.com/download");
-            return;
+        if (minecraftVersion == null) {
+            minecraftVersion = paths.cachedClientVersion().orElse(null);
+        }
+
+        if (minecraftVersion == null || !Files.isRegularFile(paths.jarPath(minecraftVersion))) {
+            System.out.println("No cached client JAR for the requested version; downloading first.");
+            runDownloadStep();
         }
 
         if (Files.exists(paths.renderedItems())) {
@@ -354,10 +348,7 @@ public class MinecraftAssetTool {
             ToolingSupport.deleteDirectory(paths.renderedItems());
         }
 
-        ItemRenderer renderer = new ItemRenderer(paths);
-        renderer.setDebug(debug);
-        renderer.setup(forceReclone, forceRebuild);
-        renderer.renderAllItems(paths.renderedItems(), minecraftVersion, renderSize);
+        new ItemIconRenderer(paths).renderAll(paths.renderedItems(), minecraftVersion, renderSize);
     }
 
     private void runSpritesheetStep() {
@@ -400,18 +391,6 @@ public class MinecraftAssetTool {
             System.out.println("[Cleanup] Work directory removed.");
         } catch (IOException e) {
             System.err.println("[Cleanup] Failed to remove work directory: " + e.getMessage());
-        }
-    }
-
-    private boolean isDotNetAvailable() {
-        try {
-            ProcessBuilder pb = new ProcessBuilder("dotnet", "--version");
-            pb.redirectErrorStream(true);
-            Process process = pb.start();
-            boolean finished = process.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
-            return finished && process.exitValue() == 0;
-        } catch (Exception e) {
-            return false;
         }
     }
 

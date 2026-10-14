@@ -664,29 +664,25 @@ MinecraftImageGenerator/
 The project includes a GitHub Actions workflow for generating and updating Minecraft item spritesheets and overlays. This is triggered manually via `workflow_dispatch` and supports:
 
 - Downloading Minecraft assets for any version
-- Rendering items at configurable sizes (requires .NET 10)
+- Rendering every block and item icon at a configurable size
 - Generating sprite atlases with coordinate metadata
 - Generating item overlays for colored variants (armor, potions, etc.)
 
-The render step clones and builds [MinecraftRenderer](https://github.com/ptlthg/MinecraftRenderer), which
-depends on SixLabors ImageSharp 4. That library will not compile without a Six Labors license key, so the
-workflow passes the `SIXLABORS_LICENSE_KEY` repository secret to the build, and a local run needs the same
-variable in its environment or a `sixlabors.lic` file in the renderer checkout. Open-source projects can apply
-for a free Community license at [licensing.sixlabors.com](https://licensing.sixlabors.com). Without a key the
-tool stops before cloning anything and says so.
+The render step draws the icons in-process with
+[asset-renderer](https://github.com/minecraft-library/asset-renderer), an Apache-2.0 Java library that reads
+the client JAR the download step cached. It needs nothing beyond the JDK, and the tooling pins it to a commit
+in `tooling/pom.xml` because the library has no tagged releases.
 
 ### Configurable tooling outputs and atlas pages
 
 By default the tooling keeps its scratch files under `tooling/build` and writes
 spritesheets and JSON into `generator/src/main/resources/minecraft/assets`.
 `MinecraftAssetTool`, `SpritesheetGenerator` and `OverlayGenerator` all accept
-`--work-dir=<path>`, `--output-dir=<path>` and `--renderer-dir=<path>` to move
-those, which is handy when another build drives the tooling once per Minecraft
-version. The same three settings can be given as the JVM system properties
-`generator.tooling.workDir`, `generator.tooling.outputDir` and
-`generator.tooling.rendererDir`, which is the way to pass them through the Maven
-profiles. A flag wins over a property. The renderer directory defaults to
-`MinecraftRenderer` inside whichever work directory is in use.
+`--work-dir=<path>` and `--output-dir=<path>` to move those, which is handy when
+another build drives the tooling once per Minecraft version. The same two
+settings can be given as the JVM system properties `generator.tooling.workDir`
+and `generator.tooling.outputDir`, which is the way to pass them through the
+Maven profiles. A flag wins over a property.
 
 `--size` sets the render size only. Atlas tiles stay at 256px unless you pass
 `--tile-size`. `--atlas-width`, `--atlas-height` and `--padding` bound each page
@@ -711,5 +707,4 @@ resources loads without any other change.
 The tool deletes `tooling/build` at the end of a run, as it always has. A work
 directory you chose yourself is kept unless you pass `--clean`, and `--no-clean`
 keeps the default one too. Cleanup refuses to run when the work directory
-contains the current directory, the output directory, or a renderer checkout
-you placed inside it.
+contains the current directory or the output directory.

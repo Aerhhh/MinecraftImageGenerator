@@ -25,6 +25,13 @@
             <artifactId>Marmalade</artifactId>
             <version>master-SNAPSHOT</version>
         </dependency>
+        <!-- Renders every block and item icon in-process from the client JAR. Pinned to a commit because
+             the library has no tagged releases; bump deliberately and re-run the spritesheet workflow. -->
+        <dependency>
+            <groupId>com.github.minecraft-library</groupId>
+            <artifactId>asset-renderer</artifactId>
+            <version>addedec7a2</version>
+        </dependency>
         <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>

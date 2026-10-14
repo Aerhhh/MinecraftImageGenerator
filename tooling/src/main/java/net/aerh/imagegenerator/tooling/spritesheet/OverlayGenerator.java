@@ -84,7 +84,7 @@ public class OverlayGenerator extends AtlasGenerator {
             System.out.println("=".repeat(50));
 
             CliArgs.checkKnown(args, Set.of(), Set.of(
-                ToolingPaths.WORK_DIR_FLAG, ToolingPaths.OUTPUT_DIR_FLAG, ToolingPaths.RENDERER_DIR_FLAG, DEFINITIONS_FLAG
+                ToolingPaths.WORK_DIR_FLAG, ToolingPaths.OUTPUT_DIR_FLAG, DEFINITIONS_FLAG
             ));
             ToolingPaths paths = ToolingPaths.fromArgs(args);
             Optional<Path> definitionsFile = CliArgs.pathValue(args, DEFINITIONS_FLAG);
