@@ -10,6 +10,7 @@ import org.junit.jupiter.api.io.TempDir;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -17,6 +18,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SpritesheetGeneratorTest {
@@ -93,6 +95,20 @@ class SpritesheetGeneratorTest {
         new SpritesheetGenerator(input, paths(), LAYOUT).generate();
 
         assertEquals(List.of("iron_helmet", "iron_helmet_amethyst_trim"), names());
+    }
+
+    @Test
+    void aPaletteLayoutWithoutItsKeyFailsTheRunInsteadOfPackingTrims() throws IOException {
+        Path input = root.resolve("input");
+        writePng(input.resolve("iron_helmet.png"), RED);
+        writePng(input.resolve("iron_helmet_amethyst_trim.png"), GREEN);
+        writePalette(paths().minecraftAssets().resolve("textures/palettes/trim/amethyst.png"));
+
+        UncheckedIOException error = assertThrows(UncheckedIOException.class,
+            () -> new SpritesheetGenerator(input, paths(), LAYOUT).generate());
+
+        assertTrue(error.getMessage().contains("trim_base.png"), error.getMessage());
+        assertFalse(Files.exists(paths().spritesheets()), "nothing should be written");
     }
 
     @Test

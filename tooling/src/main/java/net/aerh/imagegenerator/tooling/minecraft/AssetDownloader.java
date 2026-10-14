@@ -2,7 +2,7 @@ package net.aerh.imagegenerator.tooling.minecraft;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import net.aerh.imagegenerator.tooling.ToolingConstants;
+import net.aerh.imagegenerator.tooling.ToolingSupport;
 import net.aerh.imagegenerator.tooling.ToolingPaths;
 import net.hypixel.nerdbot.marmalade.http.HttpClient;
 
@@ -53,7 +53,7 @@ public class AssetDownloader {
     }
 
     public void setDebug(boolean debug) {
-        ToolingConstants.setDebugEnabled(debug);
+        ToolingSupport.setDebugEnabled(debug);
     }
 
     /**
@@ -77,7 +77,7 @@ public class AssetDownloader {
         System.out.println("Downloading Minecraft " + resolvedVersion + " assets...");
 
         String clientJarUrl = getClientJarUrl(resolvedVersion);
-        ToolingConstants.printDebug("Client JAR URL: " + clientJarUrl);
+        ToolingSupport.printDebug("Client JAR URL: " + clientJarUrl);
 
         Path jarPath = downloadClientJar(clientJarUrl, resolvedVersion);
         System.out.println("Downloaded client JAR: " + jarPath);
@@ -87,12 +87,13 @@ public class AssetDownloader {
             Path mappingsPath = downloadMappings(mappingsUrl, resolvedVersion);
             System.out.println("Downloaded mappings: " + mappingsPath);
         } else {
-            System.out.println("No mappings published for " + resolvedVersion + "; the JAR ships with real class names.");
+            System.out.println("No mappings published for " + resolvedVersion
+                + " (none exist for 26.1 and later, whose JARs carry real class names).");
         }
 
         if (clean && Files.exists(outputPath)) {
             System.out.println("Cleaning output directory: " + outputPath);
-            ToolingConstants.deleteDirectory(outputPath);
+            ToolingSupport.deleteDirectory(outputPath);
         }
 
         int count = extractAssets(jarPath);
@@ -100,7 +101,7 @@ public class AssetDownloader {
 
         if (!keepJar) {
             Files.deleteIfExists(jarPath);
-            ToolingConstants.printDebug("Deleted JAR file");
+            ToolingSupport.printDebug("Deleted JAR file");
         }
 
         return count;
@@ -137,7 +138,7 @@ public class AssetDownloader {
 
             if (versionId.equals(targetVersion)) {
                 String versionUrl = versionEntry.get("url").getAsString();
-                ToolingConstants.printDebug("Version manifest URL: " + versionUrl);
+                ToolingSupport.printDebug("Version manifest URL: " + versionUrl);
 
                 JsonObject versionMeta = HttpClient.getJson(versionUrl).orElseThrow();
                 JsonObject client = versionMeta.getAsJsonObject("downloads").getAsJsonObject("client");

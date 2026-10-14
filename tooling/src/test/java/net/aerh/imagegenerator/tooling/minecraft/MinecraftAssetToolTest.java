@@ -53,10 +53,54 @@ class MinecraftAssetToolTest {
     }
 
     @Test
-    void overlayDefinitionsFlagIsCaptured() {
-        MinecraftAssetTool tool = MinecraftAssetTool.parse(new String[]{"--overlay-definitions=defs.json"});
-        assertEquals(Path.of("defs.json"), tool.overlayDefinitions());
+    void versionIsTrimmed() {
+        assertEquals("26.3", MinecraftAssetTool.parse(new String[]{"--version= 26.3 "}).minecraftVersion());
+    }
+
+    @Test
+    void unknownOptionsAreRejected() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> MinecraftAssetTool.parse(new String[]{"--spritesheet", "--atlas-hieght=2048"}));
+        assertEquals("Unknown option: --atlas-hieght=2048", error.getMessage());
+    }
+
+    @Test
+    void aValuedOptionWithoutAValueIsRejected() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> MinecraftAssetTool.parse(new String[]{"--size"}));
+        assertEquals("--size needs a value, written as --size=<value>", error.getMessage());
+    }
+
+    @Test
+    void aValidOverlayDefinitionsFileIsAccepted() throws IOException {
+        Path definitions = root.resolve("defs.json");
+        Files.writeString(definitions, "{\"specialOverlays\": [], \"armorOverlayPatterns\": [\"wolf_\"]}");
+        MinecraftAssetTool tool = MinecraftAssetTool.parse(new String[]{"--overlay-definitions=" + definitions});
+        assertEquals(definitions, tool.overlayDefinitions());
         assertNull(MinecraftAssetTool.parse(new String[]{}).overlayDefinitions());
+    }
+
+    @Test
+    void aMissingOverlayDefinitionsFileFailsAtParseTime() {
+        Path definitions = root.resolve("missing.json");
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> MinecraftAssetTool.parse(new String[]{"--overlay-definitions=" + definitions}));
+        assertTrue(error.getMessage().contains("missing.json"), error.getMessage());
+    }
+
+    @Test
+    void aMalformedOverlayDefinitionsFileFailsAtParseTime() throws IOException {
+        Path definitions = root.resolve("broken.json");
+        Files.writeString(definitions, "{ not json");
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> MinecraftAssetTool.parse(new String[]{"--overlay-definitions=" + definitions}));
+        assertTrue(error.getMessage().contains("broken.json"), error.getMessage());
+    }
+
+    @Test
+    void anAbsolutePathToTheRepositoryWorkDirectoryStillCleansByDefault() {
+        Path absolute = Path.of("tooling/build").toAbsolutePath();
+        assertTrue(MinecraftAssetTool.parse(new String[]{"--work-dir=" + absolute}).cleansWorkDir());
     }
 
     @Test

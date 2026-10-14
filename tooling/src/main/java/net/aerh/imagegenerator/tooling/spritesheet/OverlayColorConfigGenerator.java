@@ -16,7 +16,9 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 /**
@@ -65,7 +67,7 @@ public class OverlayColorConfigGenerator {
         TrimPalettes trimPalettes = extractTrimPalettes();
 
         if (extractedColors == null) {
-            throw new IOException("Failed to extract colors from JAR. Ensure the Minecraft JAR and mappings are downloaded.");
+            throw new IOException("Failed to extract colors from the client JAR; see the errors above.");
         }
 
         JsonArray colorConfig = buildColorConfig(extractedColors, trimPalettes);
@@ -73,7 +75,7 @@ public class OverlayColorConfigGenerator {
     }
 
     private ExtractedColors extractColorsFromJar() throws IOException {
-        String resolvedVersion = version != null ? version : findCachedVersion();
+        String resolvedVersion = version != null ? version : cachedVersion(paths.jarCache()).orElse(null);
 
         if (resolvedVersion == null) {
             System.err.println("  ERROR: No cached JAR found. Run 'MinecraftAssetTool --download' first.");
@@ -107,21 +109,36 @@ public class OverlayColorConfigGenerator {
         }
     }
 
-    private String findCachedVersion() throws IOException {
-        Path jarCacheDir = paths.jarCache();
-        if (!Files.exists(jarCacheDir)) {
-            return null;
+    /**
+     * The version of the one client JAR in the cache, or empty when none is cached.
+     *
+     * @throws IOException if several versions are cached, since picking one silently would be a guess
+     */
+    static Optional<String> cachedVersion(Path jarCache) throws IOException {
+        if (!Files.isDirectory(jarCache)) {
+            return Optional.empty();
         }
 
-        try (Stream<Path> files = Files.list(jarCacheDir)) {
-            return files
-                .filter(p -> p.getFileName().toString().endsWith("-client.jar"))
-                .findFirst()
-                .map(p -> p.getFileName().toString()
-                    .replace("minecraft-", "")
-                    .replace("-client.jar", ""))
-                .orElse(null);
+        List<String> versions;
+        try (Stream<Path> files = Files.list(jarCache)) {
+            versions = files
+                .map(file -> file.getFileName().toString())
+                .filter(name -> name.startsWith("minecraft-") && name.endsWith("-client.jar"))
+                .map(name -> name.substring("minecraft-".length(), name.length() - "-client.jar".length()))
+                .sorted()
+                .toList();
         }
+
+        if (versions.isEmpty()) {
+            return Optional.empty();
+        }
+
+        if (versions.size() > 1) {
+            throw new IOException("Several client JARs are cached (" + String.join(", ", versions)
+                + "); pass --version to choose one");
+        }
+
+        return Optional.of(versions.get(0));
     }
 
     private TrimPalettes extractTrimPalettes() throws IOException {

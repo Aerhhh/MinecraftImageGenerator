@@ -113,6 +113,29 @@ class OverlayGeneratorTest {
     }
 
     @Test
+    void aNullColorModeInTheDefinitionsIsAnError() throws IOException {
+        Path definitions = root.resolve("definitions.json");
+        Files.writeString(definitions, """
+            {"specialOverlays": [{"fileName": "x", "colorOptions": "potion", "type": "NORMAL", "colorMode": null}]}
+            """);
+
+        IOException error = assertThrows(IOException.class, () -> new OverlayGenerator(paths(), definitions));
+
+        assertTrue(error.getMessage().contains("colorMode"), error.getMessage());
+        assertTrue(error.getMessage().contains("definitions.json"), error.getMessage());
+    }
+
+    @Test
+    void aNonStringArmorPatternIsAnError() throws IOException {
+        Path definitions = root.resolve("definitions.json");
+        Files.writeString(definitions, "{\"armorOverlayPatterns\": [\"leather_\", {\"x\": 1}]}");
+
+        IOException error = assertThrows(IOException.class, () -> new OverlayGenerator(paths(), definitions));
+
+        assertTrue(error.getMessage().contains("armorOverlayPatterns"), error.getMessage());
+    }
+
+    @Test
     void aMalformedDefinitionsFileIsAnError() throws IOException {
         Path definitions = root.resolve("broken.json");
         Files.writeString(definitions, "{ not json");

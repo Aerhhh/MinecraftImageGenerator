@@ -115,7 +115,10 @@ public class SpritesheetLoader {
             return null;
         }
 
-        return textures.computeIfAbsent(name, key -> slice(entry));
+        // Decode the page before touching the textures map, so a slow decode only blocks callers that need
+        // this page rather than everyone whose name happens to share a bin.
+        BufferedImage page = pages.computeIfAbsent(entry.atlasFileName(), this::decodePage);
+        return textures.computeIfAbsent(name, key -> slice(page, entry));
     }
 
     /**
@@ -224,9 +227,7 @@ public class SpritesheetLoader {
         return "Texture atlas coordinates file " + path + " entry " + index;
     }
 
-    private BufferedImage slice(AtlasEntry entry) {
-        BufferedImage page = pages.computeIfAbsent(entry.atlasFileName(), this::decodePage);
-
+    private BufferedImage slice(BufferedImage page, AtlasEntry entry) {
         try {
             return page.getSubimage(entry.x(), entry.y(), entry.size(), entry.size());
         } catch (RasterFormatException e) {

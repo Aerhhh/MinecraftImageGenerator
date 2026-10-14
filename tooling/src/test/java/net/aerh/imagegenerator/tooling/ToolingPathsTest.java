@@ -92,10 +92,27 @@ class ToolingPathsTest {
     }
 
     @Test
+    void aBlankSystemPropertyCountsAsUnset() {
+        System.setProperty(ToolingPaths.WORK_DIR_PROPERTY, "  ");
+        try {
+            assertEquals(Path.of("tooling/build"), ToolingPaths.fromArgs(new String[]{}).workDir());
+        } finally {
+            System.clearProperty(ToolingPaths.WORK_DIR_PROPERTY);
+        }
+    }
+
+    @Test
     void workDirectoryCountsAsDefaultOnlyWhenItIsTheRepositoryBuildDirectory() {
         assertTrue(ToolingPaths.defaults().isDefaultWorkDir());
         assertTrue(ToolingPaths.fromArgs(new String[]{"--work-dir=tooling/build"}).isDefaultWorkDir());
         assertFalse(ToolingPaths.fromArgs(new String[]{"--work-dir=build/w"}).isDefaultWorkDir());
+    }
+
+    @Test
+    void dottedAndAbsoluteSpellingsOfTheBuildDirectoryAreStillDefault() {
+        assertTrue(ToolingPaths.fromArgs(new String[]{"--work-dir=./tooling/build"}).isDefaultWorkDir());
+        Path absolute = Path.of("tooling/build").toAbsolutePath();
+        assertTrue(ToolingPaths.fromArgs(new String[]{"--work-dir=" + absolute}).isDefaultWorkDir());
     }
 
     @Test

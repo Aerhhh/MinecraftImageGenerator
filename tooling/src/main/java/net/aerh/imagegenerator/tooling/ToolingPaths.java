@@ -73,7 +73,7 @@ public record ToolingPaths(Path workDir, Path outputDir, Path rendererDir) {
      * up after itself without being asked.
      */
     public boolean isDefaultWorkDir() {
-        return workDir.normalize().equals(DEFAULT_WORK_DIR);
+        return workDir.toAbsolutePath().normalize().equals(DEFAULT_WORK_DIR.toAbsolutePath().normalize());
     }
 
     public Path minecraftAssets() {

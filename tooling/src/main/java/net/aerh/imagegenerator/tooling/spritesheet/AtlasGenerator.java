@@ -17,6 +17,9 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 /**
  * Base class for texture atlas generation.
@@ -118,12 +121,19 @@ public abstract class AtlasGenerator {
             return atlasOutputPath;
         }
 
+        NameParts parts = nameParts();
+        return atlasOutputPath.resolveSibling(parts.stem() + "-" + page + parts.extension());
+    }
+
+    private NameParts nameParts() {
         String fileName = atlasOutputPath.getFileName().toString();
         int dot = fileName.lastIndexOf('.');
-        String numbered = dot < 0
-            ? fileName + "-" + page
-            : fileName.substring(0, dot) + "-" + page + fileName.substring(dot);
-        return atlasOutputPath.resolveSibling(numbered);
+        return dot < 0
+            ? new NameParts(fileName, "")
+            : new NameParts(fileName.substring(0, dot), fileName.substring(dot));
+    }
+
+    private record NameParts(String stem, String extension) {
     }
 
     private void saveAtlas(BufferedImage atlas, Path path) {
@@ -140,22 +150,26 @@ public abstract class AtlasGenerator {
     }
 
     /**
-     * Deletes numbered page files beyond the last page just written. They can only be left over from an earlier
-     * run that needed more pages, and a consumer would otherwise treat them as current.
+     * Deletes every numbered page file beyond the last page just written. They can only be left over from an
+     * earlier run that needed more pages, and a consumer would otherwise treat them as current. The directory is
+     * scanned rather than counted upward, so a gap in the numbering does not hide later pages.
      */
     private void removeStalePages(int pageCount) {
-        for (int page = Math.max(pageCount, 1); ; page++) {
-            Path stale = pageOutputPath(page);
-            if (!Files.exists(stale)) {
-                return;
-            }
+        NameParts parts = nameParts();
+        Pattern numberedPage = Pattern.compile(Pattern.quote(parts.stem()) + "-(\\d{1,9})" + Pattern.quote(parts.extension()));
+        int firstStale = Math.max(pageCount, 1);
+        Path directory = atlasOutputPath.toAbsolutePath().getParent();
 
-            try {
-                Files.delete(stale);
-                System.out.println("Removed stale atlas page: " + stale);
-            } catch (IOException e) {
-                throw new UncheckedIOException("Failed to remove stale atlas page " + stale, e);
+        try (Stream<Path> files = Files.list(directory)) {
+            for (Path file : files.toList()) {
+                Matcher matcher = numberedPage.matcher(file.getFileName().toString());
+                if (matcher.matches() && Integer.parseInt(matcher.group(1)) >= firstStale) {
+                    Files.delete(file);
+                    System.out.println("Removed stale atlas page: " + file);
+                }
             }
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to remove stale atlas pages next to " + atlasOutputPath, e);
         }
     }
 

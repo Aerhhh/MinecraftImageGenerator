@@ -158,6 +158,19 @@ class AtlasGeneratorPagingTest {
     }
 
     @Test
+    void stalePagesBeyondAGapAreRemovedAndUnrelatedFilesAreKept() throws IOException {
+        Files.write(directory.resolve("atlas-3.png"), new byte[]{1, 2, 3});
+        Files.write(directory.resolve("other-1.png"), new byte[]{1, 2, 3});
+        Files.write(directory.resolve("atlas-x.png"), new byte[]{1, 2, 3});
+
+        new TestAtlas(new AtlasLayout(2, 4, 4, 0), List.of(entry("red", RED, 2))).generate();
+
+        assertFalse(Files.exists(directory.resolve("atlas-3.png")));
+        assertTrue(Files.exists(directory.resolve("other-1.png")), "a different atlas's pages are left alone");
+        assertTrue(Files.exists(directory.resolve("atlas-x.png")), "only numbered suffixes are pages");
+    }
+
+    @Test
     void aShrinkingRunKeepsThePagesItWroteAndRemovesTheRest() throws IOException {
         Files.write(directory.resolve("atlas-1.png"), new byte[]{1, 2, 3});
         Files.write(directory.resolve("atlas-2.png"), new byte[]{1, 2, 3});

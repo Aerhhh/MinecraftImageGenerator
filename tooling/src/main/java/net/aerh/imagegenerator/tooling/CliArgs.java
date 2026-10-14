@@ -2,6 +2,7 @@ package net.aerh.imagegenerator.tooling;
 
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Reads {@code --flag=value} and bare {@code --flag} arguments the way every tooling entry point expects them.
@@ -62,6 +63,31 @@ public final class CliArgs {
         }
 
         return Optional.of(Path.of(raw.get().trim()));
+    }
+
+    /**
+     * Rejects any argument that is not a bare flag from {@code flags} (like {@code --clean}) or a flag from
+     * {@code valuedFlags} with a value (like {@code --size=256}), so a typo cannot be silently ignored.
+     *
+     * @throws IllegalArgumentException naming the first unknown argument, or a valued flag given without its value
+     */
+    public static void checkKnown(String[] args, Set<String> flags, Set<String> valuedFlags) {
+        for (String arg : args) {
+            if (flags.contains(arg)) {
+                continue;
+            }
+
+            int equals = arg.indexOf('=');
+            if (equals > 0 && valuedFlags.contains(arg.substring(0, equals))) {
+                continue;
+            }
+
+            if (valuedFlags.contains(arg)) {
+                throw new IllegalArgumentException(arg + " needs a value, written as " + arg + "=<value>");
+            }
+
+            throw new IllegalArgumentException("Unknown option: " + arg);
+        }
     }
 
     /**

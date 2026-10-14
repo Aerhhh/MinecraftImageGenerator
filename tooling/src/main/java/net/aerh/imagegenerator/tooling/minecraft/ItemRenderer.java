@@ -1,7 +1,7 @@
 package net.aerh.imagegenerator.tooling.minecraft;
 
 import net.aerh.imagegenerator.tooling.PathGuard;
-import net.aerh.imagegenerator.tooling.ToolingConstants;
+import net.aerh.imagegenerator.tooling.ToolingSupport;
 import net.aerh.imagegenerator.tooling.ToolingPaths;
 
 import java.io.BufferedReader;
@@ -38,7 +38,7 @@ public class ItemRenderer {
 
     public void setDebug(boolean debug) {
         this.debug = debug;
-        ToolingConstants.setDebugEnabled(debug);
+        ToolingSupport.setDebugEnabled(debug);
     }
 
     /**
@@ -68,7 +68,7 @@ public class ItemRenderer {
                 throw new IllegalStateException("Refusing to re-clone into " + repoPath + ": " + reason);
             });
             System.out.println("Force re-clone requested, deleting existing repository...");
-            ToolingConstants.deleteDirectory(repoPath);
+            ToolingSupport.deleteDirectory(repoPath);
         }
 
         if (!isCloned()) {
@@ -100,7 +100,7 @@ public class ItemRenderer {
             );
         }
 
-        ToolingConstants.printDebug("Prerequisites check passed.");
+        ToolingSupport.printDebug("Prerequisites check passed.");
     }
 
     private boolean isCommandAvailable(String... command) {
@@ -111,7 +111,7 @@ public class ItemRenderer {
             boolean finished = process.waitFor(10, TimeUnit.SECONDS);
             if (finished) {
                 String output = new String(process.getInputStream().readAllBytes());
-                ToolingConstants.printDebug(command[0] + " version: " + output.trim().split("\n")[0]);
+                ToolingSupport.printDebug(command[0] + " version: " + output.trim().split("\n")[0]);
             }
             return finished && process.exitValue() == 0;
         } catch (Exception e) {
@@ -242,7 +242,7 @@ public class ItemRenderer {
             runPb.directory(repoPath.toFile());
             runProcessWithOutput(runPb);
         } finally {
-            ToolingConstants.deleteDirectory(batchDir);
+            ToolingSupport.deleteDirectory(batchDir);
         }
     }
 
@@ -310,7 +310,7 @@ public class ItemRenderer {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                ToolingConstants.printDebug(line);
+                ToolingSupport.printDebug(line);
             }
         }
 

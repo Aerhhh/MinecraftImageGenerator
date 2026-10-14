@@ -4,13 +4,41 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CliArgsTest {
+
+    @Test
+    void checkKnownAcceptsKnownFlagsAndValuedFlags() {
+        assertDoesNotThrow(() -> CliArgs.checkKnown(new String[]{"--clean", "--size=1"}, Set.of("--clean"), Set.of("--size")));
+    }
+
+    @Test
+    void checkKnownRejectsAnUnknownOption() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> CliArgs.checkKnown(new String[]{"--clean", "--sizee=1"}, Set.of("--clean"), Set.of("--size")));
+        assertEquals("Unknown option: --sizee=1", error.getMessage());
+    }
+
+    @Test
+    void checkKnownRejectsABareWord() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> CliArgs.checkKnown(new String[]{"help"}, Set.of("--help"), Set.of()));
+        assertEquals("Unknown option: help", error.getMessage());
+    }
+
+    @Test
+    void checkKnownRejectsAValuedFlagWithoutItsValue() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> CliArgs.checkKnown(new String[]{"--size"}, Set.of(), Set.of("--size")));
+        assertEquals("--size needs a value, written as --size=<value>", error.getMessage());
+    }
 
     @Test
     void valueIsEmptyWhenTheFlagIsAbsent() {

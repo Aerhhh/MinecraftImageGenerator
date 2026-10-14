@@ -9,11 +9,11 @@ import java.util.stream.Stream;
 /**
  * Debug output and file helpers shared by the tooling module. Directories live in {@link ToolingPaths}.
  */
-public final class ToolingConstants {
+public final class ToolingSupport {
 
     private static boolean debugEnabled = false;
 
-    private ToolingConstants() {
+    private ToolingSupport() {
     }
 
     public static void setDebugEnabled(boolean enabled) {

@@ -80,16 +80,9 @@ public final class TrimPaletteExtractor {
     }
 
     /**
-     * Extracts every material palette in a directory, keyed by file name without extension.
-     *
-     * @param palettesPath the directory holding the 8x1 material PNGs
-     *
-     * @return map of palette name to array of ARGB colours; empty when the directory does not exist
+     * Extracts every material palette in a directory, keyed by file name without extension, skipping the file
+     * named {@code excludedName} (the legacy key palette lives among the materials).
      */
-    public static Map<String, int[]> extractAllPalettes(Path palettesPath) {
-        return extractAllPalettes(palettesPath, null);
-    }
-
     private static Map<String, int[]> extractAllPalettes(Path palettesPath, String excludedName) {
         Map<String, int[]> palettes = new LinkedHashMap<>();
 

@@ -1,7 +1,7 @@
 package net.aerh.imagegenerator.tooling.minecraft;
 
 import net.aerh.imagegenerator.tooling.CliArgs;
-import net.aerh.imagegenerator.tooling.ToolingConstants;
+import net.aerh.imagegenerator.tooling.ToolingSupport;
 import net.aerh.imagegenerator.tooling.ToolingPaths;
 import net.aerh.imagegenerator.tooling.spritesheet.AtlasLayout;
 import net.aerh.imagegenerator.tooling.spritesheet.OverlayColorConfigGenerator;
@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Unified CLI tool for Minecraft asset operations.
@@ -48,6 +49,16 @@ public class MinecraftAssetTool {
     public static final String VERSION_FLAG = "--version";
 
     private static final int DEFAULT_RENDER_SIZE = 256;
+
+    private static final Set<String> FLAGS = Set.of(
+        "--all", "--pipeline", "--download", "--render", "--spritesheet", "--overlays", "--skip-download",
+        "--skip-render", "--debug", "--force-clone", "--force-build", "--clean", "--no-clean", "--help"
+    );
+    private static final Set<String> VALUED_FLAGS = Set.of(
+        VERSION_FLAG, SIZE_FLAG, AtlasLayout.TILE_SIZE_FLAG, AtlasLayout.ATLAS_WIDTH_FLAG,
+        AtlasLayout.ATLAS_HEIGHT_FLAG, AtlasLayout.PADDING_FLAG, ToolingPaths.WORK_DIR_FLAG,
+        ToolingPaths.OUTPUT_DIR_FLAG, ToolingPaths.RENDERER_DIR_FLAG, OverlayGenerator.DEFINITIONS_FLAG
+    );
 
     private boolean runDownload = false;
     private boolean runRender = false;
@@ -102,15 +113,28 @@ public class MinecraftAssetTool {
      * @throws IllegalArgumentException for a value that cannot be used
      */
     static MinecraftAssetTool parse(String[] args) {
+        CliArgs.checkKnown(args, FLAGS, VALUED_FLAGS);
+
         MinecraftAssetTool tool = new MinecraftAssetTool();
         tool.paths = ToolingPaths.fromArgs(args);
         tool.layout = AtlasLayout.fromArgs(args, AtlasLayout.DEFAULT);
         tool.renderSize = CliArgs.intValue(args, SIZE_FLAG, DEFAULT_RENDER_SIZE);
-        tool.minecraftVersion = CliArgs.value(args, VERSION_FLAG).filter(version -> !version.isBlank()).orElse(null);
+        tool.minecraftVersion = CliArgs.value(args, VERSION_FLAG)
+            .map(String::trim)
+            .filter(version -> !version.isEmpty())
+            .orElse(null);
         tool.overlayDefinitions = CliArgs.pathValue(args, OverlayGenerator.DEFINITIONS_FLAG).orElse(null);
 
         if (tool.renderSize <= 0) {
             throw new IllegalArgumentException(SIZE_FLAG + " must be positive, got " + tool.renderSize);
+        }
+
+        if (tool.overlayDefinitions != null) {
+            try {
+                OverlayGenerator.checkDefinitions(tool.overlayDefinitions);
+            } catch (IOException e) {
+                throw new IllegalArgumentException(OverlayGenerator.DEFINITIONS_FLAG + ": " + e.getMessage(), e);
+            }
         }
 
         for (String arg : args) {
@@ -129,14 +153,14 @@ public class MinecraftAssetTool {
                 case "--skip-render" -> tool.skipRender = true;
                 case "--debug" -> {
                     tool.debug = true;
-                    ToolingConstants.setDebugEnabled(true);
+                    ToolingSupport.setDebugEnabled(true);
                 }
                 case "--force-clone" -> tool.forceReclone = true;
                 case "--force-build" -> tool.forceRebuild = true;
                 case "--clean" -> tool.cleanWorkDir = true;
                 case "--no-clean" -> tool.cleanWorkDir = false;
                 default -> {
-                    // Valued flags were read above; anything else is ignored, as before.
+                    // Valued flags were read above and checkKnown has already rejected anything else.
                 }
             }
         }
@@ -310,7 +334,12 @@ public class MinecraftAssetTool {
         System.out.println("[Download] Extracted " + count + " files");
     }
 
-    private void runRenderStep() throws IOException, InterruptedException {
+    /**
+     * Renders every item with MinecraftRenderer. A missing .NET SDK skips the step with a warning, since the
+     * other steps can still be useful; a renderer that is present but fails ends the run, because packing a
+     * missing or stale set of renders afterwards would look like success.
+     */
+    private void runRenderStep() throws Exception {
         System.out.println("\n[Render] Running MinecraftRenderer...");
         System.out.println("-".repeat(40));
 
@@ -322,21 +351,13 @@ public class MinecraftAssetTool {
 
         if (Files.exists(paths.renderedItems())) {
             System.out.println("Cleaning previous renders: " + paths.renderedItems());
-            ToolingConstants.deleteDirectory(paths.renderedItems());
+            ToolingSupport.deleteDirectory(paths.renderedItems());
         }
 
         ItemRenderer renderer = new ItemRenderer(paths);
         renderer.setDebug(debug);
-
-        try {
-            renderer.setup(forceReclone, forceRebuild);
-            renderer.renderAllItems(paths.renderedItems(), minecraftVersion, renderSize);
-        } catch (Exception e) {
-            System.out.println("WARNING: Renderer failed: " + e.getMessage());
-            if (debug) {
-                e.printStackTrace();
-            }
-        }
+        renderer.setup(forceReclone, forceRebuild);
+        renderer.renderAllItems(paths.renderedItems(), minecraftVersion, renderSize);
     }
 
     private void runSpritesheetStep() {
@@ -375,7 +396,7 @@ public class MinecraftAssetTool {
         }
 
         try {
-            ToolingConstants.deleteDirectory(currentDir.resolve(paths.workDir()));
+            ToolingSupport.deleteDirectory(currentDir.resolve(paths.workDir()));
             System.out.println("[Cleanup] Work directory removed.");
         } catch (IOException e) {
             System.err.println("[Cleanup] Failed to remove work directory: " + e.getMessage());

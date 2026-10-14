@@ -50,6 +50,10 @@ public class SpritesheetGenerator extends AtlasGenerator {
 
     public static void main(String[] args) {
         try {
+            CliArgs.checkKnown(args, Set.of(), Set.of(
+                INPUT_FLAG, AtlasLayout.TILE_SIZE_FLAG, AtlasLayout.ATLAS_WIDTH_FLAG, AtlasLayout.ATLAS_HEIGHT_FLAG,
+                AtlasLayout.PADDING_FLAG, ToolingPaths.WORK_DIR_FLAG, ToolingPaths.OUTPUT_DIR_FLAG, ToolingPaths.RENDERER_DIR_FLAG
+            ));
             ToolingPaths paths = ToolingPaths.fromArgs(args);
             AtlasLayout layout = AtlasLayout.fromArgs(args, AtlasLayout.DEFAULT);
             Path inputDir = CliArgs.pathValue(args, INPUT_FLAG).orElse(paths.renderedItems());
@@ -77,13 +81,17 @@ public class SpritesheetGenerator extends AtlasGenerator {
             );
     }
 
+    /**
+     * Reads the trim material names so renders of trimmed armour can be left out of the atlas. Assets without
+     * any palettes give an empty set; a palette layout that is present but broken ends the run, because packing
+     * every trim variant by mistake is exactly what the filter exists to prevent.
+     */
     private void loadTrimMaterials() {
         try {
             trimMaterials = TrimPaletteExtractor.load(minecraftAssets).materials().keySet();
             System.out.println("Loaded " + trimMaterials.size() + " trim materials from assets.");
-        } catch (Exception e) {
-            System.err.println("Failed to load trim materials: " + e.getMessage());
-            trimMaterials = Set.of();
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to load trim materials: " + e.getMessage(), e);
         }
     }
 

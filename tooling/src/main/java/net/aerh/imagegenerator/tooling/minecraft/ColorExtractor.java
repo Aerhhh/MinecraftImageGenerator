@@ -1,6 +1,6 @@
 package net.aerh.imagegenerator.tooling.minecraft;
 
-import net.aerh.imagegenerator.tooling.ToolingConstants;
+import net.aerh.imagegenerator.tooling.ToolingSupport;
 import net.aerh.imagegenerator.tooling.minecraft.colorextractor.DyeColorVisitor;
 import net.aerh.imagegenerator.tooling.minecraft.colorextractor.EffectFieldMapper;
 import net.aerh.imagegenerator.tooling.minecraft.colorextractor.EffectRegistryVisitor;
@@ -62,7 +62,7 @@ public class ColorExtractor {
 
     public void setDebug(boolean debug) {
         this.debug = debug;
-        ToolingConstants.setDebugEnabled(debug);
+        ToolingSupport.setDebugEnabled(debug);
     }
 
     public ExtractedColors extract() throws IOException {
@@ -152,7 +152,7 @@ public class ColorExtractor {
 
         System.out.println("Parsing mappings...");
         Map<String, String> classToObfuscated = parseMappings();
-        ToolingConstants.printDebug("Found " + classToObfuscated.size() + " class mappings");
+        ToolingSupport.printDebug("Found " + classToObfuscated.size() + " class mappings");
 
         for (String name : NAMED_CLASSES) {
             String obfuscated = classToObfuscated.get(name);
@@ -196,7 +196,7 @@ public class ColorExtractor {
 
             try (InputStream is = zip.getInputStream(entry)) {
                 ClassReader reader = new ClassReader(is);
-                DyeColorVisitor visitor = new DyeColorVisitor(ToolingConstants::printDebug);
+                DyeColorVisitor visitor = new DyeColorVisitor(ToolingSupport::printDebug);
                 reader.accept(visitor, 0);
                 return visitor.getColors();
             }
@@ -214,7 +214,7 @@ public class ColorExtractor {
 
             try (InputStream is = zip.getInputStream(entry)) {
                 ClassReader reader = new ClassReader(is);
-                EffectRegistryVisitor visitor = new EffectRegistryVisitor(ToolingConstants::printDebug);
+                EffectRegistryVisitor visitor = new EffectRegistryVisitor(ToolingSupport::printDebug);
                 reader.accept(visitor, 0);
                 return visitor.getColors();
             }
@@ -232,10 +232,10 @@ public class ColorExtractor {
             if (mobEffectsEntry != null) {
                 try (InputStream is = zip.getInputStream(mobEffectsEntry)) {
                     ClassReader reader = new ClassReader(is);
-                    EffectFieldMapper fieldMapper = new EffectFieldMapper(ToolingConstants::printDebug);
+                    EffectFieldMapper fieldMapper = new EffectFieldMapper(ToolingSupport::printDebug);
                     reader.accept(fieldMapper, 0);
                     fieldToEffectName = fieldMapper.getFieldToName();
-                    ToolingConstants.printDebug("Mapped " + fieldToEffectName.size() + " MobEffects fields to names");
+                    ToolingSupport.printDebug("Mapped " + fieldToEffectName.size() + " MobEffects fields to names");
                 }
             }
 
@@ -243,7 +243,7 @@ public class ColorExtractor {
             if (potionsEntry != null) {
                 try (InputStream is = zip.getInputStream(potionsEntry)) {
                     ClassReader reader = new ClassReader(is);
-                    PotionVisitor visitor = new PotionVisitor(mobEffectsInternal, fieldToEffectName, ToolingConstants::printDebug);
+                    PotionVisitor visitor = new PotionVisitor(mobEffectsInternal, fieldToEffectName, ToolingSupport::printDebug);
                     reader.accept(visitor, 0);
                     return visitor.getEffectsWithPotions();
                 }
@@ -273,7 +273,7 @@ public class ColorExtractor {
 
                         if (visitor.getEffectName() != null && visitor.getColor() != 0) {
                             colors.put(visitor.getEffectName(), visitor.getColor());
-                            ToolingConstants.printDebug("Found effect: " + visitor.getEffectName() + " -> " + visitor.getColor());
+                            ToolingSupport.printDebug("Found effect: " + visitor.getEffectName() + " -> " + visitor.getColor());
                         }
                     }
                 } catch (Exception ignored) {

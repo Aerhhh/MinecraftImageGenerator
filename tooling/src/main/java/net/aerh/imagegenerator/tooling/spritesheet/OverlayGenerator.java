@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -82,6 +83,9 @@ public class OverlayGenerator extends AtlasGenerator {
             System.out.println("Overlay Generator");
             System.out.println("=".repeat(50));
 
+            CliArgs.checkKnown(args, Set.of(), Set.of(
+                ToolingPaths.WORK_DIR_FLAG, ToolingPaths.OUTPUT_DIR_FLAG, ToolingPaths.RENDERER_DIR_FLAG, DEFINITIONS_FLAG
+            ));
             ToolingPaths paths = ToolingPaths.fromArgs(args);
             Optional<Path> definitionsFile = CliArgs.pathValue(args, DEFINITIONS_FLAG);
 
@@ -116,6 +120,16 @@ public class OverlayGenerator extends AtlasGenerator {
         }
     }
 
+    /**
+     * Parses a definitions file and discards the result, so an entry point can reject a bad file before it
+     * spends time on downloads or renders.
+     *
+     * @throws IOException if the file cannot be read or is not a valid definitions document
+     */
+    public static void checkDefinitions(Path file) throws IOException {
+        readDefinitions(file);
+    }
+
     private static OverlayDefinitions readDefinitions(Path file) throws IOException {
         if (!Files.isRegularFile(file)) {
             throw new IOException("Overlay definitions file not found: " + file);
@@ -146,7 +160,7 @@ public class OverlayGenerator extends AtlasGenerator {
                     requiredString(obj, "fileName", source),
                     requiredString(obj, "colorOptions", source),
                     requiredString(obj, "type", source),
-                    obj.has("colorMode") ? obj.get("colorMode").getAsString() : null
+                    optionalString(obj, "colorMode", source)
                 ));
             }
         }
@@ -154,6 +168,9 @@ public class OverlayGenerator extends AtlasGenerator {
         List<String> patterns = new ArrayList<>();
         if (config.has("armorOverlayPatterns")) {
             for (JsonElement element : asArray(config, "armorOverlayPatterns", source)) {
+                if (!isString(element)) {
+                    throw new IOException("Overlay definitions " + source + ": every armorOverlayPatterns entry must be a string");
+                }
                 patterns.add(element.getAsString());
             }
         }
@@ -173,11 +190,32 @@ public class OverlayGenerator extends AtlasGenerator {
 
     private static String requiredString(JsonObject obj, String key, String source) throws IOException {
         JsonElement value = obj.get(key);
-        if (value == null || !value.isJsonPrimitive()) {
+        if (value == null || value.isJsonNull()) {
             throw new IOException("Overlay definitions " + source + ": a specialOverlays entry is missing '" + key + "'");
         }
 
+        if (!isString(value)) {
+            throw new IOException("Overlay definitions " + source + ": '" + key + "' must be a string");
+        }
+
         return value.getAsString();
+    }
+
+    private static String optionalString(JsonObject obj, String key, String source) throws IOException {
+        JsonElement value = obj.get(key);
+        if (value == null) {
+            return null;
+        }
+
+        if (!isString(value)) {
+            throw new IOException("Overlay definitions " + source + ": '" + key + "' must be a string when present");
+        }
+
+        return value.getAsString();
+    }
+
+    private static boolean isString(JsonElement value) {
+        return value.isJsonPrimitive() && value.getAsJsonPrimitive().isString();
     }
 
     @Override
