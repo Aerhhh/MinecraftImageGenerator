@@ -25,17 +25,27 @@ public abstract class AtlasGenerator {
     protected static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     protected final int atlasWidth;
+    protected final AtlasLayout layout;
     protected final String atlasOutputPath;
     protected final String jsonOutputPath;
 
     protected AtlasGenerator(int atlasWidth, String atlasOutputPath, String jsonOutputPath) {
-        this.atlasWidth = atlasWidth;
+        this(new AtlasLayout(IMAGE_SIZE, atlasWidth, Integer.MAX_VALUE, 0), atlasOutputPath, jsonOutputPath);
+    }
+
+    protected AtlasGenerator(AtlasLayout layout, String atlasOutputPath, String jsonOutputPath) {
+        this.layout = layout;
+        this.atlasWidth = layout.maxWidth();
         this.atlasOutputPath = atlasOutputPath;
         this.jsonOutputPath = jsonOutputPath;
     }
 
     protected static BufferedImage resizeToAtlasSize(BufferedImage source) {
         return ImageUtil.resizeImageRaw(source, IMAGE_SIZE, IMAGE_SIZE);
+    }
+
+    protected BufferedImage resizeToLayoutSize(BufferedImage source) {
+        return ImageUtil.resizeImageRaw(source, layout.tileSize(), layout.tileSize());
     }
 
     protected abstract List<AtlasEntry> loadTextures();
@@ -50,17 +60,28 @@ public abstract class AtlasGenerator {
             throw new IllegalStateException("No textures to pack!");
         }
 
-        BufferedImage atlas = packAtlas(entries);
-        saveAtlas(atlas);
+        int capacity = layout.capacity();
+        for (int start = 0, page = 0; start < entries.size(); page++) {
+            int end = (int) Math.min(entries.size(), (long) start + capacity);
+            List<AtlasEntry> batch = entries.subList(start, end);
+            BufferedImage atlas = packAtlas(batch);
+            for (AtlasEntry entry : batch) {
+                entry.page = page;
+                entry.atlasWidth = atlas.getWidth();
+                entry.atlasHeight = atlas.getHeight();
+            }
+            saveAtlas(atlas, page);
+            start = end;
+        }
         saveCoordinatesJson(entries);
 
         System.out.println("Atlas generation complete!");
     }
 
     protected BufferedImage packAtlas(List<AtlasEntry> entries) {
-        int texturesPerRow = atlasWidth / IMAGE_SIZE;
+        int texturesPerRow = layout.columns();
         int rows = (entries.size() + texturesPerRow - 1) / texturesPerRow;
-        int atlasHeight = rows * IMAGE_SIZE;
+        int atlasHeight = rows * layout.pitch();
 
         BufferedImage atlas = new BufferedImage(atlasWidth, atlasHeight, BufferedImage.TYPE_INT_ARGB);
         int[] atlasPixels = ((DataBufferInt) atlas.getRaster().getDataBuffer()).getData();
@@ -69,14 +90,14 @@ public abstract class AtlasGenerator {
             AtlasEntry entry = entries.get(i);
             int col = i % texturesPerRow;
             int row = i / texturesPerRow;
-            entry.x = col * IMAGE_SIZE;
-            entry.y = row * IMAGE_SIZE;
+            entry.x = col * layout.pitch() + layout.padding();
+            entry.y = row * layout.pitch() + layout.padding();
 
             int[] texturePixels = ((DataBufferInt) entry.image.getRaster().getDataBuffer()).getData();
-            for (int py = 0; py < IMAGE_SIZE; py++) {
+            for (int py = 0; py < layout.tileSize(); py++) {
                 int atlasOffset = (entry.y + py) * atlasWidth + entry.x;
-                int textureOffset = py * IMAGE_SIZE;
-                System.arraycopy(texturePixels, textureOffset, atlasPixels, atlasOffset, IMAGE_SIZE);
+                int textureOffset = py * layout.tileSize();
+                System.arraycopy(texturePixels, textureOffset, atlasPixels, atlasOffset, layout.tileSize());
             }
 
             double progress = (i + 1) * 100.0 / entries.size();
@@ -88,7 +109,16 @@ public abstract class AtlasGenerator {
     }
 
     protected void saveAtlas(BufferedImage atlas) {
-        File outputFile = new File(atlasOutputPath);
+        saveAtlasToPath(atlas, atlasOutputPath);
+    }
+
+    protected void saveAtlas(BufferedImage atlas, int page) {
+        if (page == 0) saveAtlas(atlas);
+        else saveAtlasToPath(atlas, pageOutputPath(page));
+    }
+
+    private void saveAtlasToPath(BufferedImage atlas, String path) {
+        File outputFile = new File(path);
         File parentDir = outputFile.getAbsoluteFile().getParentFile();
         if (!parentDir.exists() && !parentDir.mkdirs()) {
             throw new IllegalStateException("Failed to create directory: " + parentDir.getAbsolutePath());
@@ -105,6 +135,13 @@ public abstract class AtlasGenerator {
         }
     }
 
+    protected String pageOutputPath(int page) {
+        if (page == 0) return atlasOutputPath;
+        int dot = atlasOutputPath.lastIndexOf('.');
+        return dot < 0 ? atlasOutputPath + "-" + page
+            : atlasOutputPath.substring(0, dot) + "-" + page + atlasOutputPath.substring(dot);
+    }
+
     protected void saveCoordinatesJson(List<AtlasEntry> entries) {
         File jsonFile = new File(jsonOutputPath);
         File parentDir = jsonFile.getAbsoluteFile().getParentFile();
@@ -114,7 +151,12 @@ public abstract class AtlasGenerator {
 
         JsonArray jsonArray = new JsonArray();
         for (AtlasEntry entry : entries) {
-            jsonArray.add(entryToJson(entry));
+            JsonObject object = entryToJson(entry);
+            object.addProperty("page", entry.page);
+            object.addProperty("atlas", new File(pageOutputPath(entry.page)).getName());
+            object.addProperty("atlasWidth", entry.atlasWidth);
+            object.addProperty("atlasHeight", entry.atlasHeight);
+            jsonArray.add(object);
         }
 
         try (FileWriter writer = new FileWriter(jsonFile)) {
@@ -132,6 +174,9 @@ public abstract class AtlasGenerator {
         public final String name;
         public final BufferedImage image;
         public final Map<String, String> metadata;
+        public int page;
+        public int atlasWidth;
+        public int atlasHeight;
         public int x;
         public int y;
 

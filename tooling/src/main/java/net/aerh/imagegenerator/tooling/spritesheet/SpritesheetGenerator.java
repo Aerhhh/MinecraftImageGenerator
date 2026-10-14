@@ -2,6 +2,7 @@ package net.aerh.imagegenerator.tooling.spritesheet;
 
 import com.google.gson.JsonObject;
 import net.aerh.imagegenerator.tooling.ToolingConstants;
+import net.aerh.imagegenerator.tooling.ToolingArguments;
 import net.aerh.imagegenerator.tooling.minecraft.TrimPaletteExtractor;
 import net.hypixel.nerdbot.marmalade.image.ImageUtil;
 
@@ -27,8 +28,12 @@ public class SpritesheetGenerator extends AtlasGenerator {
     private Set<String> trimMaterials;
 
     public SpritesheetGenerator(String inputPath) {
+        this(inputPath, new AtlasLayout(IMAGE_SIZE, ATLAS_WIDTH, Integer.MAX_VALUE, 0));
+    }
+
+    public SpritesheetGenerator(String inputPath, AtlasLayout layout) {
         super(
-            ATLAS_WIDTH,
+            layout,
             ToolingConstants.GENERATOR_SPRITESHEETS + "/minecraft_texture_atlas.png",
             ToolingConstants.GENERATOR_JSON + "/atlas_coordinates.json"
         );
@@ -36,15 +41,25 @@ public class SpritesheetGenerator extends AtlasGenerator {
     }
 
     public static void main(String[] args) {
+        ToolingArguments.configureDirectories(args);
         String inputPath = ToolingConstants.RENDERED_ITEMS.toString();
+        int tileSize = IMAGE_SIZE, width = ATLAS_WIDTH, height = Integer.MAX_VALUE, padding = 0;
 
         for (String arg : args) {
             if (arg.startsWith("--input=")) {
                 inputPath = arg.substring("--input=".length());
+            } else if (arg.startsWith("--tile-size=")) {
+                tileSize = Integer.parseInt(arg.substring("--tile-size=".length()));
+            } else if (arg.startsWith("--atlas-width=")) {
+                width = Integer.parseInt(arg.substring("--atlas-width=".length()));
+            } else if (arg.startsWith("--atlas-height=")) {
+                height = Integer.parseInt(arg.substring("--atlas-height=".length()));
+            } else if (arg.startsWith("--padding=")) {
+                padding = Integer.parseInt(arg.substring("--padding=".length()));
             }
         }
 
-        SpritesheetGenerator generator = new SpritesheetGenerator(inputPath);
+        SpritesheetGenerator generator = new SpritesheetGenerator(inputPath, new AtlasLayout(tileSize, width, height, padding));
         generator.generate();
         System.out.println("Texture atlas generation complete!");
     }
@@ -106,7 +121,7 @@ public class SpritesheetGenerator extends AtlasGenerator {
             }
 
             try {
-                BufferedImage processed = resizeToAtlasSize(image);
+                BufferedImage processed = resizeToLayoutSize(image);
 
                 if (ImageUtil.isFullyTransparent(processed)) {
                     skipped++;
@@ -144,7 +159,7 @@ public class SpritesheetGenerator extends AtlasGenerator {
         obj.addProperty("name", entry.name);
         obj.addProperty("x", entry.x);
         obj.addProperty("y", entry.y);
-        obj.addProperty("size", IMAGE_SIZE);
+        obj.addProperty("size", layout.tileSize());
         return obj;
     }
 }

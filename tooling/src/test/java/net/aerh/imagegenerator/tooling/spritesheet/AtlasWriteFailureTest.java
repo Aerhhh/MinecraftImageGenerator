@@ -23,4 +23,22 @@ class AtlasWriteFailureTest {
         assertThrows(IllegalStateException.class, generator::generate);
         assertFalse(Files.exists(directory.resolve("coords.json")));
     }
+
+    @Test void laterPageWriteFailureStopsBeforeCoordinatesArePublished() throws Exception {
+        Files.createDirectory(directory.resolve("atlas-1.png"));
+        Files.writeString(directory.resolve("atlas-1.png/blocker"), "not an image file");
+        var generator = new AtlasGenerator(new AtlasLayout(2, 2, 2, 0),
+            directory.resolve("atlas.png").toString(), directory.resolve("coords.json").toString()) {
+            protected List<AtlasEntry> loadTextures() {
+                return List.of(
+                    new AtlasEntry("first", new BufferedImage(2, 2, BufferedImage.TYPE_INT_ARGB)),
+                    new AtlasEntry("second", new BufferedImage(2, 2, BufferedImage.TYPE_INT_ARGB)));
+            }
+            protected JsonObject entryToJson(AtlasEntry entry) { return new JsonObject(); }
+        };
+        assertThrows(IllegalStateException.class, generator::generate);
+        assertTrue(Files.isRegularFile(directory.resolve("atlas.png")));
+        assertFalse(Files.exists(directory.resolve("coords.json")));
+    }
+
 }
