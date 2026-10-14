@@ -4,7 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import net.aerh.imagegenerator.tooling.ToolingConstants;
+import net.aerh.imagegenerator.tooling.ToolingPaths;
 import net.aerh.imagegenerator.tooling.minecraft.ColorExtractor;
 import net.aerh.imagegenerator.tooling.minecraft.DyeColorData;
 import net.aerh.imagegenerator.tooling.minecraft.ExtractedColors;
@@ -48,13 +48,21 @@ public class OverlayColorConfigGenerator {
         0xFF000000  // Black
     };
 
+    private final ToolingPaths paths;
     private final String version;
 
-    public OverlayColorConfigGenerator() {
-        this(null);
+    /**
+     * Reads colours from whichever client JAR is cached in the work directory.
+     */
+    public OverlayColorConfigGenerator(ToolingPaths paths) {
+        this(paths, null);
     }
 
-    public OverlayColorConfigGenerator(String version) {
+    /**
+     * @param version the Minecraft version whose cached JAR to read, or null to use whatever JAR is cached
+     */
+    public OverlayColorConfigGenerator(ToolingPaths paths, String version) {
+        this.paths = paths;
         this.version = version;
     }
 
@@ -83,8 +91,8 @@ public class OverlayColorConfigGenerator {
             return null;
         }
 
-        Path jarPath = ToolingConstants.getJarPath(resolvedVersion);
-        Path mappingsPath = ToolingConstants.getMappingsPath(resolvedVersion);
+        Path jarPath = paths.jarPath(resolvedVersion);
+        Path mappingsPath = paths.mappingsPath(resolvedVersion);
 
         if (!Files.exists(jarPath) || !Files.exists(mappingsPath)) {
             System.err.println("  ERROR: JAR or mappings not found");
@@ -114,7 +122,7 @@ public class OverlayColorConfigGenerator {
     }
 
     private String findCachedVersion() throws IOException {
-        Path jarCacheDir = ToolingConstants.JAR_CACHE;
+        Path jarCacheDir = paths.jarCache();
         if (!Files.exists(jarCacheDir)) {
             return null;
         }
@@ -132,7 +140,7 @@ public class OverlayColorConfigGenerator {
 
     private Map<String, int[]> extractTrimPalettes() {
         System.out.println("  Extracting trim palettes from PNG files...");
-        Map<String, int[]> palettes = TrimPaletteExtractor.extractAllPalettes();
+        Map<String, int[]> palettes = TrimPaletteExtractor.extractAllPalettes(paths.trimPalettes());
         System.out.println("  Found " + palettes.size() + " trim palettes");
         return palettes;
     }
@@ -179,12 +187,12 @@ public class OverlayColorConfigGenerator {
     }
 
     private void saveConfig(JsonArray config) throws IOException {
-        File outputDir = new File(ToolingConstants.GENERATOR_JSON);
+        File outputDir = paths.json().toFile();
         if (!outputDir.exists() && !outputDir.mkdirs()) {
             throw new IOException("Failed to create directory: " + outputDir);
         }
 
-        File outputFile = new File(ToolingConstants.GENERATOR_JSON, "overlay_colors.json");
+        File outputFile = new File(outputDir, "overlay_colors.json");
         try (FileWriter writer = new FileWriter(outputFile)) {
             GSON.toJson(config, writer);
         }

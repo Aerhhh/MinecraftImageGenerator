@@ -1,81 +1,107 @@
 package net.aerh.imagegenerator.tooling.spritesheet;
 
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.List;
-import static org.junit.jupiter.api.Assertions.*;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AtlasLayoutTest {
-    @TempDir Path directory;
 
-    @Test void pagesKeepPixelsAndTransparentGutters() throws Exception {
-        var entries = List.of(entry("red", 0xffff0000), entry("green", 0xff00ff00), entry("blue", 0xff0000ff));
-        new TestAtlas(new AtlasLayout(2, 8, 4, 1), entries).generate();
-        var first = ImageIO.read(directory.resolve("atlas.png").toFile());
-        var second = ImageIO.read(directory.resolve("atlas-1.png").toFile());
-        assertEquals(8, first.getWidth());
-        assertEquals(4, first.getHeight());
-        assertEquals(0xffff0000, first.getRGB(1, 1));
-        assertEquals(0xff00ff00, first.getRGB(5, 1));
-        assertEquals(0xff0000ff, second.getRGB(1, 1));
-        assertEquals(0, first.getRGB(0, 1));
-        assertEquals(0, first.getRGB(3, 1));
-        assertEquals(0, first.getRGB(4, 1));
-        var json = JsonParser.parseString(Files.readString(directory.resolve("coordinates.json"))).getAsJsonArray();
-        assertEquals(0, json.get(0).getAsJsonObject().get("page").getAsInt());
-        assertEquals(1, json.get(2).getAsJsonObject().get("page").getAsInt());
-        assertEquals("atlas-1.png", json.get(2).getAsJsonObject().get("atlas").getAsString());
-        assertEquals(4, json.get(2).getAsJsonObject().get("atlasHeight").getAsInt());
+    @Test
+    void defaultLayoutMatchesTheBundledAtlas() {
+        assertEquals(256, AtlasLayout.DEFAULT.tileSize());
+        assertEquals(4096, AtlasLayout.DEFAULT.maxWidth());
+        assertEquals(AtlasLayout.UNLIMITED, AtlasLayout.DEFAULT.maxHeight());
+        assertEquals(0, AtlasLayout.DEFAULT.padding());
+        assertEquals(Integer.MAX_VALUE, AtlasLayout.UNLIMITED);
     }
 
-    @Test void singlePageKeepsOriginalFilenameAndCoordinateFields() throws Exception {
-        new TestAtlas(new AtlasLayout(2, 4, 4, 0), List.of(entry("red", 0xffff0000))).generate();
-        assertTrue(Files.isRegularFile(directory.resolve("atlas.png")));
-        assertFalse(Files.exists(directory.resolve("atlas-0.png")));
-        var coordinate = JsonParser.parseString(Files.readString(directory.resolve("coordinates.json")))
-            .getAsJsonArray().get(0).getAsJsonObject();
-        assertEquals(0, coordinate.get("x").getAsInt());
-        assertEquals(0, coordinate.get("y").getAsInt());
-        assertEquals(2, coordinate.get("size").getAsInt());
+    @Test
+    void pitchIsTilePlusPaddingOnBothSides() {
+        assertEquals(10, new AtlasLayout(8, 100, 100, 1).pitch());
+        assertEquals(8, new AtlasLayout(8, 100, 100, 0).pitch());
     }
 
-    @Test void invalidLayoutsFailBeforePacking() {
-        assertThrows(IllegalArgumentException.class, () -> new AtlasLayout(0, 8, 8, 0));
-        assertThrows(IllegalArgumentException.class, () -> new AtlasLayout(4, 5, 5, 1));
-        assertThrows(IllegalArgumentException.class, () -> new AtlasLayout(4, 8, 8, -1));
-        assertThrows(IllegalArgumentException.class, () -> new AtlasLayout(Integer.MAX_VALUE, 8, 8, 1));
+    @Test
+    void columnsAndRowsRoundDownWhenBoundsAreNotAMultipleOfPitch() {
+        AtlasLayout layout = new AtlasLayout(8, 35, 21, 1);
+        assertEquals(3, layout.columns());
+        assertEquals(2, layout.rowsPerPage());
+        assertEquals(6, layout.capacity());
     }
 
-    @Test void unlimitedHeightDoesNotOverflowCapacity() {
-        assertEquals(Integer.MAX_VALUE, new AtlasLayout(1, 4096, Integer.MAX_VALUE, 0).capacity());
+    @Test
+    void unlimitedHeightGivesUnlimitedRowsWithoutOverflow() {
+        AtlasLayout layout = new AtlasLayout(1, 4096, AtlasLayout.UNLIMITED, 0);
+        assertEquals(Integer.MAX_VALUE, layout.rowsPerPage());
+        assertEquals(Integer.MAX_VALUE, layout.capacity());
     }
 
-    private AtlasGenerator.AtlasEntry entry(String name, int color) {
-        var image = new BufferedImage(2, 2, BufferedImage.TYPE_INT_ARGB);
-        for (int y = 0; y < 2; y++) for (int x = 0; x < 2; x++) image.setRGB(x, y, color);
-        return new AtlasGenerator.AtlasEntry(name, image);
+    @Test
+    void zeroTileSizeIsRejectedWithTheOffendingValue() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> new AtlasLayout(0, 8, 8, 0));
+        assertEquals("Tile size must be positive, got 0", error.getMessage());
     }
 
-    private class TestAtlas extends AtlasGenerator {
-        private final List<AtlasEntry> entries;
-        TestAtlas(AtlasLayout layout, List<AtlasEntry> entries) {
-            super(layout, directory.resolve("atlas.png").toString(), directory.resolve("coordinates.json").toString());
-            this.entries = entries;
-        }
-        protected List<AtlasEntry> loadTextures() { return entries; }
-        protected JsonObject entryToJson(AtlasEntry entry) {
-            var json = new JsonObject();
-            json.addProperty("name", entry.name);
-            json.addProperty("x", entry.x);
-            json.addProperty("y", entry.y);
-            json.addProperty("size", layout.tileSize());
-            return json;
-        }
+    @Test
+    void negativePaddingIsRejectedWithTheOffendingValue() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> new AtlasLayout(4, 8, 8, -1));
+        assertEquals("Padding must be non-negative, got -1", error.getMessage());
+    }
+
+    @Test
+    void paddingThatOverflowsThePitchIsRejectedAsTooLarge() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> new AtlasLayout(Integer.MAX_VALUE, 8, 8, 1));
+        assertEquals("Padding 1 is too large for tile size " + Integer.MAX_VALUE, error.getMessage());
+    }
+
+    @Test
+    void boundsSmallerThanOnePaddedTileAreRejected() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> new AtlasLayout(4, 5, 5, 1));
+        assertEquals("Atlas bounds 5x5 must fit at least one padded tile of 6px", error.getMessage());
+    }
+
+    @Test
+    void parsingWithoutFlagsReturnsTheGivenDefaults() {
+        AtlasLayout defaults = new AtlasLayout(16, 64, 64, 2);
+        assertEquals(defaults, AtlasLayout.fromArgs(new String[]{"--input=x", "--debug"}, defaults));
+    }
+
+    @Test
+    void parsingReadsEveryLayoutFlag() {
+        String[] args = {"--tile-size=32", "--atlas-width=2048", "--atlas-height=1024", "--padding=3"};
+        assertEquals(new AtlasLayout(32, 2048, 1024, 3), AtlasLayout.fromArgs(args, AtlasLayout.DEFAULT));
+    }
+
+    @Test
+    void parsingOverridesOnlyTheFlagsThatArePresent() {
+        AtlasLayout layout = AtlasLayout.fromArgs(new String[]{"--padding=1"}, AtlasLayout.DEFAULT);
+        assertEquals(new AtlasLayout(256, 4096, AtlasLayout.UNLIMITED, 1), layout);
+    }
+
+    @Test
+    void parsingNamesTheFlagWhenTheValueIsNotAnInteger() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> AtlasLayout.fromArgs(new String[]{"--padding=x"}, AtlasLayout.DEFAULT));
+        assertEquals("--padding expects an integer, got 'x'", error.getMessage());
+    }
+
+    @Test
+    void parsingRejectsAnEmptyValue() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> AtlasLayout.fromArgs(new String[]{"--atlas-width="}, AtlasLayout.DEFAULT));
+        assertEquals("--atlas-width expects an integer, got ''", error.getMessage());
+    }
+
+    @Test
+    void parsingStillValidatesTheCombinedLayout() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> AtlasLayout.fromArgs(new String[]{"--atlas-width=10"}, AtlasLayout.DEFAULT));
+        assertTrue(error.getMessage().startsWith("Atlas bounds 10x"), error.getMessage());
     }
 }

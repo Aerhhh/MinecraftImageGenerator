@@ -7,22 +7,10 @@ import java.util.Comparator;
 import java.util.stream.Stream;
 
 /**
- * Shared constants and utilities for the tooling module.
+ * Debug output and file helpers shared by the tooling module. Directories live in {@link ToolingPaths}.
  */
 public final class ToolingConstants {
 
-    // Build directories
-    public static final Path BUILD_DIR = Path.of(System.getProperty("generator.tooling.workDir", "tooling/build"));
-    public static final Path MINECRAFT_ASSETS = BUILD_DIR.resolve("minecraft-assets");
-    public static final Path RENDERED_ITEMS = BUILD_DIR.resolve("rendered-items");
-    public static final Path JAR_CACHE = BUILD_DIR.resolve("minecraft-jars");
-    public static final Path MAPPINGS_CACHE = BUILD_DIR.resolve("minecraft-mappings");
-    public static final Path RENDERER_CLONE = Path.of(System.getProperty("generator.tooling.rendererDir", BUILD_DIR.resolve("MinecraftRenderer").toString()));
-    // Generator output paths
-    public static final String GENERATOR_RESOURCES = System.getProperty("generator.tooling.outputDir", "generator/src/main/resources/minecraft/assets");
-    public static final String GENERATOR_SPRITESHEETS = GENERATOR_RESOURCES + "/spritesheets";
-    public static final String GENERATOR_JSON = GENERATOR_RESOURCES + "/json";
-    // Debug flag
     private static boolean debugEnabled = false;
 
     private ToolingConstants() {
@@ -59,19 +47,5 @@ public final class ToolingConstants {
                     }
                 });
         }
-    }
-
-    /**
-     * Gets the path to a cached Minecraft client JAR.
-     */
-    public static Path getJarPath(String version) {
-        return JAR_CACHE.resolve("minecraft-" + version + "-client.jar");
-    }
-
-    /**
-     * Gets the path to cached Mojang mappings.
-     */
-    public static Path getMappingsPath(String version) {
-        return MAPPINGS_CACHE.resolve("minecraft-" + version + "-client.txt");
     }
 }

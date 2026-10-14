@@ -1,7 +1,5 @@
 package net.aerh.imagegenerator.tooling.minecraft;
 
-import net.aerh.imagegenerator.tooling.ToolingConstants;
-
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.File;
@@ -18,19 +16,8 @@ import java.util.Map;
  */
 public class TrimPaletteExtractor {
 
-    private static final Path DEFAULT_PALETTES_PATH = ToolingConstants.MINECRAFT_ASSETS.resolve("textures/trims/color_palettes");
-
     /**
-     * Extracts all trim color palettes from Minecraft assets.
-     *
-     * @return map of palette name to array of RGB colors
-     */
-    public static Map<String, int[]> extractAllPalettes() {
-        return extractAllPalettes(DEFAULT_PALETTES_PATH);
-    }
-
-    /**
-     * Extracts all trim color palettes from the specified path.
+     * Extracts all trim color palettes from the specified path, normally {@code ToolingPaths#trimPalettes()}.
      *
      * @param palettesPath path to the color_palettes directory
      *

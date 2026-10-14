@@ -1,6 +1,8 @@
 package net.aerh.imagegenerator.tooling.minecraft;
 
+import net.aerh.imagegenerator.tooling.PathGuard;
 import net.aerh.imagegenerator.tooling.ToolingConstants;
+import net.aerh.imagegenerator.tooling.ToolingPaths;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -25,15 +27,13 @@ public class ItemRenderer {
 
     private static final String REPO_URL = "https://github.com/ptlthg/MinecraftRenderer.git";
 
+    private final ToolingPaths paths;
     private final Path repoPath;
     private boolean debug;
 
-    public ItemRenderer() {
-        this(ToolingConstants.RENDERER_CLONE);
-    }
-
-    public ItemRenderer(Path repoPath) {
-        this.repoPath = repoPath;
+    public ItemRenderer(ToolingPaths paths) {
+        this.paths = paths;
+        this.repoPath = paths.rendererDir();
     }
 
     public void setDebug(boolean debug) {
@@ -64,6 +64,9 @@ public class ItemRenderer {
         checkPrerequisites();
 
         if (forceReclone && Files.exists(repoPath)) {
+            PathGuard.deletionRefusal(repoPath, Path.of("").toAbsolutePath()).ifPresent(reason -> {
+                throw new IllegalStateException("Refusing to re-clone into " + repoPath + ": " + reason);
+            });
             System.out.println("Force re-clone requested, deleting existing repository...");
             ToolingConstants.deleteDirectory(repoPath);
         }
@@ -280,7 +283,7 @@ public class ItemRenderer {
      * Ensures Minecraft assets are downloaded and returns the path to them.
      */
     private Path ensureMinecraftAssets(String version) throws IOException, InterruptedException {
-        Path assetsPath = ToolingConstants.MINECRAFT_ASSETS;
+        Path assetsPath = paths.minecraftAssets();
 
         if (Files.exists(assetsPath.resolve("models")) && Files.exists(assetsPath.resolve("textures"))) {
             System.out.println("Minecraft assets already downloaded.");
@@ -289,8 +292,8 @@ public class ItemRenderer {
 
         System.out.println("Downloading Minecraft assets (this may take a moment)...");
         AssetDownloader downloader = new AssetDownloader(
+            paths,
             version,
-            assetsPath,
             true,   // keep JAR (for caching)
             true    // clean first
         );
