@@ -31,7 +31,6 @@ class ToolingPathsTest {
         assertEquals(Path.of("w/rendered-items"), paths.renderedItems());
         assertEquals(Path.of("w/minecraft-jars"), paths.jarCache());
         assertEquals(Path.of("w/minecraft-mappings"), paths.mappingsCache());
-        assertEquals(Path.of("w/minecraft-assets/textures/trims/color_palettes"), paths.trimPalettes());
         assertEquals(Path.of("o/spritesheets"), paths.spritesheets());
         assertEquals(Path.of("o/json"), paths.json());
     }

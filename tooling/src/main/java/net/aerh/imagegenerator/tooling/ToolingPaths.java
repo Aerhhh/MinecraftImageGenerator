@@ -92,10 +92,6 @@ public record ToolingPaths(Path workDir, Path outputDir, Path rendererDir) {
         return workDir.resolve("minecraft-mappings");
     }
 
-    public Path trimPalettes() {
-        return minecraftAssets().resolve("textures/trims/color_palettes");
-    }
-
     public Path spritesheets() {
         return outputDir.resolve("spritesheets");
     }

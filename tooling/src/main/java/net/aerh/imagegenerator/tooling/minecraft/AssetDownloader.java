@@ -87,7 +87,7 @@ public class AssetDownloader {
             Path mappingsPath = downloadMappings(mappingsUrl, resolvedVersion);
             System.out.println("Downloaded mappings: " + mappingsPath);
         } else {
-            ToolingConstants.printDebug("No mappings available for this version");
+            System.out.println("No mappings published for " + resolvedVersion + "; the JAR ships with real class names.");
         }
 
         if (clean && Files.exists(outputPath)) {

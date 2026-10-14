@@ -57,11 +57,27 @@ class SpritesheetGeneratorTest {
     }
 
     @Test
-    void armorTrimVariantsAreLeftOutWhenTheWorkDirectoryHasTrimPalettes() throws IOException {
+    void armorTrimVariantsAreLeftOutWhenTheAssetsHaveTrimPalettes() throws IOException {
         Path input = root.resolve("input");
         writePng(input.resolve("iron_helmet.png"), RED);
         writePng(input.resolve("iron_helmet_amethyst_trim.png"), GREEN);
-        writePalette(paths().trimPalettes().resolve("amethyst.png"));
+        Path palettes = paths().minecraftAssets().resolve("textures/palettes");
+        writePalette(palettes.resolve("trim_base.png"));
+        writePalette(palettes.resolve("trim/amethyst.png"));
+
+        new SpritesheetGenerator(input, paths(), LAYOUT).generate();
+
+        assertEquals(List.of("iron_helmet"), names());
+    }
+
+    @Test
+    void armorTrimVariantsAreLeftOutWithTheLegacyPaletteLayout() throws IOException {
+        Path input = root.resolve("input");
+        writePng(input.resolve("iron_helmet.png"), RED);
+        writePng(input.resolve("iron_helmet_amethyst_trim.png"), GREEN);
+        Path palettes = paths().minecraftAssets().resolve("textures/trims/color_palettes");
+        writePalette(palettes.resolve("trim_palette.png"));
+        writePalette(palettes.resolve("amethyst.png"));
 
         new SpritesheetGenerator(input, paths(), LAYOUT).generate();
 

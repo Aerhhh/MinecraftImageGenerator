@@ -23,7 +23,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -251,32 +250,25 @@ public class OverlayGenerator extends AtlasGenerator {
     }
 
     /**
-     * Discovers armor trim overlay types from the trims/items directory.
-     * Each unique armor type (helmet, chestplate, etc.) found becomes a trim definition.
+     * Discovers armor trim overlays from the trims/items directory. The game ships one greyscale overlay per
+     * armour piece there, named {@code <armor>_trim.png}, and recolours it per material at runtime; each such
+     * file becomes a MAPPED definition named after the file.
      */
     private List<OverlayDefinition> discoverTrimOverlays() {
         if (!Files.exists(trimItems)) {
             return List.of();
         }
 
-        File[] files = trimItems.toFile().listFiles((dir, name) -> name.endsWith(".png"));
+        File[] files = trimItems.toFile().listFiles((dir, name) -> name.endsWith("_trim.png"));
 
         if (files == null) {
             return List.of();
         }
 
-        // Extract unique armor types from filenames like "coast_helmet.png" -> "helmet"
-        // Pattern: {trim_pattern}_{armor_type}.png
         return Arrays.stream(files)
             .map(f -> f.getName().replace(".png", ""))
-            .map(name -> {
-                int lastUnderscore = name.lastIndexOf('_');
-                return lastUnderscore > 0 ? name.substring(lastUnderscore + 1) : null;
-            })
-            .filter(Objects::nonNull)
-            .distinct()
             .sorted()
-            .map(type -> new OverlayDefinition(type + "_trim", "armor_trim", "MAPPED", null))
+            .map(name -> new OverlayDefinition(name, "armor_trim", "MAPPED", null))
             .collect(Collectors.toList());
     }
 

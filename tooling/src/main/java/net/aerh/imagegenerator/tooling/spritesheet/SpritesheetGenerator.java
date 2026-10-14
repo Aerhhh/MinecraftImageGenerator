@@ -28,7 +28,7 @@ public class SpritesheetGenerator extends AtlasGenerator {
     private static final String[] ARMOR_TYPES = {"helmet", "chestplate", "leggings", "boots"};
 
     private final Path inputDir;
-    private final Path trimPalettes;
+    private final Path minecraftAssets;
     private Set<String> trimMaterials;
 
     /**
@@ -45,7 +45,7 @@ public class SpritesheetGenerator extends AtlasGenerator {
             paths.json().resolve("atlas_coordinates.json")
         );
         this.inputDir = inputDir;
-        this.trimPalettes = paths.trimPalettes();
+        this.minecraftAssets = paths.minecraftAssets();
     }
 
     public static void main(String[] args) {
@@ -79,7 +79,7 @@ public class SpritesheetGenerator extends AtlasGenerator {
 
     private void loadTrimMaterials() {
         try {
-            trimMaterials = TrimPaletteExtractor.extractAllPalettes(trimPalettes).keySet();
+            trimMaterials = TrimPaletteExtractor.load(minecraftAssets).materials().keySet();
             System.out.println("Loaded " + trimMaterials.size() + " trim materials from assets.");
         } catch (Exception e) {
             System.err.println("Failed to load trim materials: " + e.getMessage());

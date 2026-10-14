@@ -30,26 +30,28 @@ class OverlayGeneratorTest {
     void armorAndTrimOverlaysAreDiscoveredFromTheMinecraftAssets() throws IOException {
         writeItemTexture("leather_boots_overlay");
         writeItemTexture("stone");
-        // A trim type is discovered from "<pattern>_<type>.png" and its overlay is read from "<type>_trim.png".
-        writeTrimTexture("coast_helmet");
+        // The game ships one greyscale overlay per armour piece, named "<armor>_trim.png".
         writeTrimTexture("helmet_trim");
-        writeTrimTexture("coast_chestplate");
         writeTrimTexture("chestplate_trim");
+        writeTrimTexture("coast_helmet");
 
         new OverlayGenerator(paths()).generate();
 
         Map<String, JsonObject> entries = entriesByName();
         assertEquals("NORMAL", entries.get("leather_boots_overlay").get("type").getAsString());
         assertEquals("leather_armor", entries.get("leather_boots_overlay").get("colorOptions").getAsString());
+        assertTrue(entries.containsKey("helmet_trim"), "helmet_trim should be discovered: " + entries.keySet());
+        assertTrue(entries.containsKey("chestplate_trim"), "chestplate_trim should be discovered: " + entries.keySet());
         assertEquals("MAPPED", entries.get("helmet_trim").get("type").getAsString());
         assertEquals("armor_trim", entries.get("chestplate_trim").get("colorOptions").getAsString());
+        assertFalse(entries.containsKey("coast_helmet"), "only *_trim.png files are trim overlays");
+        assertFalse(entries.containsKey("trim_trim"));
         assertFalse(entries.containsKey("stone"));
     }
 
     @Test
     void overlaysStayOnOneTwoFiftySixPixelPage() throws IOException {
         writeItemTexture("leather_boots_overlay");
-        writeTrimTexture("coast_helmet");
         writeTrimTexture("helmet_trim");
 
         new OverlayGenerator(paths()).generate();
