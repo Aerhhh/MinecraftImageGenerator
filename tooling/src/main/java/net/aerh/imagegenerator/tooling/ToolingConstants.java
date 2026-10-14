@@ -12,14 +12,14 @@ import java.util.stream.Stream;
 public final class ToolingConstants {
 
     // Build directories
-    public static final Path BUILD_DIR = Path.of("tooling/build");
+    public static final Path BUILD_DIR = Path.of(System.getProperty("generator.tooling.workDir", "tooling/build"));
     public static final Path MINECRAFT_ASSETS = BUILD_DIR.resolve("minecraft-assets");
     public static final Path RENDERED_ITEMS = BUILD_DIR.resolve("rendered-items");
     public static final Path JAR_CACHE = BUILD_DIR.resolve("minecraft-jars");
     public static final Path MAPPINGS_CACHE = BUILD_DIR.resolve("minecraft-mappings");
-    public static final Path RENDERER_CLONE = BUILD_DIR.resolve("MinecraftRenderer");
+    public static final Path RENDERER_CLONE = Path.of(System.getProperty("generator.tooling.rendererDir", BUILD_DIR.resolve("MinecraftRenderer").toString()));
     // Generator output paths
-    public static final String GENERATOR_RESOURCES = "generator/src/main/resources/minecraft/assets";
+    public static final String GENERATOR_RESOURCES = System.getProperty("generator.tooling.outputDir", "generator/src/main/resources/minecraft/assets");
     public static final String GENERATOR_SPRITESHEETS = GENERATOR_RESOURCES + "/spritesheets";
     public static final String GENERATOR_JSON = GENERATOR_RESOURCES + "/json";
     // Debug flag
