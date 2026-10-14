@@ -1,45 +1,80 @@
 package net.aerh.imagegenerator.tooling.spritesheet;
 
-import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import net.aerh.imagegenerator.tooling.ToolingConstants;
+import com.google.gson.JsonParseException;
+import com.google.gson.JsonParser;
+import net.aerh.imagegenerator.tooling.CliArgs;
+import net.aerh.imagegenerator.tooling.ToolingPaths;
 import net.hypixel.nerdbot.marmalade.image.ImageUtil;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.File;
-import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
  * Generates the overlay spritesheet from Minecraft texture assets.
+ * <p>
+ * Which overlays exist comes from a definitions file: a list of special overlays with their colour handling,
+ * and the file name prefixes that mark dyeable armour overlays. The tooling bundles that file as a classpath
+ * resource; callers can point at their own with {@value #DEFINITIONS_FLAG}. A supplied file replaces the
+ * bundled one entirely, so a key it leaves out means "none".
  */
 public class OverlayGenerator extends AtlasGenerator {
 
+    public static final String DEFINITIONS_FLAG = "--overlay-definitions";
+
+    private static final String BUNDLED_DEFINITIONS = "/overlay_definitions.json";
     private static final int ATLAS_WIDTH = 1_024;
 
-    private static final Path ITEM_TEXTURES = ToolingConstants.MINECRAFT_ASSETS.resolve("textures/item");
-    private static final Path TRIM_ITEMS = ToolingConstants.MINECRAFT_ASSETS.resolve("textures/trims/items");
-    private static final Path OVERLAY_DEFINITIONS_PATH = Path.of(ToolingConstants.GENERATOR_JSON + "/overlay_definitions.json");
+    private final Path itemTextures;
+    private final Path trimItems;
+    private final List<OverlayDefinition> specialOverlayDefinitions;
+    private final List<String> armorOverlayPatterns;
 
-    private List<OverlayDefinition> specialOverlayDefinitions = List.of();
-    private List<String> armorOverlayPatterns = List.of("leather_", "wolf_");
+    /**
+     * Uses the definitions bundled with the tooling.
+     *
+     * @throws IOException if the bundled definitions are missing or malformed
+     */
+    public OverlayGenerator(ToolingPaths paths) throws IOException {
+        this(paths, readBundledDefinitions());
+    }
 
-    public OverlayGenerator() {
+    /**
+     * Uses the caller's own definitions file instead of the bundled one.
+     *
+     * @throws IOException if the file cannot be read or is not a valid definitions document
+     */
+    public OverlayGenerator(ToolingPaths paths, Path definitionsFile) throws IOException {
+        this(paths, readDefinitions(definitionsFile));
+    }
+
+    private OverlayGenerator(ToolingPaths paths, OverlayDefinitions definitions) {
         super(
-            ATLAS_WIDTH,
-            ToolingConstants.GENERATOR_SPRITESHEETS + "/overlays.png",
-            ToolingConstants.GENERATOR_JSON + "/overlay_coordinates.json"
+            new AtlasLayout(AtlasLayout.DEFAULT_TILE_SIZE, ATLAS_WIDTH, AtlasLayout.UNLIMITED, 0),
+            paths.spritesheets().resolve("overlays.png"),
+            paths.json().resolve("overlay_coordinates.json")
         );
+        this.itemTextures = paths.minecraftAssets().resolve("textures/item");
+        this.trimItems = paths.minecraftAssets().resolve("textures/trims/items");
+        this.specialOverlayDefinitions = definitions.specialOverlays();
+        this.armorOverlayPatterns = definitions.armorOverlayPatterns();
     }
 
     public static void main(String[] args) {
@@ -48,120 +83,189 @@ public class OverlayGenerator extends AtlasGenerator {
             System.out.println("Overlay Generator");
             System.out.println("=".repeat(50));
 
-            if (!Files.exists(ToolingConstants.MINECRAFT_ASSETS)) {
-                throw new IOException("Minecraft assets not found at: " + ToolingConstants.MINECRAFT_ASSETS +
-                    "\nRun 'MinecraftAssetTool --download' first.");
+            CliArgs.checkKnown(args, Set.of(), Set.of(
+                ToolingPaths.WORK_DIR_FLAG, ToolingPaths.OUTPUT_DIR_FLAG, DEFINITIONS_FLAG
+            ));
+            ToolingPaths paths = ToolingPaths.fromArgs(args);
+            Optional<Path> definitionsFile = CliArgs.pathValue(args, DEFINITIONS_FLAG);
+
+            if (!Files.exists(paths.minecraftAssets())) {
+                throw new IOException("Minecraft assets not found at: " + paths.minecraftAssets()
+                    + "\nRun 'MinecraftAssetTool --download' first.");
             }
 
-            new OverlayGenerator().generate();
-            new OverlayColorConfigGenerator().generate();
+            OverlayGenerator generator = definitionsFile.isPresent()
+                ? new OverlayGenerator(paths, definitionsFile.get())
+                : new OverlayGenerator(paths);
+            generator.generate();
+            new OverlayColorConfigGenerator(paths).generate();
 
             System.out.println("\n" + "=".repeat(50));
             System.out.println("Overlay generation complete!");
             System.out.println("=".repeat(50));
-        } catch (IOException e) {
+        } catch (IOException | UncheckedIOException | IllegalArgumentException | IllegalStateException e) {
             System.err.println("Failed to generate overlays: " + e.getMessage());
             e.printStackTrace();
             System.exit(1);
         }
     }
 
+    private static OverlayDefinitions readBundledDefinitions() throws IOException {
+        try (InputStream stream = OverlayGenerator.class.getResourceAsStream(BUNDLED_DEFINITIONS)) {
+            if (stream == null) {
+                throw new IOException("Bundled overlay definitions " + BUNDLED_DEFINITIONS + " are missing from the tooling classpath");
+            }
+
+            return parseDefinitions(new InputStreamReader(stream, StandardCharsets.UTF_8), "bundled " + BUNDLED_DEFINITIONS);
+        }
+    }
+
+    /**
+     * Parses a definitions file and discards the result, so an entry point can reject a bad file before it
+     * spends time on downloads or renders.
+     *
+     * @throws IOException if the file cannot be read or is not a valid definitions document
+     */
+    public static void checkDefinitions(Path file) throws IOException {
+        readDefinitions(file);
+    }
+
+    private static OverlayDefinitions readDefinitions(Path file) throws IOException {
+        if (!Files.isRegularFile(file)) {
+            throw new IOException("Overlay definitions file not found: " + file);
+        }
+
+        try (Reader reader = Files.newBufferedReader(file)) {
+            return parseDefinitions(reader, file.toString());
+        }
+    }
+
+    private static OverlayDefinitions parseDefinitions(Reader reader, String source) throws IOException {
+        JsonObject config;
+        try {
+            config = JsonParser.parseReader(reader).getAsJsonObject();
+        } catch (JsonParseException | IllegalStateException e) {
+            throw new IOException("Overlay definitions " + source + " are not a JSON object: " + e.getMessage(), e);
+        }
+
+        List<OverlayDefinition> specials = new ArrayList<>();
+        if (config.has("specialOverlays")) {
+            for (JsonElement element : asArray(config, "specialOverlays", source)) {
+                if (!element.isJsonObject()) {
+                    throw new IOException("Overlay definitions " + source + ": every specialOverlays entry must be an object");
+                }
+
+                JsonObject obj = element.getAsJsonObject();
+                specials.add(new OverlayDefinition(
+                    requiredString(obj, "fileName", source),
+                    requiredString(obj, "colorOptions", source),
+                    requiredString(obj, "type", source),
+                    optionalString(obj, "colorMode", source)
+                ));
+            }
+        }
+
+        List<String> patterns = new ArrayList<>();
+        if (config.has("armorOverlayPatterns")) {
+            for (JsonElement element : asArray(config, "armorOverlayPatterns", source)) {
+                if (!isString(element)) {
+                    throw new IOException("Overlay definitions " + source + ": every armorOverlayPatterns entry must be a string");
+                }
+                patterns.add(element.getAsString());
+            }
+        }
+
+        System.out.println("  Loaded " + specials.size() + " special overlay definitions and "
+            + patterns.size() + " armor overlay patterns from " + source);
+        return new OverlayDefinitions(List.copyOf(specials), List.copyOf(patterns));
+    }
+
+    private static JsonArray asArray(JsonObject config, String key, String source) throws IOException {
+        if (!config.get(key).isJsonArray()) {
+            throw new IOException("Overlay definitions " + source + ": " + key + " must be an array");
+        }
+
+        return config.getAsJsonArray(key);
+    }
+
+    private static String requiredString(JsonObject obj, String key, String source) throws IOException {
+        JsonElement value = obj.get(key);
+        if (value == null || value.isJsonNull()) {
+            throw new IOException("Overlay definitions " + source + ": a specialOverlays entry is missing '" + key + "'");
+        }
+
+        if (!isString(value)) {
+            throw new IOException("Overlay definitions " + source + ": '" + key + "' must be a string");
+        }
+
+        return value.getAsString();
+    }
+
+    private static String optionalString(JsonObject obj, String key, String source) throws IOException {
+        JsonElement value = obj.get(key);
+        if (value == null) {
+            return null;
+        }
+
+        if (!isString(value)) {
+            throw new IOException("Overlay definitions " + source + ": '" + key + "' must be a string when present");
+        }
+
+        return value.getAsString();
+    }
+
+    private static boolean isString(JsonElement value) {
+        return value.isJsonPrimitive() && value.getAsJsonPrimitive().isString();
+    }
+
     @Override
     protected List<AtlasEntry> loadTextures() {
         List<AtlasEntry> overlays = new ArrayList<>();
 
-        loadOverlayDefinitions();
-
-        System.out.println("\nDiscovering dyeable armor overlays from: " + ITEM_TEXTURES);
+        System.out.println("\nDiscovering dyeable armor overlays from: " + itemTextures);
         List<OverlayDefinition> armorOverlays = discoverArmorOverlays();
         System.out.println("  Found " + armorOverlays.size() + " armor overlays");
-        loadOverlays(overlays, ITEM_TEXTURES, armorOverlays);
+        loadOverlays(overlays, itemTextures, armorOverlays);
 
-        System.out.println("\nDiscovering special overlays from config");
+        System.out.println("\nDiscovering special overlays from definitions");
         List<OverlayDefinition> specialOverlays = discoverSpecialOverlays();
         System.out.println("  Found " + specialOverlays.size() + " special overlays");
-        loadOverlays(overlays, ITEM_TEXTURES, specialOverlays);
+        loadOverlays(overlays, itemTextures, specialOverlays);
 
-        System.out.println("\nDiscovering trim overlays from: " + TRIM_ITEMS);
+        System.out.println("\nDiscovering trim overlays from: " + trimItems);
         List<OverlayDefinition> trimOverlays = discoverTrimOverlays();
         System.out.println("  Found " + trimOverlays.size() + " trim types");
-        loadOverlays(overlays, TRIM_ITEMS, trimOverlays);
+        loadOverlays(overlays, trimItems, trimOverlays);
 
         System.out.println("\nTotal overlays loaded: " + overlays.size());
         return overlays;
     }
 
     /**
-     * Loads overlay definitions from overlay_definitions.json config file.
-     */
-    private void loadOverlayDefinitions() {
-        if (!Files.exists(OVERLAY_DEFINITIONS_PATH)) {
-            System.err.println("  WARNING: overlay_definitions.json not found, using defaults");
-            return;
-        }
-
-        try (FileReader reader = new FileReader(OVERLAY_DEFINITIONS_PATH.toFile())) {
-            Gson gson = new Gson();
-            JsonObject config = gson.fromJson(reader, JsonObject.class);
-
-            // Load special overlays
-            if (config.has("specialOverlays")) {
-                List<OverlayDefinition> specials = new ArrayList<>();
-                JsonArray specialsArray = config.getAsJsonArray("specialOverlays");
-                for (JsonElement element : specialsArray) {
-                    JsonObject obj = element.getAsJsonObject();
-                    specials.add(new OverlayDefinition(
-                        obj.get("fileName").getAsString(),
-                        obj.get("colorOptions").getAsString(),
-                        obj.get("type").getAsString(),
-                        obj.has("colorMode") ? obj.get("colorMode").getAsString() : null
-                    ));
-                }
-                specialOverlayDefinitions = specials;
-                System.out.println("  Loaded " + specials.size() + " special overlay definitions from config");
-            }
-
-            // Load armor overlay patterns
-            if (config.has("armorOverlayPatterns")) {
-                List<String> patterns = new ArrayList<>();
-                JsonArray patternsArray = config.getAsJsonArray("armorOverlayPatterns");
-                for (JsonElement element : patternsArray) {
-                    patterns.add(element.getAsString());
-                }
-                armorOverlayPatterns = patterns;
-                System.out.println("  Loaded " + patterns.size() + " armor overlay patterns from config");
-            }
-        } catch (IOException e) {
-            System.err.println("  ERROR: Failed to load overlay_definitions.json: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Filters special overlay definitions to only include files that exist in assets.
+     * Keeps the special overlay definitions whose texture exists in the assets.
      * These have unique color handling so mappings are kept explicit, but we verify existence.
      */
     private List<OverlayDefinition> discoverSpecialOverlays() {
-        if (!Files.exists(ITEM_TEXTURES)) {
+        if (!Files.exists(itemTextures)) {
             return List.of();
         }
 
         return specialOverlayDefinitions.stream()
-            .filter(def -> ITEM_TEXTURES.resolve(def.fileName + ".png").toFile().exists())
+            .filter(def -> Files.exists(itemTextures.resolve(def.fileName + ".png")))
             .collect(Collectors.toList());
     }
 
     /**
-     * Discovers dyeable armor overlays from the textures directory.
-     * Uses patterns from overlay_definitions.json (e.g., leather_*, wolf_*)
+     * Discovers dyeable armor overlays from the textures directory using the configured name prefixes.
      */
     private List<OverlayDefinition> discoverArmorOverlays() {
         List<OverlayDefinition> definitions = new ArrayList<>();
 
-        if (!Files.exists(ITEM_TEXTURES)) {
+        if (!Files.exists(itemTextures)) {
             return definitions;
         }
 
-        File[] files = ITEM_TEXTURES.toFile().listFiles((dir, name) -> {
+        File[] files = itemTextures.toFile().listFiles((dir, name) -> {
             if (!name.endsWith("_overlay.png")) {
                 return false;
             }
@@ -184,34 +288,25 @@ public class OverlayGenerator extends AtlasGenerator {
     }
 
     /**
-     * Discovers armor trim overlay type from the trims/items directory.
-     * Each unique armor type (helmet, chestplate, etc.) found becomes a trim definition.
+     * Discovers armor trim overlays from the trims/items directory. The game ships one greyscale overlay per
+     * armour piece there, named {@code <armor>_trim.png}, and recolours it per material at runtime; each such
+     * file becomes a MAPPED definition named after the file.
      */
     private List<OverlayDefinition> discoverTrimOverlays() {
-        List<OverlayDefinition> definitions = new ArrayList<>();
-
-        if (!Files.exists(TRIM_ITEMS)) {
-            return definitions;
+        if (!Files.exists(trimItems)) {
+            return List.of();
         }
 
-        File[] files = TRIM_ITEMS.toFile().listFiles((dir, name) -> name.endsWith(".png"));
+        File[] files = trimItems.toFile().listFiles((dir, name) -> name.endsWith("_trim.png"));
 
         if (files == null) {
-            return definitions;
+            return List.of();
         }
 
-        // Extract unique armor types from filenames like "coast_helmet.png" -> "helmet"
-        // Pattern: {trim_pattern}_{armor_type}.png
         return Arrays.stream(files)
             .map(f -> f.getName().replace(".png", ""))
-            .map(name -> {
-                int lastUnderscore = name.lastIndexOf('_');
-                return lastUnderscore > 0 ? name.substring(lastUnderscore + 1) : null;
-            })
-            .filter(Objects::nonNull)
-            .distinct()
             .sorted()
-            .map(type -> new OverlayDefinition(type + "_trim", "armor_trim", "MAPPED", null))
+            .map(name -> new OverlayDefinition(name, "armor_trim", "MAPPED", null))
             .collect(Collectors.toList());
     }
 
@@ -235,7 +330,7 @@ public class OverlayGenerator extends AtlasGenerator {
                     continue;
                 }
 
-                BufferedImage resized = resizeToAtlasSize(ImageUtil.convertToArgbRaw(image));
+                BufferedImage resized = resizeToLayoutSize(ImageUtil.convertToArgbRaw(image));
 
                 AtlasEntry entry = new AtlasEntry(def.fileName, resized)
                     .withMeta("type", def.type)
@@ -246,7 +341,8 @@ public class OverlayGenerator extends AtlasGenerator {
                 }
 
                 overlays.add(entry);
-                System.out.println("  Loaded: " + def.fileName + " (" + image.getWidth() + "x" + image.getHeight() + " -> " + IMAGE_SIZE + "x" + IMAGE_SIZE + ")");
+                System.out.println("  Loaded: " + def.fileName + " (" + image.getWidth() + "x" + image.getHeight()
+                    + " -> " + layout.tileSize() + "x" + layout.tileSize() + ")");
             } catch (IOException e) {
                 System.err.println("  Error loading " + def.fileName + ": " + e.getMessage());
             }
@@ -259,7 +355,7 @@ public class OverlayGenerator extends AtlasGenerator {
         obj.addProperty("name", entry.name);
         obj.addProperty("x", entry.x);
         obj.addProperty("y", entry.y);
-        obj.addProperty("size", IMAGE_SIZE);
+        obj.addProperty("size", layout.tileSize());
         obj.addProperty("type", entry.getMeta("type"));
         obj.addProperty("colorOptions", entry.getMeta("colorOptions"));
 
@@ -271,5 +367,8 @@ public class OverlayGenerator extends AtlasGenerator {
     }
 
     private record OverlayDefinition(String fileName, String colorOptions, String type, String colorMode) {
+    }
+
+    private record OverlayDefinitions(List<OverlayDefinition> specialOverlays, List<String> armorOverlayPatterns) {
     }
 }

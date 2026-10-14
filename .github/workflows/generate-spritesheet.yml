@@ -1,5 +1,7 @@
 name: Generate Spritesheet
 
+# Dispatch this on any branch. The regenerated assets are committed back to the branch it ran on,
+# or a pull request is opened against that branch, so it works inside an open PR as well as on master.
 on:
   workflow_dispatch:
     inputs:
@@ -42,24 +44,22 @@ jobs:
   generate:
     runs-on: ubuntu-latest
 
+    env:
+      # The render step draws every block and item in the Maven JVM, so give it room for the renderer's context.
+      MAVEN_OPTS: -Xmx4g
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - name: Set up JDK 21
+      - name: Set up JDK 25
         uses: actions/setup-java@v6.0.1
         with:
           java-version: '25'
           distribution: 'temurin'
           cache: maven
-
-      - name: Set up .NET SDK
-        if: inputs.pipeline == 'full' || inputs.pipeline == 'render-only'
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: '10.0.x'
 
       - name: Build Tooling Module
         run: mvn -pl tooling -am compile -DskipTests -q
@@ -187,7 +187,7 @@ jobs:
           ## Asset Changes
 
           $DIFF_TABLE" \
-            --base master || echo "PR already exists"
+            --base "${{ github.ref_name }}" || echo "PR already exists"
 
       - name: Commit Directly
         if: steps.changes.outputs.has_changes == 'true' && inputs.create_pr == false
@@ -196,7 +196,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add generator/src/main/resources/minecraft/assets/
           git commit -m "Update spritesheet assets"
-          git push origin master
+          git push origin HEAD:"${{ github.ref_name }}"
 
       - name: Upload Artifacts
         if: steps.changes.outputs.has_changes == 'true'

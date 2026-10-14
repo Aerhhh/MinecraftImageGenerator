@@ -1,6 +1,6 @@
 package net.aerh.imagegenerator.tooling.minecraft;
 
-import net.aerh.imagegenerator.tooling.ToolingConstants;
+import net.aerh.imagegenerator.tooling.ToolingSupport;
 import net.aerh.imagegenerator.tooling.minecraft.colorextractor.DyeColorVisitor;
 import net.aerh.imagegenerator.tooling.minecraft.colorextractor.EffectFieldMapper;
 import net.aerh.imagegenerator.tooling.minecraft.colorextractor.EffectRegistryVisitor;
@@ -20,7 +20,9 @@ import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -30,30 +32,45 @@ import java.util.zip.ZipFile;
  */
 public class ColorExtractor {
 
+    private static final String DYE_COLOR_CLASS = "net.minecraft.world.item.DyeColor";
+    private static final String MOB_EFFECTS_CLASS = "net.minecraft.world.effect.MobEffects";
+    private static final String MOB_EFFECT_CLASS = "net.minecraft.world.effect.MobEffect";
+    private static final String POTIONS_CLASS = "net.minecraft.world.item.alchemy.Potions";
+    private static final List<String> NAMED_CLASSES = List.of(DYE_COLOR_CLASS, MOB_EFFECTS_CLASS, MOB_EFFECT_CLASS, POTIONS_CLASS);
+
     private final Path jarPath;
+    /** Mojang's ProGuard mappings for an obfuscated JAR, or null when the JAR already uses the real class names. */
     private final Path mappingsPath;
-    private final Map<String, String> classToObfuscated = new HashMap<>();
 
     private boolean debug = false;
 
+    /**
+     * Reads a client JAR that ships unobfuscated, as every version from 26.x on does.
+     */
+    public ColorExtractor(Path jarPath) {
+        this.jarPath = Objects.requireNonNull(jarPath, "jarPath");
+        this.mappingsPath = null;
+    }
+
+    /**
+     * Reads an obfuscated client JAR through Mojang's mappings for that version.
+     */
     public ColorExtractor(Path jarPath, Path mappingsPath) {
-        this.jarPath = jarPath;
-        this.mappingsPath = mappingsPath;
+        this.jarPath = Objects.requireNonNull(jarPath, "jarPath");
+        this.mappingsPath = Objects.requireNonNull(mappingsPath, "mappingsPath");
     }
 
     public void setDebug(boolean debug) {
         this.debug = debug;
-        ToolingConstants.setDebugEnabled(debug);
+        ToolingSupport.setDebugEnabled(debug);
     }
 
     public ExtractedColors extract() throws IOException {
-        System.out.println("Parsing mappings...");
-        parseMappings();
-        ToolingConstants.printDebug("Found " + classToObfuscated.size() + " class mappings");
+        Map<String, String> classes = resolveClassNames();
 
         ExtractedColors result = new ExtractedColors();
 
-        String dyeColorClass = classToObfuscated.get("net.minecraft.world.item.DyeColor");
+        String dyeColorClass = classes.get(DYE_COLOR_CLASS);
         if (dyeColorClass != null) {
             System.out.println("Extracting DyeColor values from: " + dyeColorClass);
             result.dyeColors = extractDyeColors(dyeColorClass);
@@ -62,8 +79,8 @@ public class ColorExtractor {
             System.err.println("WARNING: Could not find DyeColor class mapping");
         }
 
-        String mobEffectsClass = classToObfuscated.get("net.minecraft.world.effect.MobEffects");
-        String mobEffectClass = classToObfuscated.get("net.minecraft.world.effect.MobEffect");
+        String mobEffectsClass = classes.get(MOB_EFFECTS_CLASS);
+        String mobEffectClass = classes.get(MOB_EFFECT_CLASS);
         if (mobEffectsClass != null && mobEffectClass != null) {
             System.out.println("Extracting MobEffect colors from: " + mobEffectsClass);
             result.effectColors = extractEffectColors(mobEffectsClass);
@@ -78,7 +95,7 @@ public class ColorExtractor {
             System.err.println("WARNING: Could not find MobEffects class mapping");
         }
 
-        String potionsClass = classToObfuscated.get("net.minecraft.world.item.alchemy.Potions");
+        String potionsClass = classes.get(POTIONS_CLASS);
 
         Set<String> effectsWithPotions = new HashSet<>();
         if (potionsClass != null && mobEffectsClass != null) {
@@ -108,13 +125,52 @@ public class ColorExtractor {
         return result;
     }
 
-    private void parseMappings() throws IOException {
+    /**
+     * Works out the class names to read from the JAR. With mappings, each named class is translated to its
+     * obfuscated name and left out when the mappings do not list it. Without mappings the JAR must already use
+     * the real names, which is checked by looking for the DyeColor class before anything else runs.
+     *
+     * @throws IOException if the mappings cannot be read, or no mappings were given and the JAR is obfuscated
+     */
+    Map<String, String> resolveClassNames() throws IOException {
+        Map<String, String> classes = new HashMap<>();
+
+        if (mappingsPath == null) {
+            try (ZipFile zip = new ZipFile(jarPath.toFile())) {
+                if (zip.getEntry(DYE_COLOR_CLASS.replace('.', '/') + ".class") == null) {
+                    throw new IOException("Client JAR " + jarPath.getFileName() + " looks obfuscated (no "
+                        + DYE_COLOR_CLASS + " class) and no mappings were given");
+                }
+            }
+
+            System.out.println("JAR uses real class names; no mappings needed.");
+            for (String name : NAMED_CLASSES) {
+                classes.put(name, name);
+            }
+            return classes;
+        }
+
+        System.out.println("Parsing mappings...");
+        Map<String, String> classToObfuscated = parseMappings();
+        ToolingSupport.printDebug("Found " + classToObfuscated.size() + " class mappings");
+
+        for (String name : NAMED_CLASSES) {
+            String obfuscated = classToObfuscated.get(name);
+            if (obfuscated != null) {
+                classes.put(name, obfuscated);
+            }
+        }
+        return classes;
+    }
+
+    private Map<String, String> parseMappings() throws IOException {
         MemoryMappingTree tree = new MemoryMappingTree();
 
         try (BufferedReader reader = Files.newBufferedReader(mappingsPath)) {
             MappingReader.read(reader, tree);
         }
 
+        Map<String, String> classToObfuscated = new HashMap<>();
         for (MappingTree.ClassMapping classMapping : tree.getClasses()) {
             String srcName = classMapping.getSrcName();
             String dstName = classMapping.getDstName(0);
@@ -126,6 +182,7 @@ public class ColorExtractor {
                 );
             }
         }
+        return classToObfuscated;
     }
 
     private Map<String, DyeColorData> extractDyeColors(String obfuscatedClass) throws IOException {
@@ -139,7 +196,7 @@ public class ColorExtractor {
 
             try (InputStream is = zip.getInputStream(entry)) {
                 ClassReader reader = new ClassReader(is);
-                DyeColorVisitor visitor = new DyeColorVisitor(ToolingConstants::printDebug);
+                DyeColorVisitor visitor = new DyeColorVisitor(ToolingSupport::printDebug);
                 reader.accept(visitor, 0);
                 return visitor.getColors();
             }
@@ -157,7 +214,7 @@ public class ColorExtractor {
 
             try (InputStream is = zip.getInputStream(entry)) {
                 ClassReader reader = new ClassReader(is);
-                EffectRegistryVisitor visitor = new EffectRegistryVisitor(ToolingConstants::printDebug);
+                EffectRegistryVisitor visitor = new EffectRegistryVisitor(ToolingSupport::printDebug);
                 reader.accept(visitor, 0);
                 return visitor.getColors();
             }
@@ -175,10 +232,10 @@ public class ColorExtractor {
             if (mobEffectsEntry != null) {
                 try (InputStream is = zip.getInputStream(mobEffectsEntry)) {
                     ClassReader reader = new ClassReader(is);
-                    EffectFieldMapper fieldMapper = new EffectFieldMapper(ToolingConstants::printDebug);
+                    EffectFieldMapper fieldMapper = new EffectFieldMapper(ToolingSupport::printDebug);
                     reader.accept(fieldMapper, 0);
                     fieldToEffectName = fieldMapper.getFieldToName();
-                    ToolingConstants.printDebug("Mapped " + fieldToEffectName.size() + " MobEffects fields to names");
+                    ToolingSupport.printDebug("Mapped " + fieldToEffectName.size() + " MobEffects fields to names");
                 }
             }
 
@@ -186,7 +243,7 @@ public class ColorExtractor {
             if (potionsEntry != null) {
                 try (InputStream is = zip.getInputStream(potionsEntry)) {
                     ClassReader reader = new ClassReader(is);
-                    PotionVisitor visitor = new PotionVisitor(mobEffectsInternal, fieldToEffectName, ToolingConstants::printDebug);
+                    PotionVisitor visitor = new PotionVisitor(mobEffectsInternal, fieldToEffectName, ToolingSupport::printDebug);
                     reader.accept(visitor, 0);
                     return visitor.getEffectsWithPotions();
                 }
@@ -216,7 +273,7 @@ public class ColorExtractor {
 
                         if (visitor.getEffectName() != null && visitor.getColor() != 0) {
                             colors.put(visitor.getEffectName(), visitor.getColor());
-                            ToolingConstants.printDebug("Found effect: " + visitor.getEffectName() + " -> " + visitor.getColor());
+                            ToolingSupport.printDebug("Found effect: " + visitor.getEffectName() + " -> " + visitor.getColor());
                         }
                     }
                 } catch (Exception ignored) {

@@ -5,7 +5,9 @@
     "y": 0,
     "size": 256,
     "type": "NORMAL",
-    "colorOptions": "leather_armor"
+    "colorOptions": "leather_armor",
+    "page": 0,
+    "atlas": "overlays.png"
   },
   {
     "name": "leather_chestplate_overlay",
@@ -13,7 +15,9 @@
     "y": 0,
     "size": 256,
     "type": "NORMAL",
-    "colorOptions": "leather_armor"
+    "colorOptions": "leather_armor",
+    "page": 0,
+    "atlas": "overlays.png"
   },
   {
     "name": "leather_helmet_overlay",
@@ -21,7 +25,9 @@
     "y": 0,
     "size": 256,
     "type": "NORMAL",
-    "colorOptions": "leather_armor"
+    "colorOptions": "leather_armor",
+    "page": 0,
+    "atlas": "overlays.png"
   },
   {
     "name": "leather_horse_armor_overlay",
@@ -29,7 +35,9 @@
     "y": 0,
     "size": 256,
     "type": "NORMAL",
-    "colorOptions": "leather_armor"
+    "colorOptions": "leather_armor",
+    "page": 0,
+    "atlas": "overlays.png"
   },
   {
     "name": "leather_leggings_overlay",
@@ -37,7 +45,9 @@
     "y": 256,
     "size": 256,
     "type": "NORMAL",
-    "colorOptions": "leather_armor"
+    "colorOptions": "leather_armor",
+    "page": 0,
+    "atlas": "overlays.png"
   },
   {
     "name": "wolf_armor_overlay",
@@ -45,7 +55,9 @@
     "y": 256,
     "size": 256,
     "type": "NORMAL",
-    "colorOptions": "leather_armor"
+    "colorOptions": "leather_armor",
+    "page": 0,
+    "atlas": "overlays.png"
   },
   {
     "name": "potion_overlay",
@@ -54,7 +66,9 @@
     "size": 256,
     "type": "NORMAL",
     "colorOptions": "potion",
-    "colorMode": "OVERLAY"
+    "colorMode": "OVERLAY",
+    "page": 0,
+    "atlas": "overlays.png"
   },
   {
     "name": "tipped_arrow_head",
@@ -63,7 +77,9 @@
     "size": 256,
     "type": "NORMAL",
     "colorOptions": "effect",
-    "colorMode": "OVERLAY"
+    "colorMode": "OVERLAY",
+    "page": 0,
+    "atlas": "overlays.png"
   },
   {
     "name": "firework_star_overlay",
@@ -72,6 +88,48 @@
     "size": 256,
     "type": "NORMAL",
     "colorOptions": "firework",
-    "colorMode": "OVERLAY"
+    "colorMode": "OVERLAY",
+    "page": 0,
+    "atlas": "overlays.png"
+  },
+  {
+    "name": "boots_trim",
+    "x": 256,
+    "y": 512,
+    "size": 256,
+    "type": "MAPPED",
+    "colorOptions": "armor_trim",
+    "page": 0,
+    "atlas": "overlays.png"
+  },
+  {
+    "name": "chestplate_trim",
+    "x": 512,
+    "y": 512,
+    "size": 256,
+    "type": "MAPPED",
+    "colorOptions": "armor_trim",
+    "page": 0,
+    "atlas": "overlays.png"
+  },
+  {
+    "name": "helmet_trim",
+    "x": 768,
+    "y": 512,
+    "size": 256,
+    "type": "MAPPED",
+    "colorOptions": "armor_trim",
+    "page": 0,
+    "atlas": "overlays.png"
+  },
+  {
+    "name": "leggings_trim",
+    "x": 0,
+    "y": 768,
+    "size": 256,
+    "type": "MAPPED",
+    "colorOptions": "armor_trim",
+    "page": 0,
+    "atlas": "overlays.png"
   }
 ]
