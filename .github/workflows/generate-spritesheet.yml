@@ -44,6 +44,11 @@ jobs:
   generate:
     runs-on: ubuntu-latest
 
+    env:
+      # MinecraftRenderer builds on SixLabors ImageSharp 4, which needs a license key to compile.
+      # Store the key as a repository secret; without it the render step stops with a one-line explanation.
+      SIXLABORS_LICENSE_KEY: ${{ secrets.SIXLABORS_LICENSE_KEY }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v7

@@ -10,6 +10,8 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -26,6 +28,10 @@ import java.util.concurrent.TimeUnit;
 public class ItemRenderer {
 
     private static final String REPO_URL = "https://github.com/ptlthg/MinecraftRenderer.git";
+
+    /** Environment variable MinecraftRenderer's project file reads its Six Labors license key from. */
+    public static final String LICENSE_KEY_VARIABLE = "SIXLABORS_LICENSE_KEY";
+    private static final String LICENSE_FILE_NAME = "sixlabors.lic";
 
     private final ToolingPaths paths;
     private final Path repoPath;
@@ -69,6 +75,12 @@ public class ItemRenderer {
             });
             System.out.println("Force re-clone requested, deleting existing repository...");
             ToolingSupport.deleteDirectory(repoPath);
+        }
+
+        if (forceRebuild || !isBuilt()) {
+            licenseRefusal(repoPath, System.getenv()).ifPresent(reason -> {
+                throw new IllegalStateException(reason);
+            });
         }
 
         if (!isCloned()) {
@@ -131,6 +143,26 @@ public class ItemRenderer {
      */
     public boolean isBuilt() {
         return Files.exists(repoPath.resolve("CreateAtlases/bin"));
+    }
+
+    /**
+     * MinecraftRenderer builds on SixLabors ImageSharp 4, which refuses to compile without a Six Labors license:
+     * a key in the {@value #LICENSE_KEY_VARIABLE} environment variable, which is what its own CI uses, or a
+     * {@code sixlabors.lic} file in the checkout. Says what is missing, or returns empty when a build can go ahead.
+     */
+    static Optional<String> licenseRefusal(Path repoPath, Map<String, String> env) {
+        String key = env.get(LICENSE_KEY_VARIABLE);
+        if (key != null && !key.isBlank()) {
+            return Optional.empty();
+        }
+
+        if (Files.isRegularFile(repoPath.resolve(LICENSE_FILE_NAME))) {
+            return Optional.empty();
+        }
+
+        return Optional.of("MinecraftRenderer needs a Six Labors ImageSharp license to build. Set "
+            + LICENSE_KEY_VARIABLE + " to a license key, or put a " + LICENSE_FILE_NAME + " file in " + repoPath
+            + ". Open-source projects can apply for a free Community license at https://licensing.sixlabors.com");
     }
 
     /**

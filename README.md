@@ -668,6 +668,13 @@ The project includes a GitHub Actions workflow for generating and updating Minec
 - Generating sprite atlases with coordinate metadata
 - Generating item overlays for colored variants (armor, potions, etc.)
 
+The render step clones and builds [MinecraftRenderer](https://github.com/ptlthg/MinecraftRenderer), which
+depends on SixLabors ImageSharp 4. That library will not compile without a Six Labors license key, so the
+workflow passes the `SIXLABORS_LICENSE_KEY` repository secret to the build, and a local run needs the same
+variable in its environment or a `sixlabors.lic` file in the renderer checkout. Open-source projects can apply
+for a free Community license at [licensing.sixlabors.com](https://licensing.sixlabors.com). Without a key the
+tool stops before cloning anything and says so.
+
 ### Configurable tooling outputs and atlas pages
 
 By default the tooling keeps its scratch files under `tooling/build` and writes
