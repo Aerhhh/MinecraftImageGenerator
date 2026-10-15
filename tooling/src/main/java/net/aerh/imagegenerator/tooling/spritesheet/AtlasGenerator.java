@@ -51,16 +51,16 @@ public abstract class AtlasGenerator {
     protected abstract JsonObject entryToJson(AtlasEntry entry);
 
     /**
-     * Loads, packs and writes the atlas. Fails with an {@link UncheckedIOException} rather than leaving a
-     * half-written set of files behind.
+     * Loads, packs and writes the atlas. Nothing to pack is an {@link IllegalStateException} and a file that
+     * cannot be written an {@link UncheckedIOException}: a run that reports success without producing the atlas,
+     * or leaves a half-written set of files behind, would let a build package stale or partial assets.
      */
     public void generate() {
         List<AtlasEntry> entries = loadTextures();
         System.out.println("Loaded " + entries.size() + " textures.");
 
         if (entries.isEmpty()) {
-            System.err.println("No textures to pack!");
-            return;
+            throw new IllegalStateException("No textures to pack into " + atlasOutputPath);
         }
 
         int capacity = layout.capacity();

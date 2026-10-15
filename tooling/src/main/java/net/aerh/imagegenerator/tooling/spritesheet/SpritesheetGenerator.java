@@ -8,15 +8,16 @@ import net.hypixel.nerdbot.marmalade.image.ImageUtil;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
-import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * Generates the item texture atlas from a directory of individual PNG renders.
@@ -60,7 +61,7 @@ public class SpritesheetGenerator extends AtlasGenerator {
 
             new SpritesheetGenerator(inputDir, paths, layout).generate();
             System.out.println("Texture atlas generation complete!");
-        } catch (IllegalArgumentException | UncheckedIOException e) {
+        } catch (IllegalArgumentException | IllegalStateException | UncheckedIOException e) {
             System.err.println("Error: " + e.getMessage());
             System.exit(1);
         }
@@ -95,52 +96,38 @@ public class SpritesheetGenerator extends AtlasGenerator {
         }
     }
 
+    /**
+     * Reads every PNG in the input directory in name order. A directory that cannot be listed and a file that
+     * is not a readable image both end the run: skipping them would pack an atlas with holes and report success,
+     * which is worse for a build than a clear failure.
+     */
     @Override
     protected List<AtlasEntry> loadTextures() {
         loadTrimMaterials();
 
+        List<Path> files = listPngs();
+        System.out.println("Loading textures from: " + inputDir.toAbsolutePath());
+
         List<AtlasEntry> textures = new ArrayList<>();
-        File folder = inputDir.toFile();
-        File[] files = folder.listFiles(f -> f.isFile() && f.getName().toLowerCase().endsWith(".png"));
-
-        if (files == null) {
-            System.err.println("No textures found in: " + folder.getAbsolutePath());
-            return textures;
-        }
-
-        System.out.println("Loading textures from: " + folder.getAbsolutePath());
-        Arrays.sort(files, Comparator.comparing(File::getName));
-
         int skipped = 0;
         int trimFiltered = 0;
 
-        for (File file : files) {
-            String name = file.getName().replace(".png", "");
+        for (Path file : files) {
+            String name = file.getFileName().toString().replace(".png", "");
 
             if (isArmorTrimVariant(name)) {
                 trimFiltered++;
                 continue;
             }
 
-            BufferedImage image = loadImage(file);
-            if (image == null) {
-                System.err.println("Failed to load: " + file.getName());
+            BufferedImage processed = resizeToLayoutSize(readImage(file));
+
+            if (ImageUtil.isFullyTransparent(processed)) {
+                skipped++;
                 continue;
             }
 
-            try {
-                BufferedImage processed = resizeToLayoutSize(image);
-
-                if (ImageUtil.isFullyTransparent(processed)) {
-                    skipped++;
-                    continue;
-                }
-
-                textures.add(new AtlasEntry(name, processed));
-            } catch (Exception e) {
-                System.err.println("Failed to process: " + file.getName());
-                e.printStackTrace();
-            }
+            textures.add(new AtlasEntry(name, processed));
         }
 
         if (skipped > 0) {
@@ -154,11 +141,30 @@ public class SpritesheetGenerator extends AtlasGenerator {
         return textures;
     }
 
-    private BufferedImage loadImage(File file) {
-        try {
-            return ImageIO.read(file);
+    private List<Path> listPngs() {
+        try (Stream<Path> listing = Files.list(inputDir)) {
+            return listing
+                .filter(Files::isRegularFile)
+                .filter(file -> file.getFileName().toString().toLowerCase().endsWith(".png"))
+                .sorted(Comparator.comparing(file -> file.getFileName().toString()))
+                .toList();
         } catch (IOException e) {
-            return null;
+            throw new UncheckedIOException("Cannot read texture input directory " + inputDir.toAbsolutePath(), e);
+        }
+    }
+
+    /**
+     * @throws UncheckedIOException when the file cannot be read, or is not in a format ImageIO understands
+     */
+    private static BufferedImage readImage(Path file) {
+        try {
+            BufferedImage image = ImageIO.read(file.toFile());
+            if (image == null) {
+                throw new IOException("not a readable image");
+            }
+            return image;
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to load texture " + file + ": " + e.getMessage(), e);
         }
     }
 

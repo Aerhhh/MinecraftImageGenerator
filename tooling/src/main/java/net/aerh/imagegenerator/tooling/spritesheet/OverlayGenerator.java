@@ -103,7 +103,7 @@ public class OverlayGenerator extends AtlasGenerator {
             System.out.println("\n" + "=".repeat(50));
             System.out.println("Overlay generation complete!");
             System.out.println("=".repeat(50));
-        } catch (IOException | UncheckedIOException | IllegalArgumentException e) {
+        } catch (IOException | UncheckedIOException | IllegalArgumentException | IllegalStateException e) {
             System.err.println("Failed to generate overlays: " + e.getMessage());
             e.printStackTrace();
             System.exit(1);

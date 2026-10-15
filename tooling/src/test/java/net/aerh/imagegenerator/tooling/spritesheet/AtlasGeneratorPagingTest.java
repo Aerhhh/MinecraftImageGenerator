@@ -17,6 +17,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AtlasGeneratorPagingTest {
@@ -31,7 +32,7 @@ class AtlasGeneratorPagingTest {
     @Test
     void defaultLayoutPacksSixteenTilesPerRowWithoutGutters() throws IOException {
         List<AtlasGenerator.AtlasEntry> entries = solidEntries(17, 256);
-        new TestAtlas(AtlasLayout.DEFAULT, entries).generate();
+        atlas(AtlasLayout.DEFAULT, entries).generate();
 
         BufferedImage page = ImageIO.read(directory.resolve("atlas.png").toFile());
         assertEquals(4096, page.getWidth());
@@ -52,7 +53,7 @@ class AtlasGeneratorPagingTest {
     @Test
     void pagesKeepPixelsAndTransparentGutters() throws IOException {
         List<AtlasGenerator.AtlasEntry> entries = List.of(entry("red", RED, 2), entry("green", GREEN, 2), entry("blue", BLUE, 2));
-        new TestAtlas(new AtlasLayout(2, 8, 4, 1), entries).generate();
+        atlas(new AtlasLayout(2, 8, 4, 1), entries).generate();
 
         BufferedImage first = ImageIO.read(directory.resolve("atlas.png").toFile());
         BufferedImage second = ImageIO.read(directory.resolve("atlas-1.png").toFile());
@@ -74,7 +75,7 @@ class AtlasGeneratorPagingTest {
 
     @Test
     void singlePageKeepsTheOriginalFilename() throws IOException {
-        new TestAtlas(new AtlasLayout(2, 4, 4, 0), List.of(entry("red", RED, 2))).generate();
+        atlas(new AtlasLayout(2, 4, 4, 0), List.of(entry("red", RED, 2))).generate();
 
         assertTrue(Files.isRegularFile(directory.resolve("atlas.png")));
         assertFalse(Files.exists(directory.resolve("atlas-0.png")));
@@ -89,7 +90,7 @@ class AtlasGeneratorPagingTest {
 
     @Test
     void exactlyCapacityEntriesFillOnePage() throws IOException {
-        new TestAtlas(new AtlasLayout(2, 4, 4, 0), solidEntries(4, 2)).generate();
+        atlas(new AtlasLayout(2, 4, 4, 0), solidEntries(4, 2)).generate();
 
         assertTrue(Files.exists(directory.resolve("atlas.png")));
         assertFalse(Files.exists(directory.resolve("atlas-1.png")));
@@ -100,7 +101,7 @@ class AtlasGeneratorPagingTest {
 
     @Test
     void oneEntryOverCapacityStartsASecondPage() throws IOException {
-        new TestAtlas(new AtlasLayout(2, 4, 4, 0), solidEntries(5, 2)).generate();
+        atlas(new AtlasLayout(2, 4, 4, 0), solidEntries(5, 2)).generate();
 
         assertTrue(Files.exists(directory.resolve("atlas-1.png")));
         assertFalse(Files.exists(directory.resolve("atlas-2.png")));
@@ -116,7 +117,7 @@ class AtlasGeneratorPagingTest {
         List<AtlasGenerator.AtlasEntry> entries = List.of(
             entry("a", RED, 2), entry("b", GREEN, 2), entry("c", BLUE, 2), entry("d", RED, 2)
         );
-        new TestAtlas(new AtlasLayout(2, 8, 8, 1), entries).generate();
+        atlas(new AtlasLayout(2, 8, 8, 1), entries).generate();
 
         BufferedImage page = ImageIO.read(directory.resolve("atlas.png").toFile());
         assertEquals(8, page.getWidth());
@@ -137,7 +138,7 @@ class AtlasGeneratorPagingTest {
 
     @Test
     void lastPageIsOnlyAsTallAsItsRows() throws IOException {
-        new TestAtlas(new AtlasLayout(2, 4, 8, 0), solidEntries(10, 2)).generate();
+        atlas(new AtlasLayout(2, 4, 8, 0), solidEntries(10, 2)).generate();
 
         BufferedImage first = ImageIO.read(directory.resolve("atlas.png").toFile());
         BufferedImage second = ImageIO.read(directory.resolve("atlas-1.png").toFile());
@@ -151,7 +152,7 @@ class AtlasGeneratorPagingTest {
         Files.write(directory.resolve("atlas-1.png"), new byte[]{1, 2, 3});
         Files.write(directory.resolve("atlas-2.png"), new byte[]{1, 2, 3});
 
-        new TestAtlas(new AtlasLayout(2, 4, 4, 0), List.of(entry("red", RED, 2))).generate();
+        atlas(new AtlasLayout(2, 4, 4, 0), List.of(entry("red", RED, 2))).generate();
 
         assertFalse(Files.exists(directory.resolve("atlas-1.png")));
         assertFalse(Files.exists(directory.resolve("atlas-2.png")));
@@ -163,7 +164,7 @@ class AtlasGeneratorPagingTest {
         Files.write(directory.resolve("other-1.png"), new byte[]{1, 2, 3});
         Files.write(directory.resolve("atlas-x.png"), new byte[]{1, 2, 3});
 
-        new TestAtlas(new AtlasLayout(2, 4, 4, 0), List.of(entry("red", RED, 2))).generate();
+        atlas(new AtlasLayout(2, 4, 4, 0), List.of(entry("red", RED, 2))).generate();
 
         assertFalse(Files.exists(directory.resolve("atlas-3.png")));
         assertTrue(Files.exists(directory.resolve("other-1.png")), "a different atlas's pages are left alone");
@@ -175,7 +176,7 @@ class AtlasGeneratorPagingTest {
         Files.write(directory.resolve("atlas-1.png"), new byte[]{1, 2, 3});
         Files.write(directory.resolve("atlas-2.png"), new byte[]{1, 2, 3});
 
-        new TestAtlas(new AtlasLayout(2, 4, 4, 0), solidEntries(5, 2)).generate();
+        atlas(new AtlasLayout(2, 4, 4, 0), solidEntries(5, 2)).generate();
 
         assertEquals(4, ImageIO.read(directory.resolve("atlas-1.png").toFile()).getWidth());
         assertFalse(Files.exists(directory.resolve("atlas-2.png")));
@@ -183,7 +184,7 @@ class AtlasGeneratorPagingTest {
 
     @Test
     void coordinatesCarryPageAndAtlasButNotPageDimensions() throws IOException {
-        new TestAtlas(new AtlasLayout(2, 4, 4, 0), solidEntries(5, 2)).generate();
+        atlas(new AtlasLayout(2, 4, 4, 0), solidEntries(5, 2)).generate();
 
         JsonArray json = readCoordinates();
         assertEquals(5, json.size());
@@ -194,7 +195,7 @@ class AtlasGeneratorPagingTest {
 
     @Test
     void pageOutputPathNumbersPagesBeforeTheExtension() {
-        TestAtlas atlas = new TestAtlas(AtlasLayout.DEFAULT, List.of());
+        TestAtlas atlas = atlas(AtlasLayout.DEFAULT, List.of());
         assertEquals(directory.resolve("atlas.png"), atlas.pageOutputPath(0));
         assertEquals(directory.resolve("atlas-2.png"), atlas.pageOutputPath(2));
     }
@@ -202,15 +203,18 @@ class AtlasGeneratorPagingTest {
     @Test
     void pageOutputPathIgnoresDotsInDirectoryNames() {
         Path output = directory.resolve("v26.3").resolve("atlas");
-        TestAtlas atlas = new TestAtlas(AtlasLayout.DEFAULT, List.of(), output);
+        TestAtlas atlas = atlas(AtlasLayout.DEFAULT, List.of(), output);
         assertEquals(output, atlas.pageOutputPath(0));
         assertEquals(directory.resolve("v26.3").resolve("atlas-1"), atlas.pageOutputPath(1));
     }
 
     @Test
-    void generatingNothingWritesNoFiles() {
-        new TestAtlas(new AtlasLayout(2, 4, 4, 0), List.of()).generate();
+    void generatingNothingIsAnErrorAndWritesNoFiles() {
+        TestAtlas atlas = atlas(new AtlasLayout(2, 4, 4, 0), List.of());
 
+        IllegalStateException error = assertThrows(IllegalStateException.class, atlas::generate);
+
+        assertTrue(error.getMessage().contains("atlas.png"), error.getMessage());
         assertFalse(Files.exists(directory.resolve("atlas.png")));
         assertFalse(Files.exists(directory.resolve("coordinates.json")));
     }
@@ -253,32 +257,11 @@ class AtlasGeneratorPagingTest {
         }
     }
 
-    private class TestAtlas extends AtlasGenerator {
+    private TestAtlas atlas(AtlasLayout layout, List<AtlasGenerator.AtlasEntry> entries) {
+        return atlas(layout, entries, directory.resolve("atlas.png"));
+    }
 
-        private final List<AtlasEntry> entries;
-
-        TestAtlas(AtlasLayout layout, List<AtlasEntry> entries) {
-            this(layout, entries, directory.resolve("atlas.png"));
-        }
-
-        TestAtlas(AtlasLayout layout, List<AtlasEntry> entries, Path atlasOutputPath) {
-            super(layout, atlasOutputPath, directory.resolve("coordinates.json"));
-            this.entries = entries;
-        }
-
-        @Override
-        protected List<AtlasEntry> loadTextures() {
-            return entries;
-        }
-
-        @Override
-        protected JsonObject entryToJson(AtlasEntry entry) {
-            JsonObject json = new JsonObject();
-            json.addProperty("name", entry.name);
-            json.addProperty("x", entry.x);
-            json.addProperty("y", entry.y);
-            json.addProperty("size", layout.tileSize());
-            return json;
-        }
+    private TestAtlas atlas(AtlasLayout layout, List<AtlasGenerator.AtlasEntry> entries, Path atlasOutputPath) {
+        return new TestAtlas(layout, entries, atlasOutputPath, directory.resolve("coordinates.json"));
     }
 }

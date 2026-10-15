@@ -108,7 +108,7 @@ class SpritesheetGeneratorTest {
             () -> new SpritesheetGenerator(input, paths(), LAYOUT).generate());
 
         assertTrue(error.getMessage().contains("trim_base.png"), error.getMessage());
-        assertFalse(Files.exists(paths().spritesheets()), "nothing should be written");
+        assertNothingWritten();
     }
 
     @Test
@@ -121,15 +121,58 @@ class SpritesheetGeneratorTest {
     }
 
     @Test
-    void missingInputDirectoryWritesNothing() {
-        new SpritesheetGenerator(root.resolve("missing"), paths(), LAYOUT).generate();
+    void aMissingInputDirectoryIsAnError() {
+        SpritesheetGenerator generator = new SpritesheetGenerator(root.resolve("missing"), paths(), LAYOUT);
 
-        assertFalse(Files.exists(paths().spritesheets()));
-        assertFalse(Files.exists(paths().json()));
+        UncheckedIOException error = assertThrows(UncheckedIOException.class, generator::generate);
+
+        assertTrue(error.getMessage().contains("missing"), error.getMessage());
+        assertNothingWritten();
+    }
+
+    @Test
+    void anInputDirectoryWithoutPngsIsAnError() throws IOException {
+        Path input = root.resolve("input");
+        Files.createDirectories(input);
+        Files.writeString(input.resolve("notes.txt"), "not an image");
+        SpritesheetGenerator generator = new SpritesheetGenerator(input, paths(), LAYOUT);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, generator::generate);
+
+        assertTrue(error.getMessage().contains("No textures to pack"), error.getMessage());
+        assertNothingWritten();
+    }
+
+    @Test
+    void aFileThatIsNotAnImageIsAnError() throws IOException {
+        Path input = root.resolve("input");
+        writePng(input.resolve("a.png"), RED);
+        Files.writeString(input.resolve("broken.png"), "not a PNG");
+        SpritesheetGenerator generator = new SpritesheetGenerator(input, paths(), LAYOUT);
+
+        UncheckedIOException error = assertThrows(UncheckedIOException.class, generator::generate);
+
+        assertTrue(error.getMessage().contains("broken.png"), error.getMessage());
+        assertNothingWritten();
+    }
+
+    @Test
+    void inputMadeOnlyOfTransparentImagesIsAnError() throws IOException {
+        Path input = root.resolve("input");
+        writePng(input.resolve("empty.png"), 0);
+        SpritesheetGenerator generator = new SpritesheetGenerator(input, paths(), LAYOUT);
+
+        assertThrows(IllegalStateException.class, generator::generate);
+        assertNothingWritten();
     }
 
     private ToolingPaths paths() {
         return new ToolingPaths(root.resolve("work"), root.resolve("out"));
+    }
+
+    private void assertNothingWritten() {
+        assertFalse(Files.exists(paths().spritesheets()), "no atlas page should be written");
+        assertFalse(Files.exists(paths().json()), "no coordinates file should be written");
     }
 
     private JsonArray readCoordinates() throws IOException {

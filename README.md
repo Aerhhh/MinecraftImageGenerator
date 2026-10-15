@@ -708,3 +708,14 @@ The tool deletes `tooling/build` at the end of a run, as it always has. A work
 directory you chose yourself is kept unless you pass `--clean`, and `--no-clean`
 keeps the default one too. Cleanup refuses to run when the work directory
 contains the current directory or the output directory.
+
+### Failures stop the run
+
+A problem part-way through never produces a run that looks successful. A render
+directory that is missing or cannot be read, a file in it that is not a readable
+image, an input that leaves nothing to pack, and a page or coordinates file that
+cannot be written all end the run with a nonzero exit status. The coordinates
+JSON is written only after every page is on disk, so a failed run cannot leave
+an index that points at pages which do not exist. A build that drives the
+tooling can stop there instead of packaging partial or stale assets. The render
+step fails the same way when an icon cannot be drawn.
