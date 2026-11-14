@@ -31,7 +31,7 @@
         <dependency>
             <groupId>com.github.minecraft-library</groupId>
             <artifactId>asset-renderer</artifactId>
-            <version>addedec7a2</version>
+            <version>8c094de29ca18fab5e091880a7ba91547f29a9d6</version>
         </dependency>
         <dependency>
             <groupId>com.google.code.gson</groupId>
