@@ -5,10 +5,12 @@ name: Generate Spritesheet
 on:
   workflow_dispatch:
     inputs:
+      # Pinned to 26.1: asset-renderer has not been brought to parity with 26.2 or 26.3 yet, and renders
+      # some block entities wrongly there (beds lose their head half). Raise this once upstream supports them.
       minecraft_version:
         description: 'Minecraft version (leave empty for latest)'
         required: false
-        default: ''
+        default: '26.1'
         type: string
       render_size:
         description: 'Render size in pixels'
