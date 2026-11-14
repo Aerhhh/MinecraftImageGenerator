@@ -1,0 +1,17 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Dependabot handles Maven and Actions versions. Renovate only moves the asset-renderer commit pin, which Dependabot cannot read.",
+  "enabledManagers": ["custom.regex"],
+  "schedule": ["before 7am on monday"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^tooling/pom\\.xml$/"],
+      "matchStrings": ["<artifactId>asset-renderer</artifactId>\\s*<version>(?<currentDigest>[0-9a-f]+)</version>"],
+      "currentValueTemplate": "master",
+      "depNameTemplate": "asset-renderer",
+      "packageNameTemplate": "https://github.com/minecraft-library/asset-renderer",
+      "datasourceTemplate": "git-refs"
+    }
+  ]
+}
