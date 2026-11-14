@@ -26,7 +26,8 @@
             <version>master-SNAPSHOT</version>
         </dependency>
         <!-- Renders every block and item icon in-process from the client JAR. Pinned to a commit because
-             the library has no tagged releases; bump deliberately and re-run the spritesheet workflow. -->
+             the library has no tagged releases. Renovate proposes each bump (renovate.json); dispatch the
+             spritesheet workflow on its pull request before merging. -->
         <dependency>
             <groupId>com.github.minecraft-library</groupId>
             <artifactId>asset-renderer</artifactId>
