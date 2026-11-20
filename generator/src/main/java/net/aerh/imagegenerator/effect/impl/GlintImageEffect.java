@@ -137,8 +137,9 @@ public class GlintImageEffect implements ImageEffect {
         float[] sampled = new float[4];
 
         for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int index = y * width + x;
+            int preIndex = y * width;
+            int preMax = preIndex + width;
+            for (int index = preIndex; index < preMax; index++) {
                 int argb = pixels[index];
                 int alpha = (argb >>> 24) & 0xFF;
                 if (alpha == 0) {
