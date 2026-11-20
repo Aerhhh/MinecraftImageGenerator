@@ -20,10 +20,10 @@ import java.util.stream.IntStream;
 public class GlintImageEffect implements ImageEffect {
 
     private final BufferedImage glintTexture;
-    private final float[] glintRed;
-    private final float[] glintGreen;
-    private final float[] glintBlue;
-    private final float[] glintAlpha;
+    private final int[] glintRed;
+    private final int[] glintGreen;
+    private final int[] glintBlue;
+    private final int[] glintAlpha;
 
     private static final int FRAME_DELAY_MS = 33; // ~30 FPS
     private static final int TOTAL_DURATION_MS = 6000;
@@ -51,16 +51,16 @@ public class GlintImageEffect implements ImageEffect {
         int textureWidth = glintTexture.getWidth();
         int textureHeight = glintTexture.getHeight();
         int[] glintPixels = glintTexture.getRGB(0, 0, textureWidth, textureHeight, null, 0, textureWidth);
-        this.glintRed = new float[glintPixels.length];
-        this.glintGreen = new float[glintPixels.length];
-        this.glintBlue = new float[glintPixels.length];
-        this.glintAlpha = new float[glintPixels.length];
+        this.glintRed = new int[glintPixels.length];
+        this.glintGreen = new int[glintPixels.length];
+        this.glintBlue = new int[glintPixels.length];
+        this.glintAlpha = new int[glintPixels.length];
         for (int i = 0; i < glintPixels.length; i++) {
             int argb = glintPixels[i];
-            glintRed[i] = ((argb >> 16) & 0xFF) / 255f;
-            glintGreen[i] = ((argb >> 8) & 0xFF) / 255f;
-            glintBlue[i] = (argb & 0xFF) / 255f;
-            glintAlpha[i] = (argb >>> 24) / 255f;
+            glintRed[i] = ((argb >> 16) & 0xFF);
+            glintGreen[i] = ((argb >> 8) & 0xFF);
+            glintBlue[i] = (argb & 0xFF);
+            glintAlpha[i] = (argb >>> 24);
         }
     }
 
@@ -133,7 +133,7 @@ public class GlintImageEffect implements ImageEffect {
         double scaledUOffset = direction * adjustedOffset;
         int textureWidth = glintTexture.getWidth();
         int textureHeight = glintTexture.getHeight();
-        float[] sampled = new float[4];
+        int[] sampled = new int[4];
 
         for (int y = 0; y < height; y++) {
             int preIndex = y * width;
@@ -149,30 +149,30 @@ public class GlintImageEffect implements ImageEffect {
                 double scaledV = scaledRotatedV[index];
 
                 sampleGlint(scaledU, scaledV, textureWidth, textureHeight, sampled);
-                float sampledAlpha = sampled[3];
-                if (sampledAlpha <= 0.0f) {
+                int sampledAlpha = sampled[3];
+                if (sampledAlpha <= 0) {
                     continue;
                 }
-                float glintAlpha = sampledAlpha * GLINT_INTENSITY;
+                int glintAlpha = (int) (sampledAlpha * GLINT_INTENSITY);
 
-                float baseR = ((argb >> 16) & 0xFF) / 255f;
-                float baseG = ((argb >> 8) & 0xFF) / 255f;
-                float baseB = (argb & 0xFF) / 255f;
+                int baseR = ((argb >> 16) & 0xFF);
+                int baseG = ((argb >> 8) & 0xFF);
+                int baseB = (argb & 0xFF);
 
-                float addR = sampled[0] * GLINT_TINT[0] * glintAlpha;
-                float addG = sampled[1] * GLINT_TINT[1] * glintAlpha;
-                float addB = sampled[2] * GLINT_TINT[2] * glintAlpha;
+                int addR = (int) (sampled[0] * (GLINT_TINT[0] * glintAlpha));
+                int addG = (int) (sampled[1] * (GLINT_TINT[1] * glintAlpha));
+                int addB = (int) (sampled[2] * (GLINT_TINT[2] * glintAlpha));
 
-                int outR = (int) (Math.min(1.0f, baseR + addR) * 255.0f + 0.5f);
-                int outG = (int) (Math.min(1.0f, baseG + addG) * 255.0f + 0.5f);
-                int outB = (int) (Math.min(1.0f, baseB + addB) * 255.0f + 0.5f);
+                int outR = Math.min(255, baseR + addR);
+                int outG = Math.min(255, baseG + addG);
+                int outB = Math.min(255, baseB + addB);
 
                 pixels[index] = (alpha << 24) | (outR << 16) | (outG << 8) | outB;
             }
         }
     }
 
-    private void sampleGlint(double u, double v, int textureWidth, int textureHeight, float[] out) {
+    private void sampleGlint(double u, double v, int textureWidth, int textureHeight, int[] out) {
         double wrappedU = u - Math.floor(u);
         double wrappedV = v - Math.floor(v);
 
@@ -200,27 +200,22 @@ public class GlintImageEffect implements ImageEffect {
         int bottomLeftIndex = bottomY * textureWidth + leftX;
         int bottomRightIndex = bottomY * textureWidth + rightX;
 
-        double red = glintRed[topLeftIndex] * weightTopLeft
+        out[0] = (int) (glintRed[topLeftIndex] * weightTopLeft
             + glintRed[topRightIndex] * weightTopRight
             + glintRed[bottomLeftIndex] * weightBottomLeft
-            + glintRed[bottomRightIndex] * weightBottomRight;
-        double green = glintGreen[topLeftIndex] * weightTopLeft
+            + glintRed[bottomRightIndex] * weightBottomRight);
+        out[1] = (int) (glintGreen[topLeftIndex] * weightTopLeft
             + glintGreen[topRightIndex] * weightTopRight
             + glintGreen[bottomLeftIndex] * weightBottomLeft
-            + glintGreen[bottomRightIndex] * weightBottomRight;
-        double blue = glintBlue[topLeftIndex] * weightTopLeft
+            + glintGreen[bottomRightIndex] * weightBottomRight);
+        out[2] = (int) (glintBlue[topLeftIndex] * weightTopLeft
             + glintBlue[topRightIndex] * weightTopRight
             + glintBlue[bottomLeftIndex] * weightBottomLeft
-            + glintBlue[bottomRightIndex] * weightBottomRight;
-        double alpha = glintAlpha[topLeftIndex] * weightTopLeft
+            + glintBlue[bottomRightIndex] * weightBottomRight);
+        out[3] = (int) (glintAlpha[topLeftIndex] * weightTopLeft
             + glintAlpha[topRightIndex] * weightTopRight
             + glintAlpha[bottomLeftIndex] * weightBottomLeft
-            + glintAlpha[bottomRightIndex] * weightBottomRight;
-
-        out[0] = (float) red;
-        out[1] = (float) green;
-        out[2] = (float) blue;
-        out[3] = (float) alpha;
+            + glintAlpha[bottomRightIndex] * weightBottomRight);
     }
 
     private int floorMod(int value, int modulus) {
