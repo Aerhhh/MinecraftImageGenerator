@@ -4,10 +4,12 @@ import net.aerh.imagegenerator.cache.GeneratorCacheKey;
 import net.aerh.imagegenerator.effect.EffectPipeline;
 import net.aerh.imagegenerator.exception.GeneratorException;
 import net.aerh.imagegenerator.exception.PackResolveException;
+import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.pack.PackId;
 import net.aerh.imagegenerator.pack.PackLimits;
 import net.aerh.imagegenerator.pack.PackRepository;
 import net.aerh.imagegenerator.pack.PackSource;
+import net.aerh.imagegenerator.testsupport.BenchmarkArtifacts;
 import net.aerh.imagegenerator.testsupport.FixturePacks;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,10 +17,12 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
 import java.awt.image.BufferedImage;
+import java.io.IOException;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -99,7 +103,7 @@ class MinecraftItemGeneratorPackTest {
 
     @EnabledIfSystemProperty(named = "benchmarks", matches = "true")
     @Test
-    void benchmarkDirtBlockWithEnchantGlint() {
+    void benchmarkDirtBlockWithEnchantGlint() throws IOException {
         final int warmupIterations = 3;
         final int measuredIterations = 10;
 
@@ -129,15 +133,21 @@ class MinecraftItemGeneratorPackTest {
         System.out.printf(
             "Dirt + enchant glint benchmark: warmup=%d, iterations=%d, average=%.1f ms, min=%.1f ms, max=%.1f ms%n",
             warmupIterations, measuredIterations, averageMillis, minMillis, maxMillis);
+
+        GeneratedObject generated = generateDirtWithGlint();
+        Path output = BenchmarkArtifacts.storeBenchmarkGif("dirt-enchant-glint.gif", generated);
+        System.out.println("Dirt benchmark image: " + output.toAbsolutePath());
     }
 
-    private static void generateDirtWithGlint() {
+    private static GeneratedObject generateDirtWithGlint() {
         var generated = new MinecraftItemGenerator.Builder()
             .withItem("dirt")
             .isEnchanted(true)
             .build()
             .generate();
         assertTrue(generated.isAnimated(), "enchanted dirt must generate a GIF");
+        assertNotNull(generated.getGifData(), "enchanted dirt GIF bytes must be present");
+        return generated;
     }
 
     @Test
