@@ -4,6 +4,7 @@ import net.aerh.imagegenerator.cache.GeneratorCacheKey;
 import net.aerh.imagegenerator.effect.EffectPipeline;
 import net.aerh.imagegenerator.exception.GeneratorException;
 import net.aerh.imagegenerator.exception.PackResolveException;
+import net.aerh.imagegenerator.image.GeneratorImageBuilder;
 import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.pack.PackId;
 import net.aerh.imagegenerator.pack.PackLimits;
@@ -145,6 +146,57 @@ class MinecraftItemGeneratorPackTest {
             .isEnchanted(true)
             .build()
             .generate();
+        assertTrue(generated.isAnimated(), "enchanted dirt must generate a GIF");
+        assertNotNull(generated.getGifData(), "enchanted dirt GIF bytes must be present");
+        return generated;
+    }
+
+    @EnabledIfSystemProperty(named = "benchmarks", matches = "true")
+    @Test
+    void benchmarkAnimatedDirtBlockWithEnchantGlint() throws IOException {
+        final int warmupIterations = 3;
+        final int measuredIterations = 10;
+
+        for (int i = 0; i < warmupIterations; i++) {
+            generateAnimatedDirtWithGlint();
+        }
+
+        long[] elapsedNanos = new long[measuredIterations];
+        for (int i = 0; i < measuredIterations; i++) {
+            long startNanos = System.nanoTime();
+            generateAnimatedDirtWithGlint();
+            elapsedNanos[i] = System.nanoTime() - startNanos;
+        }
+
+        long totalNanos = 0;
+        long minNanos = Long.MAX_VALUE;
+        long maxNanos = 0;
+        for (long elapsed : elapsedNanos) {
+            totalNanos += elapsed;
+            minNanos = Math.min(minNanos, elapsed);
+            maxNanos = Math.max(maxNanos, elapsed);
+        }
+
+        double averageMillis = totalNanos / 1_000_000.0 / measuredIterations;
+        double minMillis = minNanos / 1_000_000.0;
+        double maxMillis = maxNanos / 1_000_000.0;
+        System.out.printf(
+            "Dirt + enchant glint (animated) benchmark: warmup=%d, iterations=%d, average=%.1f ms, min=%.1f ms, max=%.1f ms%n",
+            warmupIterations, measuredIterations, averageMillis, minMillis, maxMillis);
+
+        GeneratedObject generated = generateAnimatedDirtWithGlint();
+        Path output = BenchmarkArtifacts.storeBenchmarkGif("dirt-enchant-glint-animated.gif", generated);
+        System.out.println("Dirt benchmark image: " + output.toAbsolutePath());
+    }
+
+    private static GeneratedObject generateAnimatedDirtWithGlint() {
+        GeneratedObject generated = new GeneratorImageBuilder()
+            .addGenerator(new MinecraftItemGenerator.Builder()
+                .withItem("dirt")
+                .isEnchanted(true)
+                .build())
+            .build();
+
         assertTrue(generated.isAnimated(), "enchanted dirt must generate a GIF");
         assertNotNull(generated.getGifData(), "enchanted dirt GIF bytes must be present");
         return generated;
