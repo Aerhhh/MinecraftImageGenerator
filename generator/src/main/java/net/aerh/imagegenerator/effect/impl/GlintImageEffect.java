@@ -141,7 +141,7 @@ public class GlintImageEffect implements ImageEffect {
             int preMax = preIndex + width;
             for (int index = preIndex; index < preMax; index++) {
                 int argb = pixels[index];
-                int alpha = (argb >>> 24) & 0xFF;
+                int alpha = argb >>> 24;
                 if (alpha == 0) {
                     continue;
                 }
