@@ -94,9 +94,9 @@ public class GlintImageEffect implements ImageEffect {
             int[] framePixels = Arrays.copyOf(basePixels, basePixels.length);
 
             applyGlintPass(framePixels, width, height, timeMs, PRIMARY_PERIOD_MS, 1.0,
-                scaledRotatedUPrimary, scaledRotatedVPrimary, uvScale);
+                scaledRotatedUPrimary, scaledRotatedVPrimary);
             applyGlintPass(framePixels, width, height, timeMs, SECONDARY_PERIOD_MS, -1.0,
-                scaledRotatedUSecondary, scaledRotatedVSecondary, uvScale);
+                scaledRotatedUSecondary, scaledRotatedVSecondary);
 
             BufferedImage frame = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
             frame.setRGB(0, 0, width, height, framePixels, 0, width);
@@ -127,11 +127,10 @@ public class GlintImageEffect implements ImageEffect {
     }
 
     private void applyGlintPass(int[] pixels, int width, int height, double timeMs, double periodMs,
-                                double direction, double[] scaledRotatedU, double[] scaledRotatedV,
-                                double uvScale) {
+                                double direction, double[] scaledRotatedU, double[] scaledRotatedV) {
         double offset = (timeMs % periodMs) / periodMs;
-        double inverseScale = 1.0 / uvScale;
         double adjustedOffset = offset * SCROLL_SPEED;
+        double scaledUOffset = direction * adjustedOffset;
         int textureWidth = glintTexture.getWidth();
         int textureHeight = glintTexture.getHeight();
         float[] sampled = new float[4];
@@ -146,7 +145,7 @@ public class GlintImageEffect implements ImageEffect {
                     continue;
                 }
 
-                double scaledU = scaledRotatedU[index] + direction * adjustedOffset * inverseScale * uvScale;
+                double scaledU = scaledRotatedU[index] + scaledUOffset;
                 double scaledV = scaledRotatedV[index];
 
                 sampleGlint(scaledU, scaledV, textureWidth, textureHeight, sampled);
