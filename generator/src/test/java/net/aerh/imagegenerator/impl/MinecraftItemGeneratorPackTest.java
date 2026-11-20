@@ -12,6 +12,7 @@ import net.aerh.imagegenerator.testsupport.FixturePacks;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
 import java.awt.image.BufferedImage;
 import java.nio.file.Path;
@@ -94,6 +95,49 @@ class MinecraftItemGeneratorPackTest {
     void enchantEffectAppliesToPackSprites() {
         var generated = packBuilder("testpack:item/simple").isEnchanted(true).build().generate();
         assertTrue(generated.isAnimated(), "glint pipeline runs on pack sprites too");
+    }
+
+    @EnabledIfSystemProperty(named = "benchmark.glint", matches = "true")
+    @Test
+    void benchmarkDirtBlockWithEnchantGlint() {
+        final int warmupIterations = 3;
+        final int measuredIterations = 10;
+
+        for (int i = 0; i < warmupIterations; i++) {
+            generateDirtWithGlint();
+        }
+
+        long[] elapsedNanos = new long[measuredIterations];
+        for (int i = 0; i < measuredIterations; i++) {
+            long startNanos = System.nanoTime();
+            generateDirtWithGlint();
+            elapsedNanos[i] = System.nanoTime() - startNanos;
+        }
+
+        long totalNanos = 0;
+        long minNanos = Long.MAX_VALUE;
+        long maxNanos = 0;
+        for (long elapsed : elapsedNanos) {
+            totalNanos += elapsed;
+            minNanos = Math.min(minNanos, elapsed);
+            maxNanos = Math.max(maxNanos, elapsed);
+        }
+
+        double averageMillis = totalNanos / 1_000_000.0 / measuredIterations;
+        double minMillis = minNanos / 1_000_000.0;
+        double maxMillis = maxNanos / 1_000_000.0;
+        System.out.printf(
+            "Dirt + enchant glint benchmark: warmup=%d, iterations=%d, average=%.1f ms, min=%.1f ms, max=%.1f ms%n",
+            warmupIterations, measuredIterations, averageMillis, minMillis, maxMillis);
+    }
+
+    private static void generateDirtWithGlint() {
+        var generated = new MinecraftItemGenerator.Builder()
+            .withItem("dirt")
+            .isEnchanted(true)
+            .build()
+            .generate();
+        assertTrue(generated.isAnimated(), "enchanted dirt must generate a GIF");
     }
 
     @Test
