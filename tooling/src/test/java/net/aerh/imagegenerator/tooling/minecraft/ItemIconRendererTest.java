@@ -11,6 +11,7 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -128,7 +129,7 @@ class ItemIconRendererTest {
     }
 
     private static AtlasResult.Tile tile(String id, AtlasResult.Tile.Kind kind, AtlasResult.Tile.Source source, int col, int row) {
-        return new AtlasResult.Tile(id, kind, source, col, row, col * 2, row * 2, 2, 2, List.of());
+        return new AtlasResult.Tile(id, Optional.empty(), kind, source, col, row, col * 2, row * 2, 2, 2, List.of());
     }
 
     private static void fill(BufferedImage image, int x0, int y0, int width, int height, int argb) {
