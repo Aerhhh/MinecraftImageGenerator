@@ -97,7 +97,7 @@ class MinecraftItemGeneratorPackTest {
         assertTrue(generated.isAnimated(), "glint pipeline runs on pack sprites too");
     }
 
-    @EnabledIfSystemProperty(named = "benchmark.glint", matches = "true")
+    @EnabledIfSystemProperty(named = "benchmarks", matches = "true")
     @Test
     void benchmarkDirtBlockWithEnchantGlint() {
         final int warmupIterations = 3;
