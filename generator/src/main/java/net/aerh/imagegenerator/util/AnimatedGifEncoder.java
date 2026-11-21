@@ -22,8 +22,8 @@ import java.util.List;
 /**
  * GIF encoding with PER-FRAME delays, for tick-timed pack texture animations whose frames hold
  * for different times (a shiny-strip frames list like {@code [0..16, {index: 0, time: 100}]}
- * needs one long-hold frame). Uniform-delay frame lists delegate to the established
- * {@link ImageUtil#toGifBytes} path unchanged.
+ * needs one long-hold frame), and with one delay for every frame. The uniform-delay output is
+ * byte-identical to {@link ImageUtil#toGifBytes}, which it replaces so the encode can be cancelled.
  *
  * <p>The variable-delay writer applies the same correctness rules that path learned the hard
  * way: frame disposal is {@code restoreToBackgroundColor} so transparent regions never ghost
@@ -51,7 +51,7 @@ public class AnimatedGifEncoder {
         }
         if (delaysMs.stream().distinct().count() == 1) {
             // The established uniform-delay encoder path, byte-identical to every existing GIF.
-            return ImageUtil.toGifBytes(frames, delaysMs.getFirst(), true);
+            return encode(frames, delaysMs.getFirst());
         }
 
         ByteArrayOutputStream output = new ByteArrayOutputStream();
@@ -70,6 +70,73 @@ public class AnimatedGifEncoder {
             writer.dispose();
         }
         return output.toByteArray();
+    }
+
+    /**
+     * Encodes frames into a looping animated GIF with one delay for every frame. The output is
+     * byte-for-byte what {@link ImageUtil#toGifBytes} produces for the same input; the encoding is
+     * done here instead so a cancelled render stops between frames rather than running the whole
+     * encode to its end (see {@link RenderCancellation}).
+     *
+     * @param frames  the frames, in playback order
+     * @param delayMs the delay after each frame, in milliseconds (rounded down to whole centiseconds)
+     * @return the GIF bytes
+     * @throws IOException              when encoding fails
+     * @throws IllegalArgumentException when there are no frames
+     */
+    public static byte[] encode(List<BufferedImage> frames, int delayMs) throws IOException {
+        if (frames == null || frames.isEmpty()) {
+            throw new IllegalArgumentException("Frames list cannot be null or empty");
+        }
+
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        ImageWriter writer = gifWriter();
+        try (ImageOutputStream imageOutput = ImageIO.createImageOutputStream(output)) {
+            ImageWriteParam writeParam = writer.getDefaultWriteParam();
+            IIOMetadata metadata = uniformMetadata(writer, writeParam, delayMs);
+            writer.setOutput(imageOutput);
+            writer.prepareWriteSequence(null);
+            for (BufferedImage frame : frames) {
+                RenderCancellation.check();
+                writer.writeToSequence(new IIOImage(toGifCompatibleFrame(frame), null, metadata), writeParam);
+            }
+            writer.endWriteSequence();
+        } finally {
+            writer.dispose();
+        }
+        return output.toByteArray();
+    }
+
+    /**
+     * The one metadata object the uniform-delay path reuses for every frame. It deliberately
+     * mirrors the encoder it replaces, down to the unclamped delay, the comment attribute and the
+     * loop block carried by every frame, because that is what keeps the bytes identical.
+     */
+    private static IIOMetadata uniformMetadata(ImageWriter writer, ImageWriteParam writeParam, int delayMs)
+        throws IOException {
+        IIOMetadata metadata = writer.getDefaultImageMetadata(
+            ImageTypeSpecifier.createFromBufferedImageType(BufferedImage.TYPE_INT_ARGB), writeParam);
+        String formatName = metadata.getNativeMetadataFormatName();
+        IIOMetadataNode root = (IIOMetadataNode) metadata.getAsTree(formatName);
+
+        IIOMetadataNode graphicControl = childNode(root, "GraphicControlExtension");
+        graphicControl.setAttribute("disposalMethod", "restoreToBackgroundColor");
+        graphicControl.setAttribute("userInputFlag", "FALSE");
+        graphicControl.setAttribute("transparentColorFlag", "FALSE");
+        graphicControl.setAttribute("delayTime", Integer.toString(delayMs / 10));
+        graphicControl.setAttribute("transparentColorIndex", "0");
+
+        childNode(root, "CommentExtensions").setAttribute("CommentExtension", "Created by MAH");
+
+        IIOMetadataNode loop = new IIOMetadataNode("ApplicationExtension");
+        loop.setAttribute("applicationID", "NETSCAPE");
+        loop.setAttribute("authenticationCode", "2.0");
+        // Loop count 0 = loop forever.
+        loop.setUserObject(new byte[]{0x1, 0x0, 0x0});
+        childNode(root, "ApplicationExtensions").appendChild(loop);
+
+        metadata.setFromTree(formatName, root);
+        return metadata;
     }
 
     private static ImageWriter gifWriter() throws IOException {

@@ -241,6 +241,11 @@ public class MinecraftTooltip {
         return themeSprites != null && renderBorder;
     }
 
+    /** Forces this class's one-off setup (font loading and character width tables) to run now. */
+    public static void warmUp() {
+        // Calling any static method runs the static initializer; there is nothing else to do.
+    }
+
     /**
      * Precomputes character widths for the text obfuscation/magic formatting effect.
      */
