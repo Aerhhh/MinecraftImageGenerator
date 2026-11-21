@@ -26,7 +26,17 @@
         <surefire.excludedGroups>network</surefire.excludedGroups>
     </properties>
 
+    <!-- Maven asks repositories in the order listed, and puts its built-in Central entry after any
+         declared here. Naming Central first means everything published there is resolved from there,
+         and JitPack is only asked for the com.github.* libraries that Central does not have. -->
     <repositories>
+        <repository>
+            <id>central</id>
+            <url>https://repo.maven.apache.org/maven2</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
         <repository>
             <id>jitpack.io</id>
             <url>https://jitpack.io</url>
@@ -68,6 +78,38 @@
                 <groupId>org.slf4j</groupId>
                 <artifactId>slf4j-simple</artifactId>
                 <version>2.0.20</version>
+            </dependency>
+
+            <!-- Transitive versions raised past published advisories. None of these is a direct
+                 dependency: Jackson and HttpComponents arrive in the tooling module through
+                 asset-renderer, log4j-api in both modules through the minecraft-library artifacts.
+                 Drop an entry once the library that brings it in ships a fixed version itself. -->
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>2.18.11</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.httpcomponents.client5</groupId>
+                <artifactId>httpclient5</artifactId>
+                <version>5.6.3</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5</artifactId>
+                <version>5.4.3</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5-h2</artifactId>
+                <version>5.4.3</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-api</artifactId>
+                <version>2.25.5</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

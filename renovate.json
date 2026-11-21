@@ -1,15 +1,34 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "description": "Dependabot handles Maven and Actions versions. Renovate only moves the asset-renderer commit pin, which Dependabot cannot read.",
-  "enabledManagers": ["custom.regex"],
+  "description": "Dependabot handles Maven and Actions versions. Renovate only moves the JitPack commit pins (asset-renderer and Marmalade), which Dependabot cannot read.",
+  "enabledManagers": [
+    "custom.regex"
+  ],
   "customManagers": [
     {
       "customType": "regex",
-      "managerFilePatterns": ["/^tooling/pom\\.xml$/"],
-      "matchStrings": ["<artifactId>asset-renderer</artifactId>\\s*<version>(?<currentDigest>[0-9a-f]+)</version>"],
+      "managerFilePatterns": [
+        "/^tooling/pom\\.xml$/"
+      ],
+      "matchStrings": [
+        "<artifactId>asset-renderer</artifactId>\\s*<version>(?<currentDigest>[0-9a-f]+)</version>"
+      ],
       "currentValueTemplate": "master",
       "depNameTemplate": "asset-renderer",
       "packageNameTemplate": "https://github.com/minecraft-library/asset-renderer",
+      "datasourceTemplate": "git-refs"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^(generator|tooling)/pom\\.xml$/"
+      ],
+      "matchStrings": [
+        "<artifactId>Marmalade</artifactId>\\s*(?:<!--[\\s\\S]*?-->\\s*)?<version>(?<currentDigest>[0-9a-f]+)</version>"
+      ],
+      "currentValueTemplate": "master",
+      "depNameTemplate": "Marmalade",
+      "packageNameTemplate": "https://github.com/SkyBlock-Nerds/Marmalade",
       "datasourceTemplate": "git-refs"
     }
   ]
