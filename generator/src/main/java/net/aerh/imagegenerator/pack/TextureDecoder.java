@@ -18,6 +18,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.zip.DataFormatException;
@@ -34,6 +35,9 @@ import java.util.zip.Inflater;
  */
 @UtilityClass
 class TextureDecoder {
+
+    /** Most pixels one decoded texture may hold (64 MiB of ARGB), whatever its per-side limit. */
+    static final long MAX_TEXTURE_PIXELS = 16L * 1024 * 1024;
 
     private static final int EMISSIVE_OPAQUE_ALPHA = 252;
 
@@ -92,7 +96,7 @@ class TextureDecoder {
      */
     private static BufferedImage readStrict(byte[] imageBytes, int maxTextureDim) throws IOException {
         try (ImageInputStream input = ImageIO.createImageInputStream(new ByteArrayInputStream(imageBytes))) {
-            Iterator<ImageReader> readers = ImageIO.getImageReaders(input);
+            Iterator<ImageReader> readers = pngReaders(imageBytes);
             if (!readers.hasNext()) {
                 throw new PackLoadException("Pack texture is not a decodable image");
             }
@@ -112,6 +116,25 @@ class TextureDecoder {
             throw new PackLoadException("Pack texture dimensions %sx%s exceed limit %s",
                 String.valueOf(width), String.valueOf(height), String.valueOf(maxTextureDim));
         }
+        // The per-side cap alone lets a sheet-sized texture be square: 8192x8192 is 256 MiB decoded.
+        // Sheets are long and narrow (glyph grids, flipbook strips), so bound the area as well.
+        if ((long) width * height > MAX_TEXTURE_PIXELS) {
+            throw new PackLoadException("Pack texture dimensions %sx%s exceed the limit of %s pixels",
+                String.valueOf(width), String.valueOf(height), String.valueOf(MAX_TEXTURE_PIXELS));
+        }
+    }
+
+    /**
+     * The PNG readers, or none when the bytes do not start with the PNG signature. Minecraft
+     * textures are always PNG; letting ImageIO pick a reader from the content would hand
+     * pack-supplied bytes to every installed decoder (JPEG, TIFF, BMP, GIF, WBMP).
+     */
+    private static Iterator<ImageReader> pngReaders(byte[] imageBytes) {
+        if (imageBytes.length < PNG_SIGNATURE.length
+            || !Arrays.equals(imageBytes, 0, PNG_SIGNATURE.length, PNG_SIGNATURE, 0, PNG_SIGNATURE.length)) {
+            return Collections.emptyIterator();
+        }
+        return ImageIO.getImageReadersByFormatName("png");
     }
 
     /**
@@ -123,7 +146,7 @@ class TextureDecoder {
      */
     private static BufferedImage readPartial(byte[] imageBytes, int maxTextureDim) {
         try (ImageInputStream input = ImageIO.createImageInputStream(new ByteArrayInputStream(imageBytes))) {
-            Iterator<ImageReader> readers = ImageIO.getImageReaders(input);
+            Iterator<ImageReader> readers = pngReaders(imageBytes);
             if (!readers.hasNext()) {
                 return null;
             }

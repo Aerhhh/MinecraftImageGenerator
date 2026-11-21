@@ -212,6 +212,12 @@ class PackJsonParser {
         if (!elementsElement.isJsonArray()) {
             throw new PackLoadException("Model 'elements' must be an array");
         }
+        if (elementsElement.getAsJsonArray().size() > ElementModelRenderer.MAX_ELEMENTS_PER_MODEL) {
+            // Same cap the renderer applies; checking here keeps an oversized list out of the index
+            throw new PackLoadException("Model has %s elements, over the limit of %s",
+                String.valueOf(elementsElement.getAsJsonArray().size()),
+                String.valueOf(ElementModelRenderer.MAX_ELEMENTS_PER_MODEL));
+        }
         List<ModelElement> elements = new ArrayList<>();
         for (JsonElement element : elementsElement.getAsJsonArray()) {
             elements.add(parseElement(asObject(element, "model element")));

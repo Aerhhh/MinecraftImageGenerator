@@ -23,14 +23,18 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
-import java.net.URL;
-import java.net.URLConnection;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.Iterator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -42,7 +46,19 @@ public class MinecraftPlayerHeadGenerator implements Generator {
     private static final Pattern TEXTURE_URL = Pattern.compile("(?:https?://textures.minecraft.net/texture/)?([a-zA-Z0-9]+)");
     private static final Pattern SKIN_BASE64_REGEX = Pattern.compile("^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$");
     private static final Pattern HEX_TEXTURE_HASH = Pattern.compile("^[a-fA-F0-9]{64}$");
+    private static final int MIN_SKIN_WIDTH = 64;
+    private static final int MIN_SKIN_HEIGHT = 32;
+    private static final Pattern TEXTURE_ID = Pattern.compile("^[a-zA-Z0-9]{1,128}$");
+    private static final String TEXTURE_BASE_URL = "https://textures.minecraft.net/texture/";
     private static final int SKIN_FETCH_TIMEOUT_MS = 5_000;
+    /** Largest skin download accepted. Real skins are a few kilobytes. */
+    static final int MAX_SKIN_BYTES = 1024 * 1024;
+    /** Largest skin size accepted, per side. Real skins are 64x64 or 64x32. */
+    static final int MAX_SKIN_DIMENSION = 1024;
+    /** The head render is 1250 px square, so upscaling is kept small; larger values are clamped. */
+    public static final int MAX_UPSCALE = 4;
+    /** The largest downscale divisor; larger values are clamped. */
+    public static final int MAX_DOWNSCALE = 64;
 
     private final String textureId;
     private final int scale;
@@ -56,11 +72,55 @@ public class MinecraftPlayerHeadGenerator implements Generator {
      * @return the skin ID
      */
     private static String base64ToSkinURL(String base64SkinData) {
-        JsonObject skinData = JsonParser.parseString(new String(Base64.getDecoder().decode(base64SkinData))).getAsJsonObject();
-        return skinData.get("textures").getAsJsonObject()
-            .get("SKIN").getAsJsonObject()
-            .get("url").getAsString()
-            .replace("http://textures.minecraft.net/texture/", "");
+        try {
+            String json = new String(Base64.getDecoder().decode(base64SkinData), StandardCharsets.UTF_8);
+            JsonObject skinData = JsonParser.parseString(json).getAsJsonObject();
+            String url = skinData.getAsJsonObject("textures")
+                .getAsJsonObject("SKIN")
+                .get("url").getAsString();
+            return url.substring(url.lastIndexOf('/') + 1);
+        } catch (RuntimeException exception) {
+            // Malformed base64, malformed JSON, or a missing/mistyped member
+            throw new GeneratorException("Skin data is not a valid texture value");
+        }
+    }
+
+    /**
+     * Reads a downloaded skin, refusing anything that is not a plausibly sized image before it is
+     * decoded. The size is taken from the image header, so an image claiming huge dimensions is
+     * rejected without allocating its pixels.
+     *
+     * @return the decoded skin, or null if the bytes are not an image
+     */
+    static @Nullable BufferedImage decodeSkin(byte[] bytes) throws IOException {
+        try (ImageInputStream input = ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))) {
+            Iterator<ImageReader> readers = ImageIO.getImageReadersByFormatName("png");
+            if (input == null || !readers.hasNext()) {
+                return null;
+            }
+
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(input, true, true);
+                int width = reader.getWidth(0);
+                int height = reader.getHeight(0);
+                if (width < MIN_SKIN_WIDTH || height < MIN_SKIN_HEIGHT || width > MAX_SKIN_DIMENSION || height > MAX_SKIN_DIMENSION) {
+                    throw new GeneratorException("Skin has an unsupported size: %sx%s", String.valueOf(width), String.valueOf(height));
+                }
+                return reader.read(0);
+            } finally {
+                reader.dispose();
+            }
+        }
+    }
+
+    /** Reads at most {@link #MAX_SKIN_BYTES} from the stream, failing if there is more. */
+    private static byte[] readSkinBytes(InputStream stream) throws IOException {
+        byte[] bytes = stream.readNBytes(MAX_SKIN_BYTES + 1);
+        if (bytes.length > MAX_SKIN_BYTES) {
+            throw new GeneratorException("Skin download is larger than %s bytes", String.valueOf(MAX_SKIN_BYTES));
+        }
+        return bytes;
     }
 
     @Override
@@ -73,7 +133,9 @@ public class MinecraftPlayerHeadGenerator implements Generator {
     }
 
     private BufferedImage createHead(String textureId) {
-        // If no textureId provided, leave as null and let downstream logic handle
+        if (textureId == null || textureId.isBlank()) {
+            throw new GeneratorException("No skin was provided for the player head");
+        }
 
         if (isHexTextureHash(textureId)) {
             // Already a valid hex texture hash, use directly
@@ -88,15 +150,23 @@ public class MinecraftPlayerHeadGenerator implements Generator {
             }
         }
 
+        // Only a bare texture ID may reach the URL: anything else (slashes, dots, query strings)
+        // would let the caller choose the path requested from the texture host.
+        if (!TEXTURE_ID.matcher(textureId).matches()) {
+            throw new GeneratorException("Invalid skin texture ID: `%s`", textureId);
+        }
+
         try {
-            URL target = new URL("http://textures.minecraft.net/texture/" + textureId);
-            URLConnection connection = target.openConnection();
+            HttpURLConnection connection = (HttpURLConnection) URI.create(TEXTURE_BASE_URL + textureId).toURL().openConnection();
             connection.setConnectTimeout(SKIN_FETCH_TIMEOUT_MS);
             connection.setReadTimeout(SKIN_FETCH_TIMEOUT_MS);
+            connection.setInstanceFollowRedirects(false);
 
             BufferedImage skin;
             try (InputStream stream = connection.getInputStream()) {
-                skin = ImageIO.read(stream);
+                skin = decodeSkin(readSkinBytes(stream));
+            } finally {
+                connection.disconnect();
             }
 
             if (skin == null) {
@@ -106,9 +176,10 @@ public class MinecraftPlayerHeadGenerator implements Generator {
             BufferedImage head = new RenderedPlayerSkull(skin).generate().getImage();
 
             if (scale > 0) {
-                head = ImageUtil.upscaleImage(head, scale);
+                head = ImageUtil.upscaleImage(head, Math.min(scale, MAX_UPSCALE));
             } else if (scale < 0) {
-                head = ImageUtil.downscaleImage(head, Math.abs(scale));
+                // long arithmetic: Math.abs(Integer.MIN_VALUE) is still negative as an int
+                head = ImageUtil.downscaleImage(head, (int) Math.min(Math.abs((long) scale), MAX_DOWNSCALE));
             }
 
             return head;
@@ -176,7 +247,7 @@ public class MinecraftPlayerHeadGenerator implements Generator {
         try {
             JsonObject root = JsonParser.parseString(json).getAsJsonObject();
             return root != null && root.has("textures") && root.getAsJsonObject("textures").has("SKIN");
-        } catch (JsonSyntaxException | IllegalStateException ex) {
+        } catch (JsonSyntaxException | IllegalStateException | ClassCastException ex) {
             return false;
         }
     }
@@ -205,7 +276,7 @@ public class MinecraftPlayerHeadGenerator implements Generator {
         public MinecraftPlayerHeadGenerator build() {
             MojangApiClient client = (mojangApiClient != null)
                 ? mojangApiClient
-                : MojangApiClientFactory.defaultInstance();
+                : MojangApiClientFactory.sharedInstance();
             return new MinecraftPlayerHeadGenerator(texture, scale, client);
         }
     }
