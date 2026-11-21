@@ -1,5 +1,6 @@
 package net.aerh.imagegenerator.impl.scene;
 
+import net.aerh.imagegenerator.image.RenderCancellation;
 import net.aerh.imagegenerator.image.RenderLimits;
 import net.aerh.imagegenerator.exception.GeneratorException;
 import net.aerh.imagegenerator.item.GeneratedObject;
@@ -71,6 +72,7 @@ final class SceneCompositor {
 
         List<BufferedImage> compositeFrames = new ArrayList<>(timeline.steps().size());
         for (AnimationTimeline.Step step : timeline.steps()) {
+            RenderCancellation.check();
             compositeFrames.add(composeFrame(placed, width, height, step));
         }
 

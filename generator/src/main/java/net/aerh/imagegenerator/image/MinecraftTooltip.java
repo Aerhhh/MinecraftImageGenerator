@@ -644,6 +644,7 @@ public class MinecraftTooltip {
         this.locationY = startXY + pixelSize * 2 + yIncrement / 2;
 
         for (int lineIndex = 0; lineIndex < this.getLines().size(); lineIndex++) {
+            RenderCancellation.check();
             LineSegment line = this.getLines().get(lineIndex);
             int lineWidth = calculateLineWidth(measureGraphics, line);
             this.lineMetrics.put(lineIndex, lineWidth);
@@ -686,6 +687,7 @@ public class MinecraftTooltip {
         this.packObfuscationCounter = 0;
 
         for (int lineIndex = 0; lineIndex < this.getLines().size(); lineIndex++) {
+            RenderCancellation.check();
             LineSegment line = this.getLines().get(lineIndex);
             int lineWidth = this.lineMetrics.getOrDefault(lineIndex, 0);
 
@@ -1085,6 +1087,7 @@ public class MinecraftTooltip {
         BufferedImage themeLayer = isThemed() ? buildThemeLayer(frameWidth, frameHeight, this.themeSprites) : null;
 
         for (int i = 0; i < framesToGenerate; i++) {
+            RenderCancellation.check();
             BufferedImage frameImage = new BufferedImage(frameWidth, frameHeight, BufferedImage.TYPE_INT_ARGB);
             Graphics2D graphics = frameImage.createGraphics();
             BufferedImage processedFrame;
@@ -1167,6 +1170,7 @@ public class MinecraftTooltip {
         Map<Long, BufferedImage> themeLayers = new HashMap<>();
         List<Integer> delays = new ArrayList<>(timeline.steps().size());
         for (AnimationTimeline.Step step : timeline.steps()) {
+            RenderCancellation.check();
             int backgroundPosition = backgroundSource >= 0 ? step.framePositions().get(backgroundSource) : 0;
             int framePosition = frameSource >= 0 ? step.framePositions().get(frameSource) : 0;
             BufferedImage themeLayer = themeLayers.computeIfAbsent(

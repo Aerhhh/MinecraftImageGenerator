@@ -1,5 +1,6 @@
 package net.aerh.imagegenerator.impl;
 
+import net.aerh.imagegenerator.image.RenderCancellation;
 import net.aerh.imagegenerator.image.RenderLimits;
 import lombok.Getter;
 import lombok.ToString;
@@ -317,6 +318,7 @@ public class MinecraftInventoryGenerator implements Generator {
         boolean hasAnimation = false;
         boolean hasTextureAnimation = false;
         for (InventoryItem item : items) {
+            RenderCancellation.check();
             processItem(item, generationContext);
             if (item.getAnimationFrames() != null && !item.getAnimationFrames().isEmpty()) {
                 hasAnimation = true;
@@ -739,6 +741,7 @@ public class MinecraftInventoryGenerator implements Generator {
 
         RenderLimits.checkFrames(inventoryImage.getWidth(), inventoryImage.getHeight(), maxFrames);
         for (int frameIndex = 0; frameIndex < maxFrames; frameIndex++) {
+            RenderCancellation.check();
             BufferedImage frame = new BufferedImage(inventoryImage.getWidth(), inventoryImage.getHeight(), BufferedImage.TYPE_INT_ARGB);
             Graphics2D frameGraphics = frame.createGraphics();
             try {
@@ -810,6 +813,7 @@ public class MinecraftInventoryGenerator implements Generator {
         RenderLimits.checkFrames(inventoryImage.getWidth(), inventoryImage.getHeight(), timeline.steps().size());
         List<BufferedImage> frames = new ArrayList<>(timeline.steps().size());
         for (AnimationTimeline.Step step : timeline.steps()) {
+            RenderCancellation.check();
             BufferedImage frame = new BufferedImage(inventoryImage.getWidth(), inventoryImage.getHeight(), BufferedImage.TYPE_INT_ARGB);
             Graphics2D frameGraphics = frame.createGraphics();
             try {
