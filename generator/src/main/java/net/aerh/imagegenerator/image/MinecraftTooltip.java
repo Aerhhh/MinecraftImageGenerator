@@ -33,6 +33,9 @@ import java.util.concurrent.ThreadLocalRandom;
 @Slf4j
 public class MinecraftTooltip {
 
+    /** The widest padding, in px per side, a tooltip accepts; larger values are clamped. */
+    public static final int MAX_PADDING = 255;
+
     private static final Map<Integer, Map<Integer, List<Character>>> OBFUSCATION_WIDTH_MAPS = new HashMap<>(); // Integer key represents font style index (0: regular, 1: bold, 2: italic, 3: bold-italic)
     private static final int[] UNICODE_BLOCK_RANGES = {
         0x0020, 0x007E, // Basic Latin
@@ -238,6 +241,11 @@ public class MinecraftTooltip {
         return themeSprites != null && renderBorder;
     }
 
+    /** Forces this class's one-off setup (font loading and character width tables) to run now. */
+    public static void warmUp() {
+        // Calling any static method runs the static initializer; there is nothing else to do.
+    }
+
     /**
      * Precomputes character widths for the text obfuscation/magic formatting effect.
      */
@@ -314,6 +322,12 @@ public class MinecraftTooltip {
      *
      * @return The padded {@link BufferedImage} frame.
      */
+    /** Checks the padded frame size against the shared pixel budget before any frame is allocated. */
+    private void checkFrameBudget(int frameWidth, int frameHeight, int frameCount) {
+        long padding = Math.max(0, this.getPadding()) * 2L;
+        RenderLimits.checkFrames(frameWidth + padding, frameHeight + padding, frameCount);
+    }
+
     private BufferedImage addPadding(BufferedImage frame) {
         if (this.getPadding() <= 0) {
             return frame;
@@ -635,6 +649,7 @@ public class MinecraftTooltip {
         this.locationY = startXY + pixelSize * 2 + yIncrement / 2;
 
         for (int lineIndex = 0; lineIndex < this.getLines().size(); lineIndex++) {
+            RenderCancellation.check();
             LineSegment line = this.getLines().get(lineIndex);
             int lineWidth = calculateLineWidth(measureGraphics, line);
             this.lineMetrics.put(lineIndex, lineWidth);
@@ -677,6 +692,7 @@ public class MinecraftTooltip {
         this.packObfuscationCounter = 0;
 
         for (int lineIndex = 0; lineIndex < this.getLines().size(); lineIndex++) {
+            RenderCancellation.check();
             LineSegment line = this.getLines().get(lineIndex);
             int lineWidth = this.lineMetrics.getOrDefault(lineIndex, 0);
 
@@ -1072,9 +1088,11 @@ public class MinecraftTooltip {
         }
 
         int framesToGenerate = this.isAnimated ? this.animationFrameCount : 1;
+        checkFrameBudget(frameWidth, frameHeight, framesToGenerate);
         BufferedImage themeLayer = isThemed() ? buildThemeLayer(frameWidth, frameHeight, this.themeSprites) : null;
 
         for (int i = 0; i < framesToGenerate; i++) {
+            RenderCancellation.check();
             BufferedImage frameImage = new BufferedImage(frameWidth, frameHeight, BufferedImage.TYPE_INT_ARGB);
             Graphics2D graphics = frameImage.createGraphics();
             BufferedImage processedFrame;
@@ -1152,10 +1170,12 @@ public class MinecraftTooltip {
             sources.add(Collections.nCopies(this.animationFrameCount, obfuscationTicks));
         }
         AnimationTimeline timeline = AnimationTimeline.of(sources);
+        checkFrameBudget(frameWidth, frameHeight, timeline.steps().size());
 
         Map<Long, BufferedImage> themeLayers = new HashMap<>();
         List<Integer> delays = new ArrayList<>(timeline.steps().size());
         for (AnimationTimeline.Step step : timeline.steps()) {
+            RenderCancellation.check();
             int backgroundPosition = backgroundSource >= 0 ? step.framePositions().get(backgroundSource) : 0;
             int framePosition = frameSource >= 0 ? step.framePositions().get(frameSource) : 0;
             BufferedImage themeLayer = themeLayers.computeIfAbsent(
@@ -1289,7 +1309,7 @@ public class MinecraftTooltip {
         }
 
         public Builder withPadding(int padding) {
-            this.padding = Math.max(0, padding);
+            this.padding = Math.max(0, Math.min(padding, MAX_PADDING));
             return this;
         }
 

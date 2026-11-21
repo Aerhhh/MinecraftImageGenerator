@@ -27,6 +27,12 @@ import java.util.regex.Pattern;
  */
 public final class SnbtParser {
 
+    /**
+     * Deepest nesting of compounds and lists accepted, matching vanilla's NBT limit. Parsing is
+     * recursive, so without a limit a long run of {@code [} overflows the stack.
+     */
+    static final int MAX_DEPTH = 512;
+
     private static final Pattern DOUBLE_PATTERN = Pattern.compile("[-+]?[0-9]*\\.?[0-9]+[dD]");
     private static final Pattern FLOAT_PATTERN = Pattern.compile("[-+]?[0-9]*\\.?[0-9]+[fF]");
     private static final Pattern BYTE_PATTERN = Pattern.compile("[-+]?[0-9]+[bB]");
@@ -38,6 +44,7 @@ public final class SnbtParser {
 
     private final String input;
     private int pos;
+    private int depth;
 
     private SnbtParser(String input) {
         this.input = input;
@@ -85,6 +92,18 @@ public final class SnbtParser {
     }
 
     private JsonElement parseAny() {
+        if (depth >= MAX_DEPTH) {
+            throw error("SNBT is nested more than " + MAX_DEPTH + " levels deep");
+        }
+        depth++;
+        try {
+            return parseAnyValue();
+        } finally {
+            depth--;
+        }
+    }
+
+    private JsonElement parseAnyValue() {
         skipWhitespace();
 
         if (isFinished()) {
@@ -309,6 +328,15 @@ public final class SnbtParser {
     }
 
     private JsonElement tryParseNumeric(String raw) {
+        try {
+            return parseNumeric(raw);
+        } catch (NumberFormatException e) {
+            // Shaped like a number but out of range for its type suffix (e.g. 999b): keep it as text
+            return null;
+        }
+    }
+
+    private JsonElement parseNumeric(String raw) {
         if (!ROUGH_NUMERIC_PATTERN.matcher(raw).matches()) {
             return null;
         }

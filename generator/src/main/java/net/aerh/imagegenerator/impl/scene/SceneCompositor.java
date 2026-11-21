@@ -1,5 +1,7 @@
 package net.aerh.imagegenerator.impl.scene;
 
+import net.aerh.imagegenerator.image.RenderCancellation;
+import net.aerh.imagegenerator.image.RenderLimits;
 import net.aerh.imagegenerator.exception.GeneratorException;
 import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.pack.AnimationTimeline;
@@ -62,12 +64,15 @@ final class SceneCompositor {
             }
         }
         if (sources.isEmpty()) {
+            RenderLimits.checkCanvas(width, height);
             return new GeneratedObject(composeFrame(placed, width, height, null));
         }
         AnimationTimeline timeline = AnimationTimeline.of(sources);
+        RenderLimits.checkFrames(width, height, timeline.steps().size());
 
         List<BufferedImage> compositeFrames = new ArrayList<>(timeline.steps().size());
         for (AnimationTimeline.Step step : timeline.steps()) {
+            RenderCancellation.check();
             compositeFrames.add(composeFrame(placed, width, height, step));
         }
 

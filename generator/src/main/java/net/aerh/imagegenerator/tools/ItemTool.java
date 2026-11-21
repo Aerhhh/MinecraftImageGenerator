@@ -32,6 +32,11 @@ public final class ItemTool {
      * @throws GeneratorException if the request is invalid or the render fails
      */
     public GeneratedObject render(ItemRequest request, @Nullable GenerationContext context) throws IOException {
+        // Parsing the request runs under the render timeout too, not just the drawing.
+        return GeneratorImageBuilder.withinTimeout(() -> renderWithinTimeout(request, context));
+    }
+
+    private GeneratedObject renderWithinTimeout(ItemRequest request, @Nullable GenerationContext context) throws IOException {
         ItemAddressing.requireSingleItemAddress(request.itemId(), request.itemModel());
 
         GeneratorImageBuilder generatorImageBuilder = new GeneratorImageBuilder().withContext(context);

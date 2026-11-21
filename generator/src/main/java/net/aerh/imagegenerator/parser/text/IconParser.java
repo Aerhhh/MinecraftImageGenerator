@@ -10,6 +10,9 @@ import java.util.regex.Matcher;
 
 public class IconParser implements StringParser {
 
+    /** The most times one icon placeholder may repeat its character. */
+    public static final int MAX_REPEAT = 100;
+
     @Override
     public String parse(String input) {
         return parse(input, ParseContext.empty());
@@ -57,7 +60,7 @@ public class IconParser implements StringParser {
 
         try {
             int amount = Integer.parseInt(extra);
-            return character.repeat(amount);
+            return character.repeat(clampRepeat(amount));
         } catch (NumberFormatException e) {
             return character;
         }
@@ -98,7 +101,15 @@ public class IconParser implements StringParser {
             return null;
         }
 
-        return character.repeat(count);
+        return character.repeat(clampRepeat(count));
+    }
+
+    /**
+     * Keeps a repeat count from user text within {@code 0..}{@link #MAX_REPEAT}. The count is part of
+     * the placeholder a user types, so without a ceiling a few characters expand to gigabytes.
+     */
+    private static int clampRepeat(int count) {
+        return Math.max(0, Math.min(count, MAX_REPEAT));
     }
 
     private String resolveIconCharacter(String target, ParseContext context) {

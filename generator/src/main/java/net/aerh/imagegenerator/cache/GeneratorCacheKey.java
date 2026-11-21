@@ -145,11 +145,17 @@ public class GeneratorCacheKey {
         return parts.toString();
     }
 
+    /**
+     * Encodes one value so that different values can never encode alike: a short value is written
+     * with its length in front, so a value containing {@code ;name=} cannot pass for the start of the
+     * next field, and a long value is replaced by its hash under a different tag, so no short value
+     * can spell a hash.
+     */
     private static String abbreviate(String value) {
         if (value.length() <= 64) {
-            return value;
+            return "s" + value.length() + ":" + value;
         }
-        return hash(value);
+        return "h:" + hash(value);
     }
 
     private static String hash(String value) {

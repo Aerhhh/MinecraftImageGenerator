@@ -5,9 +5,12 @@ import net.hypixel.nerdbot.marmalade.image.ImageUtil;
 import net.aerh.imagegenerator.context.GenerationContext;
 import net.aerh.imagegenerator.Generator;
 import net.aerh.imagegenerator.exception.GeneratorException;
+import net.aerh.imagegenerator.exception.GeneratorTimeoutException;
 import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.pack.AnimationTimeline;
+import net.aerh.imagegenerator.spritesheet.Spritesheet;
 import net.aerh.imagegenerator.util.AnimatedGifEncoder;
+import net.aerh.imagegenerator.util.MinecraftFonts;
 import org.jetbrains.annotations.Nullable;
 
 import java.awt.*;
@@ -15,10 +18,12 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -28,7 +33,20 @@ public class GeneratorImageBuilder {
     private static final int IMAGE_PADDING_PX = 25;
     private static final int IMAGE_BORDER_PADDING_PX = 15;
 
-    private static final ExecutorService executorService = Executors.newVirtualThreadPerTaskExecutor();
+    /** System property: how long one {@link #build()} may take, in milliseconds. */
+    public static final String TIMEOUT_PROPERTY = "image.generator.timeout.ms";
+    /** System property: how many builds may render at once; further builds wait for a slot. Read once, at class load. */
+    public static final String MAX_CONCURRENT_RENDERS_PROPERTY = "image.generator.maxConcurrentRenders";
+
+    private static final long DEFAULT_TIMEOUT_MS = 20_000L;
+
+    // Platform threads, not virtual ones. Rendering is CPU-bound and virtual threads are not
+    // time-sliced: with every carrier busy in a render, the parked task that has to pass a
+    // cancellation on to its nested build never gets to run, so timed-out renders kept going.
+    private static final ExecutorService executorService = Executors.newThreadPerTaskExecutor(
+        Thread.ofPlatform().daemon(true).name("image-render-", 0).factory());
+    private static final Semaphore RENDER_SLOTS = new Semaphore(maxConcurrentRenders(), true);
+    private static final ThreadLocal<Boolean> INSIDE_RENDER = ThreadLocal.withInitial(() -> false);
     private final List<Generator> generators;
     private @Nullable GenerationContext context;
 
@@ -82,27 +100,148 @@ public class GeneratorImageBuilder {
     /**
      * Build the final image from the list of {@link Generator generators}.
      * The image will be generated in the order that the generators were added.
-     * If the generation fails or times out, a {@link GeneratorException} will be thrown.
+     * If the generation fails a {@link GeneratorException} is thrown; if it times out, or no render slot
+     * frees up in time, a {@link GeneratorTimeoutException} (a {@link GeneratorException}) is thrown and
+     * the render task is cancelled.
      *
      * @return The final {@link GeneratedObject image}.
      *
      * @throws GeneratorException if the generation fails or times out.
      */
     public GeneratedObject build() {
-        Future<GeneratedObject> future = executorService.submit(this::buildInternal);
-        long timeoutMs = Long.getLong("image.generator.timeout.ms", 20000L);
-
         try {
-            return future.get(timeoutMs, TimeUnit.MILLISECONDS);
-        } catch (TimeoutException exception) {
-            future.cancel(true);
-            throw new GeneratorException("Image generation timed out", exception);
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            throw new GeneratorException("Image generation was interrupted", exception);
+            return runTimed(this::buildInternal);
         } catch (ExecutionException exception) {
             throw new GeneratorException(exception.getCause().getMessage(), exception);
         }
+    }
+
+    /** Work that {@link #withinTimeout(TimedWork)} runs under the render timeout. */
+    @FunctionalInterface
+    public interface TimedWork<T> {
+        T run() throws IOException;
+    }
+
+    /**
+     * Runs a whole request under one render timeout and one render slot: the parsing that turns
+     * request text into generators as well as the {@link #build()} that draws them. On its own,
+     * {@link #build()} only times the drawing, leaving the parsing before it unbounded.
+     * <p>
+     * A {@link #build()} called by the work shares this call's slot, and is cancelled with it when
+     * the timeout passes. Called from inside a render, the work simply runs in place, since the
+     * render it belongs to is already timed. Exceptions thrown by the work reach the caller unchanged.
+     *
+     * @throws GeneratorTimeoutException if the work times out, or no render slot frees up in time
+     * @throws IOException               if the work throws one
+     */
+    public static <T> T withinTimeout(TimedWork<T> work) throws IOException {
+        if (INSIDE_RENDER.get()) {
+            return work.run();
+        }
+        try {
+            return runTimed(work::run);
+        } catch (ExecutionException exception) {
+            Throwable cause = exception.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            if (cause instanceof IOException ioException) {
+                throw ioException;
+            }
+            if (cause instanceof Error error) {
+                throw error;
+            }
+            throw new GeneratorException(cause.getMessage(), exception);
+        }
+    }
+
+    /**
+     * Loads what the first render would otherwise load inside its own timeout: the fonts, the
+     * tooltip character widths and the vanilla texture atlas. That loading takes seconds and
+     * cannot be cancelled, so a first request that times out during it keeps its render slot until
+     * the loading ends. A service should call this once at startup.
+     */
+    public static void warmUp() {
+        MinecraftFonts.getAllFonts();
+        MinecraftTooltip.warmUp();
+        Spritesheet.getImageMap();
+    }
+
+    /**
+     * Runs the work on a render task, waiting at most the render timeout for a slot and the result.
+     *
+     * @throws ExecutionException if the work itself throws
+     */
+    private static <T> T runTimed(Callable<T> work) throws ExecutionException {
+        long timeoutMs = Long.getLong(TIMEOUT_PROPERTY, DEFAULT_TIMEOUT_MS);
+        long deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs);
+
+        // A build started from inside a render task already holds a slot; taking a second one
+        // could deadlock once every slot is held by such a parent.
+        boolean nested = INSIDE_RENDER.get();
+        if (!nested) {
+            acquireRenderSlot(timeoutMs);
+        }
+
+        // A nested build joins its parent's reservations, so they are all released together when
+        // the outermost render ends.
+        RenderBudget.Scope parentScope = RenderBudget.current();
+
+        Future<T> future;
+        try {
+            future = executorService.submit(() -> {
+                INSIDE_RENDER.set(true);
+                RenderBudget.Scope scope = RenderBudget.enter(parentScope);
+                try {
+                    return work.call();
+                } finally {
+                    RenderBudget.exit(scope);
+                    // Released by the task, not the waiting caller, so a render that is still
+                    // winding down after a timeout keeps counting against the limit.
+                    if (!nested) {
+                        RENDER_SLOTS.release();
+                    }
+                }
+            });
+        } catch (RuntimeException exception) {
+            if (!nested) {
+                RENDER_SLOTS.release();
+            }
+            throw exception;
+        }
+
+        try {
+            long remainingNanos = Math.max(0, deadlineNanos - System.nanoTime());
+            return future.get(remainingNanos, TimeUnit.NANOSECONDS);
+        } catch (TimeoutException exception) {
+            future.cancel(true);
+            throw new GeneratorTimeoutException("Image generation timed out", exception);
+        } catch (InterruptedException exception) {
+            future.cancel(true);
+            Thread.currentThread().interrupt();
+            throw new GeneratorException("Image generation was interrupted", exception);
+        }
+    }
+
+    /**
+     * Waits for a free render slot, for at most the render timeout.
+     *
+     * @throws GeneratorTimeoutException if no slot frees up in time
+     */
+    private static void acquireRenderSlot(long timeoutMs) {
+        try {
+            if (!RENDER_SLOTS.tryAcquire(timeoutMs, TimeUnit.MILLISECONDS)) {
+                throw new GeneratorTimeoutException("Image generation timed out waiting for a free render slot");
+            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new GeneratorException("Image generation was interrupted", exception);
+        }
+    }
+
+    private static int maxConcurrentRenders() {
+        int configured = Integer.getInteger(MAX_CONCURRENT_RENDERS_PROPERTY, 0);
+        return configured > 0 ? configured : Math.max(2, Runtime.getRuntime().availableProcessors());
     }
 
     /**
@@ -114,6 +253,7 @@ public class GeneratorImageBuilder {
         // Generate all objects first
         List<GeneratedObject> generatedObjects = new ArrayList<>();
         for (Generator generator : generators) {
+            RenderCancellation.check();
             try {
                 generatedObjects.add(generator.generate(this.context));
             } catch (Exception e) {
@@ -165,6 +305,8 @@ public class GeneratorImageBuilder {
         if (totalWidth <= 0 || maxHeight <= 0) {
             throw new GeneratorException("Calculated image dimensions are invalid (width=" + totalWidth + ", height=" + maxHeight + ")");
         }
+
+        RenderLimits.checkCanvas((long) totalWidth + 2 * IMAGE_BORDER_PADDING_PX, (long) maxHeight + 2 * IMAGE_BORDER_PADDING_PX);
 
         BufferedImage finalImage = new BufferedImage(totalWidth + 2 * IMAGE_BORDER_PADDING_PX, maxHeight + 2 * IMAGE_BORDER_PADDING_PX, BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = finalImage.createGraphics();
@@ -241,10 +383,13 @@ public class GeneratorImageBuilder {
             throw new GeneratorException("Calculated animated image dimensions are invalid (width=" + totalWidth + ", height=" + maxHeight + ")");
         }
 
+        RenderLimits.checkFrames((long) totalWidth + 2 * IMAGE_BORDER_PADDING_PX, (long) maxHeight + 2 * IMAGE_BORDER_PADDING_PX, maxFrames);
+
         List<BufferedImage> compositeFrames = new ArrayList<>();
 
         // Generate each frame
         for (int frameIndex = 0; frameIndex < maxFrames; frameIndex++) {
+            RenderCancellation.check();
             BufferedImage compositeFrame = new BufferedImage(totalWidth + 2 * IMAGE_BORDER_PADDING_PX, maxHeight + 2 * IMAGE_BORDER_PADDING_PX, BufferedImage.TYPE_INT_ARGB);
             Graphics2D graphics = compositeFrame.createGraphics();
             try {
@@ -275,7 +420,7 @@ public class GeneratorImageBuilder {
             compositeFrames.add(compositeFrame);
         }
 
-        byte[] gifData = ImageUtil.toGifBytes(compositeFrames, frameDelayMs, true);
+        byte[] gifData = AnimatedGifEncoder.encode(compositeFrames, frameDelayMs);
 
         return new GeneratedObject(gifData, compositeFrames, frameDelayMs);
     }
@@ -319,8 +464,11 @@ public class GeneratorImageBuilder {
                 + totalWidth + ", height=" + maxHeight + ")");
         }
 
+        RenderLimits.checkFrames((long) totalWidth + 2 * IMAGE_BORDER_PADDING_PX, (long) maxHeight + 2 * IMAGE_BORDER_PADDING_PX, timeline.steps().size());
+
         List<BufferedImage> compositeFrames = new ArrayList<>(timeline.steps().size());
         for (AnimationTimeline.Step step : timeline.steps()) {
+            RenderCancellation.check();
             BufferedImage compositeFrame = new BufferedImage(totalWidth + 2 * IMAGE_BORDER_PADDING_PX, maxHeight + 2 * IMAGE_BORDER_PADDING_PX, BufferedImage.TYPE_INT_ARGB);
             Graphics2D graphics = compositeFrame.createGraphics();
             try {

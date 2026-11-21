@@ -9,10 +9,9 @@ import net.hypixel.nerdbot.marmalade.Range;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.List;
 import java.util.ListIterator;
-import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -98,18 +97,17 @@ public class InventoryStringParser implements Parser<ArrayList<InventoryItem>> {
                 int[] slots = item.getSlot();
                 int[] nextSlots = nextItem.getSlot();
 
-                // Find overlapping slots between all items
-                Set<Integer> overlappingSlots = Arrays.stream(slots)
-                    .boxed()
-                    .filter(slot -> Arrays.stream(nextSlots).anyMatch(nextSlot -> nextSlot == slot))
-                    .collect(Collectors.toSet());
+                // Drop from the current item every slot the next item also claims
+                BitSet nextSlotSet = new BitSet();
+                for (int nextSlot : nextSlots) {
+                    nextSlotSet.set(nextSlot);
+                }
 
-                if (!overlappingSlots.isEmpty()) {
-                    // Remove overlapping slots from the current item
-                    int[] newSlots = Arrays.stream(slots)
-                        .filter(slot -> !overlappingSlots.contains(slot))
-                        .toArray();
+                int[] newSlots = Arrays.stream(slots)
+                    .filter(slot -> !nextSlotSet.get(slot))
+                    .toArray();
 
+                if (newSlots.length != slots.length) {
                     // Create a new amounts array with the new slot data
                     int[] newAmounts = Arrays.copyOfRange(item.getAmount(), 0, newSlots.length);
 
@@ -146,7 +144,12 @@ public class InventoryStringParser implements Parser<ArrayList<InventoryItem>> {
                 throw new GeneratorException("Invalid slot or amount format: `%s` in slot data: `%s` for material: `%s,%s`", pair.trim(), slotMap, material, data);
             }
 
-            int amount = Range.between(1, 64).fit(Integer.parseInt(targetSlot[1].trim()));
+            int amount;
+            try {
+                amount = Range.between(1, 64).fit(Integer.parseInt(targetSlot[1].trim()));
+            } catch (NumberFormatException exception) {
+                throw new GeneratorException("Invalid amount: `%s` in slot data: `%s`", targetSlot[1].trim(), slotMap);
+            }
             int[] parsedSlots = parseSlotRange(targetSlot[0].trim(), this.totalSlots);
 
             for (int slot : parsedSlots) {
@@ -300,8 +303,14 @@ public class InventoryStringParser implements Parser<ArrayList<InventoryItem>> {
                         throw new GeneratorException("Invalid range format: `%s`", value);
                     }
 
-                    int startSlot = Range.between(1, totalSlots).fit(Integer.parseInt(rangeParts[0].trim()));
-                    int endSlot = Range.between(1, totalSlots).fit(Integer.parseInt(rangeParts[1].trim()));
+                    int startSlot;
+                    int endSlot;
+                    try {
+                        startSlot = Range.between(1, totalSlots).fit(Integer.parseInt(rangeParts[0].trim()));
+                        endSlot = Range.between(1, totalSlots).fit(Integer.parseInt(rangeParts[1].trim()));
+                    } catch (NumberFormatException exception) {
+                        throw new GeneratorException("Invalid range format: `%s`", value);
+                    }
 
                     if (startSlot > endSlot) {
                         throw new GeneratorException("Start slot cannot be greater than end slot in range: `%s`", value);
@@ -318,6 +327,9 @@ public class InventoryStringParser implements Parser<ArrayList<InventoryItem>> {
                     }
                 }
             })
+            // A slot listed twice adds nothing, and without this a short string of repeated
+            // ranges expands to many times its own length
+            .distinct()
             .mapToInt(Integer::intValue)
             .toArray();
     }

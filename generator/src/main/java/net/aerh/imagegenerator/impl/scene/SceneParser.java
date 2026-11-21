@@ -47,6 +47,11 @@ import java.util.Set;
  */
 final class SceneParser {
 
+    /** The largest scene `scale`; the canvas grows with its square. */
+    static final int MAX_SCALE = 16;
+    /** The largest margin, spacing, HUD width, column count and placement offset, in px or cells. */
+    static final int MAX_OFFSET_PX = 4096;
+
     /** The scene schema version this build understands. Newer documents are rejected. */
     static final int SCHEMA_VERSION = 1;
 
@@ -97,6 +102,7 @@ final class SceneParser {
             if (scale < 1) {
                 throw new IllegalArgumentException("Scene `scale` must be at least 1, got: " + scale);
             }
+            requireAtMost(scale, MAX_SCALE, "Scene `scale`");
         }
 
         int margin = 0;
@@ -105,6 +111,7 @@ final class SceneParser {
             if (margin < 0) {
                 throw new IllegalArgumentException("Scene `margin` must not be negative, got: " + margin);
             }
+            requireAtMost(margin, MAX_OFFSET_PX, "Scene `margin`");
         }
 
         if (!root.has("regions")) {
@@ -353,6 +360,7 @@ final class SceneParser {
             if (guiWidth < 1) {
                 throw new IllegalArgumentException(context + " `gui_width` must be at least 1, got: " + guiWidth);
             }
+            requireAtMost(guiWidth, MAX_OFFSET_PX, context + " `gui_width`");
         }
         Boolean textShadow = object.has("text_shadow")
             ? StrictJson.requireBoolean(object, "text_shadow", context)
@@ -493,6 +501,7 @@ final class SceneParser {
             if (spacing < 0) {
                 throw new IllegalArgumentException(context + " `spacing` must not be negative, got: " + spacing);
             }
+            requireAtMost(spacing, MAX_OFFSET_PX, context + " `spacing`");
         }
         Align alignment = object.has("alignment")
             ? parseAlign(StrictJson.requireString(object, "alignment", context), name, "alignment")
@@ -508,6 +517,7 @@ final class SceneParser {
             if (columns < 1) {
                 throw new IllegalArgumentException(context + " `columns` must be at least 1, got: " + columns);
             }
+            requireAtMost(columns, MAX_OFFSET_PX, context + " `columns`");
             if (object.has("cell")) {
                 String cell = StrictJson.requireString(object, "cell", context);
                 if (!cell.equals("slot")) {
@@ -571,7 +581,17 @@ final class SceneParser {
         if (intValue != value) {
             throw new IllegalArgumentException(context + " must be an [x, y] integer pair, got: " + value);
         }
+        if (Math.abs((long) intValue) > MAX_OFFSET_PX) {
+            throw new IllegalArgumentException(context + " values must be within -" + MAX_OFFSET_PX
+                + " to " + MAX_OFFSET_PX + ", got: " + intValue);
+        }
         return intValue;
+    }
+
+    private static void requireAtMost(int value, int max, String what) {
+        if (value > max) {
+            throw new IllegalArgumentException(what + " must be at most " + max + ", got: " + value);
+        }
     }
 
     /** A parsed region content together with the content-specific keys allowed on its region object. */

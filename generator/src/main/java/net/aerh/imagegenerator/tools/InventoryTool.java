@@ -36,6 +36,11 @@ public final class InventoryTool {
      * @throws GeneratorException if the request is invalid or the render fails
      */
     public GeneratedObject render(InventoryRequest request, @Nullable GenerationContext context) throws IOException {
+        // Parsing the request runs under the render timeout too, not just the drawing.
+        return GeneratorImageBuilder.withinTimeout(() -> renderWithinTimeout(request, context));
+    }
+
+    private GeneratedObject renderWithinTimeout(InventoryRequest request, @Nullable GenerationContext context) throws IOException {
         GeneratorImageBuilder generatedObject = new GeneratorImageBuilder().withContext(context)
             .addGenerator(PackTheming.applyInventoryPack(packService, new MinecraftInventoryGenerator.Builder(), request.packId())
                 .withRows(request.rows())

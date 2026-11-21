@@ -8,7 +8,6 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import net.hypixel.nerdbot.marmalade.image.ImageUtil;
 import net.hypixel.nerdbot.marmalade.Range;
 import net.hypixel.nerdbot.marmalade.Tuple;
 import net.aerh.imagegenerator.context.GenerationContext;
@@ -94,7 +93,7 @@ public class MinecraftTooltipGenerator implements Generator {
                         name, tooltip.getAnimationFrames().size());
                     return new GeneratedObject(gifData, tooltip.getAnimationFrames(), tooltip.getFrameDelaysMs());
                 }
-                byte[] gifData = ImageUtil.toGifBytes(tooltip.getAnimationFrames(), tooltip.getFrameDelayMs(), true);
+                byte[] gifData = AnimatedGifEncoder.encode(tooltip.getAnimationFrames(), tooltip.getFrameDelayMs());
                 log.debug("Rendered animated tooltip for '{}' ({} frames, delay {}ms)", name, tooltip.getAnimationFrames().size(), tooltip.getFrameDelayMs());
                 return new GeneratedObject(gifData, tooltip.getAnimationFrames(), tooltip.getFrameDelayMs());
             } catch (IOException e) {

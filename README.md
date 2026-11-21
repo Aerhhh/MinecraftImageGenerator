@@ -257,6 +257,9 @@ PackId emberveil = PackRepository.global().register(
 
 - What `maxEntries` counts depends on the source type: a zip counts every central-directory record (regular files *and* directory entries), a directory source counts only regular files under `assets/`. Size the limit comfortably above the pack's record count.
 - Sheet-shaped textures (font glyph sheets, animated tooltip sprite strips) decode under the separate `sheetTextureMaxDim` cap (default 8192); item and general GUI textures keep the strict `maxTextureDim` image-bomb guard.
+- Whatever the per-side cap, one texture decodes to at most 16,777,216 pixels, and textures must be PNG.
+- Registration reads at most `maxIndexBytes` of item and model definitions in total (default 256 MiB, `generator.pack.maxIndexBytes`, or a sixth constructor argument). A pack over it fails to register.
+- Values inside the pack that act as sizes are bounded too: GUI sprite scaling sizes, bitmap font `height` (at most 2048), TTF `size` (256), `oversample` (16) and their product (512), 64 models per composite item, and 64 distinct TTF files per pack.
 
 ### Pack variants
 
@@ -572,6 +575,37 @@ GeneratedObject image = new MinecraftTooltipGenerator.Builder()
 - **Animation** via animated GIF output with frame-by-frame compositing
 - **Caching** of rendered objects via Caffeine
 - **Alternate fonts** including Galactic (Standard Galactic Alphabet) and Illageralt
+
+## Render limits
+
+Text and options usually reach the generators from untrusted users, so every renderer checks a shared pixel budget (`RenderLimits`) before it allocates a canvas. A render over budget fails with a `GeneratorValidationException` instead of exhausting the heap. Both limits are system properties:
+
+| Property | Default | Limits |
+|---|---|---|
+| `generator.render.maxCanvasPixels` | 25,000,000 | Pixels in one canvas (about 100 MB of ARGB) |
+| `generator.render.maxAnimationPixels` | 400,000,000 | Pixels summed over every frame of one animation |
+
+The animation default leaves room for the largest stock render, a full chest with the 182-frame enchant glint (about 256 million pixels, roughly 1 GB while it renders). Lower it on a host with a small heap.
+
+Individual inputs are bounded as well: icon placeholder repeat counts (`%%dot:N%%`) clamp to 100, tooltip padding clamps to 255, inventories take at most 64 rows and 64 slots per row, scene `scale` is at most 16, scene margins, spacing and offsets at most 4096, and one content template fill produces at most 1,000,000 characters of output.
+
+### Running as a service
+
+The limits above bound one image. A service that renders for many users at once also needs the following.
+
+**Memory across renders.** Every render started through `GeneratorImageBuilder.build()` or a tool reserves its pixels against a budget shared by the whole JVM (`RenderBudget`) and returns them when it ends. A render that needs pixels another render is holding waits for it to finish. It fails with a `GeneratorBusyException` only when every other render is waiting as well, and with a `GeneratorValidationException` when it alone would need more than the whole budget.
+
+| Property | Default | Limits |
+|---|---|---|
+| `generator.render.maxConcurrentPixels` | Half the maximum heap, at 4 bytes per pixel (about 134 million on a 1 GB heap) | Pixels held by all running renders together |
+| `image.generator.maxConcurrentRenders` | The number of processors, at least 2 | Renders running at once; further requests wait for a slot |
+| `image.generator.timeout.ms` | 20,000 | Time one request may take, including the wait for a slot |
+
+On a small heap the default budget is below `generator.render.maxAnimationPixels`, so the largest animated renders are refused rather than risked. Give the JVM more heap to allow them.
+
+**Rate limiting.** A short request can be expensive: one enchanted item is a 182-frame animation and takes seconds of CPU. The library bounds how many renders run at once, not how many one user may ask for, so limit requests per user in the calling application. Identical requests are only reused when the result cache is switched on with `-Dgenerator.cache.enabled=true` (`generator.cache.maxSize`, default 256 entries).
+
+**Warm-up.** The first render loads the fonts and decodes the vanilla texture atlas, which takes seconds and cannot be cancelled. Call `GeneratorImageBuilder.warmUp()` once at startup so no user request pays for it or times out during it.
 
 ## Requirements
 

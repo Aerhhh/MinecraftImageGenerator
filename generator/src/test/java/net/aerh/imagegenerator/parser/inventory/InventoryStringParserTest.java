@@ -64,4 +64,31 @@ class InventoryStringParserTest {
     void slotFirstOrderingWithPlainMaterialHasNoValidSeparator() {
         assertThrows(GeneratorException.class, () -> parser.parse("1:stone"));
     }
+
+    @Test
+    void repeatedRangesDoNotExpandPastTheSlotCount() {
+        InventoryStringParser large = new InventoryStringParser(54);
+        String ranges = String.join(",", java.util.Collections.nCopies(500, "1-54"));
+
+        java.util.List<net.aerh.imagegenerator.item.InventoryItem> items =
+            large.parse("stone:[" + ranges + "]%%dirt:[" + ranges + "]");
+
+        // The later item wins every slot both claim, exactly as before
+        org.junit.jupiter.api.Assertions.assertEquals(0, items.get(0).getSlot().length);
+        org.junit.jupiter.api.Assertions.assertEquals(54, items.get(1).getSlot().length);
+    }
+
+    @Test
+    void overlapOnlyRemovesSharedSlotsFromTheEarlierItem() {
+        java.util.List<net.aerh.imagegenerator.item.InventoryItem> items = parser.parse("stone:[1-4]%%dirt:[3-6]");
+        org.junit.jupiter.api.Assertions.assertArrayEquals(new int[]{1, 2}, items.get(0).getSlot());
+        org.junit.jupiter.api.Assertions.assertArrayEquals(new int[]{3, 4, 5, 6}, items.get(1).getSlot());
+    }
+
+    @Test
+    void malformedNumbersAreGeneratorErrors() {
+        assertThrows(GeneratorException.class, () -> parser.parse("stone:[1-x]"));
+        assertThrows(GeneratorException.class, () -> parser.parse("stone:{1:x}"));
+        assertThrows(GeneratorException.class, () -> parser.parse("stone:[99999999999-3]"));
+    }
 }

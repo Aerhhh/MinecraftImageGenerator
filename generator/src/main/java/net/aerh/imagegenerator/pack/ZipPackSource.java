@@ -31,7 +31,8 @@ final class ZipPackSource implements PackSource {
         try {
             this.zipFile = new ZipFile(path.toFile());
         } catch (IOException e) {
-            throw new PackLoadException("Failed to open pack ZIP: " + path, e);
+            log.warn("Failed to open pack ZIP: {}", path);
+            throw new PackLoadException("Failed to open pack ZIP: " + path.getFileName(), e);
         }
         try {
             this.entryNames = indexEntries();
