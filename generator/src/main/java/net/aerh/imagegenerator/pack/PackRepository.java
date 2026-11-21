@@ -456,8 +456,9 @@ public final class PackRepository {
     private LoadedPack requireRegistered(PackId packId) {
         LoadedPack pack = packs.get(packId);
         if (pack == null) {
-            throw new PackResolveException("Pack `%s` is not registered (registered: %s)",
-                packId.toString(), registeredPacks().toString());
+            // The other registered ids are deliberately left out: this message reaches whoever asked
+            // for the pack, and a host may have packs it has not announced.
+            throw new PackResolveException("Pack `%s` is not registered", packId.toString());
         }
         return pack;
     }

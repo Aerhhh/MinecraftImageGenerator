@@ -19,7 +19,8 @@ record ResourceRef(String namespace, String path) {
     private static final Pattern DOT_ONLY_SEGMENT = Pattern.compile("\\.+");
 
     public ResourceRef {
-        if (namespace == null || !NAMESPACE.matcher(namespace).matches() || namespace.contains("..")) {
+        if (namespace == null || !NAMESPACE.matcher(namespace).matches() || namespace.contains("..")
+            || DOT_ONLY_SEGMENT.matcher(namespace).matches()) {
             throw new IllegalArgumentException("Invalid resource namespace: " + namespace);
         }
         if (path == null || !PATH.matcher(path).matches() || path.contains("..")) {

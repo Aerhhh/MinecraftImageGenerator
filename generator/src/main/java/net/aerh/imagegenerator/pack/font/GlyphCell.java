@@ -1,5 +1,6 @@
 package net.aerh.imagegenerator.pack.font;
 
+import net.aerh.imagegenerator.exception.PackResolveException;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
@@ -22,6 +23,9 @@ import java.util.Set;
  * retains no raster.
  */
 final class GlyphCell {
+
+    /** Most pixels one scaled glyph raster may hold. */
+    static final long MAX_SCALED_PIXELS = 16L * 1024 * 1024;
 
     private static final int WHITE_OPAQUE = 0xFFFFFFFF;
 
@@ -133,8 +137,14 @@ final class GlyphCell {
      * than Graphics2D interpolation hints so the result is platform-deterministic.
      */
     private BufferedImage scaleCell(int pixelSize) {
-        int destHeight = renderedGuiHeight * pixelSize;
-        int destWidth = Math.max(1, Math.round(cell.getWidth() * scale * pixelSize));
+        long scaledHeight = (long) renderedGuiHeight * pixelSize;
+        long scaledWidth = Math.max(1L, Math.round((double) cell.getWidth() * scale * pixelSize));
+        if (scaledHeight < 1 || scaledWidth * scaledHeight > MAX_SCALED_PIXELS) {
+            throw new PackResolveException("Pack glyph scales to %sx%s px, over the limit of %s pixels",
+                String.valueOf(scaledWidth), String.valueOf(scaledHeight), String.valueOf(MAX_SCALED_PIXELS));
+        }
+        int destHeight = (int) scaledHeight;
+        int destWidth = (int) scaledWidth;
         BufferedImage scaled = new BufferedImage(destWidth, destHeight, BufferedImage.TYPE_INT_ARGB);
         for (int destY = 0; destY < destHeight; destY++) {
             int srcY = (int) ((long) destY * cell.getHeight() / destHeight);

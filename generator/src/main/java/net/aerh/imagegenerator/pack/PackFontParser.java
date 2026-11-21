@@ -32,6 +32,15 @@ import java.util.Set;
 @UtilityClass
 class PackFontParser {
 
+    /** Tallest bitmap glyph, in GUI px. Full-screen glyph art runs to a few hundred. */
+    static final int MAX_BITMAP_HEIGHT = 2_048;
+    /** Largest TTF {@code size}. */
+    static final float MAX_TTF_SIZE = 256.0f;
+    /** Largest TTF {@code oversample}. */
+    static final float MAX_TTF_OVERSAMPLE = 16.0f;
+    /** Largest TTF raster size in device pixels ({@code size * oversample}). */
+    static final float MAX_TTF_PPEM = 512.0f;
+
     private static final String OWNER = "Font provider";
     private static final int DEFAULT_BITMAP_HEIGHT = 8;
     private static final float DEFAULT_TTF_SIZE = 11.0f;
@@ -72,6 +81,14 @@ class PackFontParser {
         String file = requireString(provider, "file");
         int height = provider.has("height") ? requireInt(provider, "height") : DEFAULT_BITMAP_HEIGHT;
         int ascent = requireInt(provider, "ascent");
+        if (height < 1 || height > MAX_BITMAP_HEIGHT) {
+            throw new PackLoadException("Bitmap font height must be between 1 and %s, got %s",
+                String.valueOf(MAX_BITMAP_HEIGHT), String.valueOf(height));
+        }
+        if (ascent < -MAX_BITMAP_HEIGHT) {
+            throw new PackLoadException("Bitmap font ascent must be at least %s, got %s",
+                String.valueOf(-MAX_BITMAP_HEIGHT), String.valueOf(ascent));
+        }
         if (ascent > height) {
             throw new PackLoadException("Bitmap font ascent %s exceeds height %s",
                 String.valueOf(ascent), String.valueOf(height));
@@ -131,6 +148,20 @@ class PackFontParser {
         String file = requireString(provider, "file");
         float size = provider.has("size") ? requireFloat(provider, "size") : DEFAULT_TTF_SIZE;
         float oversample = provider.has("oversample") ? requireFloat(provider, "oversample") : DEFAULT_TTF_OVERSAMPLE;
+        // Glyph cells are size * oversample device pixels on a side, snapped to oversample multiples,
+        // so both values bound the memory one glyph can take.
+        if (!(size > 0.0f) || size > MAX_TTF_SIZE) {
+            throw new PackLoadException("TTF font size must be above 0 and at most %s, got %s",
+                String.valueOf(MAX_TTF_SIZE), String.valueOf(size));
+        }
+        if (!(oversample >= 1.0f) || oversample > MAX_TTF_OVERSAMPLE) {
+            throw new PackLoadException("TTF font oversample must be between 1 and %s, got %s",
+                String.valueOf(MAX_TTF_OVERSAMPLE), String.valueOf(oversample));
+        }
+        if (size * oversample > MAX_TTF_PPEM) {
+            throw new PackLoadException("TTF font size times oversample must be at most %s, got %s",
+                String.valueOf(MAX_TTF_PPEM), String.valueOf(size * oversample));
+        }
         float shiftX = 0.0f;
         float shiftY = 0.0f;
         if (provider.has("shift")) {

@@ -18,6 +18,9 @@ import java.awt.image.BufferedImage;
 @UtilityClass
 public class GuiSpriteRenderer {
 
+    /** Most pixels a sprite may be stretched to when its texture differs from its declared nominal size. */
+    static final long MAX_NORMALIZED_PIXELS = 4L * 1024 * 1024;
+
     /**
      * Vanilla has no tiling bound (the GPU eats the quads); this cap keeps hostile tiny tile
      * sizes from turning one render into millions of pixel copies.
@@ -159,6 +162,13 @@ public class GuiSpriteRenderer {
     private static BufferedImage normalize(BufferedImage texture, int nominalWidth, int nominalHeight) {
         if (texture.getWidth() == nominalWidth && texture.getHeight() == nominalHeight) {
             return texture;
+        }
+        // The nominal size comes from the pack's .mcmeta, independent of the texture's real size, so
+        // without this bound a 1x1 texture can demand a multi-gigabyte normalized copy.
+        if ((long) nominalWidth * nominalHeight > MAX_NORMALIZED_PIXELS) {
+            throw new IllegalArgumentException("gui scaling size " + nominalWidth + "x" + nominalHeight
+                + " is too large for a " + texture.getWidth() + "x" + texture.getHeight() + " texture (limit "
+                + MAX_NORMALIZED_PIXELS + " pixels)");
         }
         BufferedImage normalized = new BufferedImage(nominalWidth, nominalHeight, BufferedImage.TYPE_INT_ARGB);
         stretchRegion(normalized, 0, 0, nominalWidth, nominalHeight,
