@@ -1,5 +1,6 @@
 package net.aerh.imagegenerator.effect.impl;
 
+import net.aerh.imagegenerator.image.RenderLimits;
 import net.aerh.imagegenerator.effect.EffectContext;
 import net.aerh.imagegenerator.effect.EffectResult;
 import net.aerh.imagegenerator.effect.ImageEffect;
@@ -52,6 +53,7 @@ public class GlintImageEffect implements ImageEffect {
         int frameCount = (int) Math.ceil((double) TOTAL_DURATION_MS / FRAME_DELAY_MS);
         int width = baseImage.getWidth();
         int height = baseImage.getHeight();
+        RenderLimits.checkFrames(width, height, frameCount);
         int[] basePixels = baseImage.getRGB(0, 0, width, height, null, 0, width);
 
         double spriteSpanU = BASE_SPRITE_PIXELS / glintTexture.getWidth();

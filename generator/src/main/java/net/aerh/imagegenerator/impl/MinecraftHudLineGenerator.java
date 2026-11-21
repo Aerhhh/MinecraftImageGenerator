@@ -1,5 +1,6 @@
 package net.aerh.imagegenerator.impl;
 
+import net.aerh.imagegenerator.image.RenderLimits;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.ToString;
@@ -125,6 +126,7 @@ public class MinecraftHudLineGenerator implements Generator {
             canvasHeightGuiPx = Math.max(canvasHeightGuiPx, lineTopGuiPx(lineIndex) + artBottomGuiPx);
         }
 
+        RenderLimits.checkCanvas((long) guiWidth * pixelSize, (long) canvasHeightGuiPx * pixelSize);
         BufferedImage canvas = new BufferedImage(canvasWidth, canvasHeightGuiPx * pixelSize,
             BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = canvas.createGraphics();

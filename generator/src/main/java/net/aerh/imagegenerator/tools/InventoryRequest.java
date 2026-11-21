@@ -1,5 +1,6 @@
 package net.aerh.imagegenerator.tools;
 
+import net.aerh.imagegenerator.impl.MinecraftInventoryGenerator;
 import net.aerh.imagegenerator.exception.GeneratorValidationException;
 import net.aerh.imagegenerator.impl.tooltip.MinecraftTooltipGenerator;
 import net.aerh.imagegenerator.pack.PackId;
@@ -28,6 +29,10 @@ public record InventoryRequest(int rows, int slotsPerRow, String inventoryString
         }
         if (slotsPerRow <= 0) {
             throw new GeneratorValidationException("slotsPerRow must be positive");
+        }
+        if (rows > MinecraftInventoryGenerator.MAX_SLOTS_PER_AXIS || slotsPerRow > MinecraftInventoryGenerator.MAX_SLOTS_PER_AXIS) {
+            throw new GeneratorValidationException("rows and slotsPerRow must be at most %s",
+                String.valueOf(MinecraftInventoryGenerator.MAX_SLOTS_PER_AXIS));
         }
         hoveredItemString = Strings.blankToNull(hoveredItemString);
         containerName = Strings.blankToNull(containerName);
