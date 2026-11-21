@@ -112,10 +112,11 @@ public class GlintImageEffect implements ImageEffect {
                 double scaledV = rotatedV * uvScale;
 
                 sampleGlint(scaledU, scaledV, textureWidth, textureHeight, sampled);
-                float glintAlpha = sampled[3] * GLINT_INTENSITY;
-                if (glintAlpha <= 0.0f) {
+                float sampledAlpha = sampled[3];
+                if (sampledAlpha <= 0.0f) {
                     continue;
                 }
+                float glintAlpha = sampledAlpha * GLINT_INTENSITY;
 
                 float baseR = ((argb >> 16) & 0xFF) / 255f;
                 float baseG = ((argb >> 8) & 0xFF) / 255f;
