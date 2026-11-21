@@ -1,5 +1,6 @@
 package net.aerh.imagegenerator.impl;
 
+import net.aerh.imagegenerator.image.RenderCancellation;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import lombok.AccessLevel;
@@ -318,6 +319,7 @@ public class MinecraftContainerGenerator implements Generator {
             : null;
         List<BufferedImage> frames = new ArrayList<>(timeline.steps().size());
         for (AnimationTimeline.Step step : timeline.steps()) {
+            RenderCancellation.check();
             BufferedImage canvas = new BufferedImage(layout.canvasWidth(), layout.canvasHeight(), BufferedImage.TYPE_INT_ARGB);
             Graphics2D graphics = canvas.createGraphics();
             try {
@@ -393,6 +395,7 @@ public class MinecraftContainerGenerator implements Generator {
         Map<ElementsRasterKey, Optional<PackAnimatedVisual>> animationCache = new HashMap<>();
         Map<ItemVisualKey, GeneratedObject> generatedCache = new HashMap<>();
         for (InventoryItem item : items) {
+            RenderCancellation.check();
             if (item.getItemName().equalsIgnoreCase("null")) {
                 continue;
             }
@@ -670,6 +673,7 @@ public class MinecraftContainerGenerator implements Generator {
         }
         List<InventoryItem> items = new InventoryStringParser(rows * COLUMNS).parse(buildInventoryString());
         for (InventoryItem item : items) {
+            RenderCancellation.check();
             if (item.getItemName().equalsIgnoreCase("null")) {
                 continue;
             }

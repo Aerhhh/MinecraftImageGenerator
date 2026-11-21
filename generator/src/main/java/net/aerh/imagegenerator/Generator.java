@@ -1,5 +1,6 @@
 package net.aerh.imagegenerator;
 
+import net.aerh.imagegenerator.image.RenderCancellation;
 import net.aerh.imagegenerator.cache.GeneratorCache;
 import net.aerh.imagegenerator.context.GenerationContext;
 import net.aerh.imagegenerator.cache.GeneratorCacheKey;
@@ -39,6 +40,9 @@ public interface Generator {
             }
 
             GeneratedObject generatedObject = render(generationContext);
+            // A render whose caller already timed out must not be cached: nobody is waiting for it,
+            // and it may have been cut short.
+            RenderCancellation.check();
             GeneratorCache.putGeneratedObject(cacheKey, generatedObject);
             return generatedObject;
         }

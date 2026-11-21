@@ -1,5 +1,6 @@
 package net.aerh.imagegenerator.effect.impl;
 
+import net.aerh.imagegenerator.image.RenderCancellation;
 import net.aerh.imagegenerator.effect.EffectContext;
 import net.aerh.imagegenerator.effect.EffectResult;
 import net.aerh.imagegenerator.effect.ImageEffect;
@@ -62,6 +63,7 @@ public class GlintImageEffect implements ImageEffect {
         List<BufferedImage> frames = new ArrayList<>(frameCount);
 
         for (int frameIndex = 0; frameIndex < frameCount; frameIndex++) {
+            RenderCancellation.check();
             double timeMs = frameIndex * FRAME_DELAY_MS;
             int[] framePixels = Arrays.copyOf(basePixels, basePixels.length);
 

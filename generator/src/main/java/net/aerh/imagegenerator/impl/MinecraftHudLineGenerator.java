@@ -1,5 +1,6 @@
 package net.aerh.imagegenerator.impl;
 
+import net.aerh.imagegenerator.image.RenderCancellation;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.ToString;
@@ -114,6 +115,7 @@ public class MinecraftHudLineGenerator implements Generator {
         int[] lineOriginsX = new int[lines.size()];
         int canvasHeightGuiPx = 0;
         for (int lineIndex = 0; lineIndex < lines.size(); lineIndex++) {
+            RenderCancellation.check();
             MinecraftTooltip.LineExtents extents = lineStack.measureLineExtents(lineIndex);
             // Extent-aware line width (the maximum rightward art extent, not the cursor end),
             // ceiled to whole GUI px like the client's text measurement. Centering uses

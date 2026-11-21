@@ -1,5 +1,6 @@
 package net.aerh.imagegenerator.util;
 
+import net.aerh.imagegenerator.image.RenderCancellation;
 import lombok.experimental.UtilityClass;
 import net.hypixel.nerdbot.marmalade.image.ImageUtil;
 
@@ -60,6 +61,7 @@ public class AnimatedGifEncoder {
             writer.setOutput(imageOutput);
             writer.prepareWriteSequence(null);
             for (int index = 0; index < frames.size(); index++) {
+                RenderCancellation.check();
                 IIOMetadata metadata = frameMetadata(writer, writeParam, delaysMs.get(index), index == 0);
                 writer.writeToSequence(new IIOImage(toGifCompatibleFrame(frames.get(index)), null, metadata), writeParam);
             }
