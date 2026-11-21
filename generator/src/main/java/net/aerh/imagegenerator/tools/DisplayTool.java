@@ -27,6 +27,11 @@ public final class DisplayTool {
      * @throws GeneratorException if the request names both or neither item address, or the render fails
      */
     public GeneratedObject render(DisplayRequest request, @Nullable GenerationContext context) throws IOException {
+        // Parsing the request runs under the render timeout too, not just the drawing.
+        return GeneratorImageBuilder.withinTimeout(() -> renderWithinTimeout(request, context));
+    }
+
+    private GeneratedObject renderWithinTimeout(DisplayRequest request, @Nullable GenerationContext context) throws IOException {
         ItemAddressing.requireSingleItemAddress(request.itemId(), request.itemModel());
         ItemAddressing.requireAnItemAddress(request.itemId(), request.itemModel());
 

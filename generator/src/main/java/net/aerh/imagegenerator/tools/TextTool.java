@@ -26,6 +26,11 @@ public final class TextTool {
      * @throws GeneratorException if the request is invalid or the render fails
      */
     public GeneratedObject render(TextRequest request, @Nullable GenerationContext context) throws IOException {
+        // Parsing the request runs under the render timeout too, not just the drawing.
+        return GeneratorImageBuilder.withinTimeout(() -> renderWithinTimeout(request, context));
+    }
+
+    private GeneratedObject renderWithinTimeout(TextRequest request, @Nullable GenerationContext context) throws IOException {
         MinecraftTooltipGenerator.Builder tooltipBuilder = new MinecraftTooltipGenerator.Builder()
             .withItemLore(TextWrapper.stripActualNewlines(request.text()))
             .withAlpha(request.alpha())

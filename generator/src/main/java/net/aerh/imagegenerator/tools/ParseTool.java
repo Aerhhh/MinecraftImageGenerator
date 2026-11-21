@@ -7,6 +7,7 @@ import net.aerh.imagegenerator.builder.ClassBuilder;
 import net.aerh.imagegenerator.context.GenerationContext;
 import net.aerh.imagegenerator.exception.GeneratorException;
 import net.aerh.imagegenerator.exception.NbtParseException;
+import net.aerh.imagegenerator.image.GeneratorImageBuilder;
 import net.aerh.imagegenerator.impl.MinecraftNbtParser;
 import net.aerh.imagegenerator.impl.tooltip.MinecraftTooltipGenerator;
 import net.aerh.imagegenerator.tools.nbt.ParsedNbtRendering;
@@ -37,6 +38,11 @@ public final class ParseTool {
      * @throws GeneratorException if the render fails, or the parse produced no tooltip
      */
     public ParseResult render(ParseRequest request, @Nullable GenerationContext context) throws IOException {
+        // Parsing the request runs under the render timeout too, not just the drawing.
+        return GeneratorImageBuilder.withinTimeout(() -> renderWithinTimeout(request, context));
+    }
+
+    private ParseResult renderWithinTimeout(ParseRequest request, @Nullable GenerationContext context) throws IOException {
         ParsedRender render;
         try {
             render = ParsedNbtRendering.renderWithFallback(packService, request.nbt(), request.packId(), context);

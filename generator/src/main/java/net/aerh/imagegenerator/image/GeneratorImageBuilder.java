@@ -16,6 +16,7 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -102,6 +103,58 @@ public class GeneratorImageBuilder {
      * @throws GeneratorException if the generation fails or times out.
      */
     public GeneratedObject build() {
+        try {
+            return runTimed(this::buildInternal);
+        } catch (ExecutionException exception) {
+            throw new GeneratorException(exception.getCause().getMessage(), exception);
+        }
+    }
+
+    /** Work that {@link #withinTimeout(TimedWork)} runs under the render timeout. */
+    @FunctionalInterface
+    public interface TimedWork<T> {
+        T run() throws IOException;
+    }
+
+    /**
+     * Runs a whole request under one render timeout and one render slot: the parsing that turns
+     * request text into generators as well as the {@link #build()} that draws them. On its own,
+     * {@link #build()} only times the drawing, leaving the parsing before it unbounded.
+     * <p>
+     * A {@link #build()} called by the work shares this call's slot, and is cancelled with it when
+     * the timeout passes. Called from inside a render, the work simply runs in place, since the
+     * render it belongs to is already timed. Exceptions thrown by the work reach the caller unchanged.
+     *
+     * @throws GeneratorTimeoutException if the work times out, or no render slot frees up in time
+     * @throws IOException               if the work throws one
+     */
+    public static <T> T withinTimeout(TimedWork<T> work) throws IOException {
+        if (INSIDE_RENDER.get()) {
+            return work.run();
+        }
+        try {
+            return runTimed(work::run);
+        } catch (ExecutionException exception) {
+            Throwable cause = exception.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            if (cause instanceof IOException ioException) {
+                throw ioException;
+            }
+            if (cause instanceof Error error) {
+                throw error;
+            }
+            throw new GeneratorException(cause.getMessage(), exception);
+        }
+    }
+
+    /**
+     * Runs the work on a render task, waiting at most the render timeout for a slot and the result.
+     *
+     * @throws ExecutionException if the work itself throws
+     */
+    private static <T> T runTimed(Callable<T> work) throws ExecutionException {
         long timeoutMs = Long.getLong(TIMEOUT_PROPERTY, DEFAULT_TIMEOUT_MS);
         long deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs);
 
@@ -112,12 +165,12 @@ public class GeneratorImageBuilder {
             acquireRenderSlot(timeoutMs);
         }
 
-        Future<GeneratedObject> future;
+        Future<T> future;
         try {
             future = executorService.submit(() -> {
                 INSIDE_RENDER.set(true);
                 try {
-                    return buildInternal();
+                    return work.call();
                 } finally {
                     // Released by the task, not the waiting caller, so a render that is still
                     // winding down after a timeout keeps counting against the limit.
@@ -143,8 +196,6 @@ public class GeneratorImageBuilder {
             future.cancel(true);
             Thread.currentThread().interrupt();
             throw new GeneratorException("Image generation was interrupted", exception);
-        } catch (ExecutionException exception) {
-            throw new GeneratorException(exception.getCause().getMessage(), exception);
         }
     }
 

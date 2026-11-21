@@ -28,6 +28,11 @@ public final class DialogueTool {
      * @throws GeneratorException if the dialogue is malformed or the render fails
      */
     public GeneratedObject render(DialogueRequest request, @Nullable GenerationContext context) throws IOException {
+        // Parsing the request runs under the render timeout too, not just the drawing.
+        return GeneratorImageBuilder.withinTimeout(() -> renderWithinTimeout(request, context));
+    }
+
+    private GeneratedObject renderWithinTimeout(DialogueRequest request, @Nullable GenerationContext context) throws IOException {
         String lore = request.mode() == DialogueRequest.Mode.SINGLE
             ? DialogueText.buildSingle(request.npcNames(), request.dialogue(), request.abiphone())
             : DialogueText.buildMulti(request.npcNames(), request.dialogue(), request.abiphone());

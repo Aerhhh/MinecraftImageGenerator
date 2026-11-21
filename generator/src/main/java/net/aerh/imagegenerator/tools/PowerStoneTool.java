@@ -30,6 +30,11 @@ public final class PowerStoneTool {
      * @throws GeneratorException if a stat is unknown or malformed, or the render fails
      */
     public GeneratedObject render(PowerStoneRequest request, @Nullable GenerationContext context) throws IOException {
+        // Parsing the request runs under the render timeout too, not just the drawing.
+        return GeneratorImageBuilder.withinTimeout(() -> renderWithinTimeout(request, context));
+    }
+
+    private GeneratedObject renderWithinTimeout(PowerStoneRequest request, @Nullable GenerationContext context) throws IOException {
         GeneratorImageBuilder generatorImageBuilder = new GeneratorImageBuilder().withContext(context);
         MinecraftTooltipGenerator.Builder tooltipGenerator = tooltipBuilder(request);
 

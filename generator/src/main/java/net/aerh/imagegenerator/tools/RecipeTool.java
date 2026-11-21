@@ -25,6 +25,11 @@ public final class RecipeTool {
      * @throws GeneratorException if the recipe string is invalid or the render fails
      */
     public GeneratedObject render(RecipeRequest request, @Nullable GenerationContext context) throws IOException {
+        // Parsing the request runs under the render timeout too, not just the drawing.
+        return GeneratorImageBuilder.withinTimeout(() -> renderWithinTimeout(request, context));
+    }
+
+    private GeneratedObject renderWithinTimeout(RecipeRequest request, @Nullable GenerationContext context) throws IOException {
         return new GeneratorImageBuilder().withContext(context)
             .addGenerator(PackTheming.applyInventoryPack(packService, new MinecraftInventoryGenerator.Builder(), request.packId())
                 .withRows(3)
