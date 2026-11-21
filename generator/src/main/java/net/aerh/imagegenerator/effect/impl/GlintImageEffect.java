@@ -94,15 +94,16 @@ public class GlintImageEffect implements ImageEffect {
 
         for (int y = 0; y < height; y++) {
             double baseV = (double) y / height * spriteSpanV;
-            for (int x = 0; x < width; x++) {
-                int index = y * width + x;
+            int preIndex = y * width;
+            int preMax = preIndex + width;
+            for (int index = preIndex; index < preMax; index++) {
                 int argb = pixels[index];
                 int alpha = (argb >>> 24);
                 if (alpha == 0) {
                     continue;
                 }
 
-                double baseU = (double) x / width * spriteSpanU;
+                double baseU = (double) (index - preIndex) / width * spriteSpanU;
 
                 double rotatedU = baseU * cos - baseV * sin;
                 double rotatedV = baseU * sin + baseV * cos;
