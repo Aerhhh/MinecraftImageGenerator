@@ -65,6 +65,14 @@ public class GlintImageEffect implements ImageEffect {
         double spriteSpanV = BASE_SPRITE_PIXELS / glintTextureHeight;
         double resolutionScale = Math.max(Math.max(width, height) / BASE_SPRITE_PIXELS, 1.0);
         double uvScale = UV_SCALE / resolutionScale;
+        double[] baseU = new double[width];
+        double[] baseV = new double[height];
+        for (int x = 0; x < width; x++) {
+            baseU[x] = (double) x / width * spriteSpanU;
+        }
+        for (int y = 0; y < height; y++) {
+            baseV[y] = (double) y / height * spriteSpanV;
+        }
 
         List<BufferedImage> frames = new ArrayList<>(frameCount);
 
@@ -73,8 +81,8 @@ public class GlintImageEffect implements ImageEffect {
             double timeMs = frameIndex * FRAME_DELAY_MS;
             int[] framePixels = Arrays.copyOf(basePixels, basePixels.length);
 
-            applyGlintPass(framePixels, width, height, timeMs, PRIMARY_PERIOD_MS, PRIMARY_ROTATION_DEG, 1.0, spriteSpanU, spriteSpanV, uvScale);
-            applyGlintPass(framePixels, width, height, timeMs, SECONDARY_PERIOD_MS, SECONDARY_ROTATION_DEG, -1.0, spriteSpanU, spriteSpanV, uvScale);
+            applyGlintPass(framePixels, width, height, timeMs, PRIMARY_PERIOD_MS, PRIMARY_ROTATION_DEG, 1.0, baseU, baseV, uvScale);
+            applyGlintPass(framePixels, width, height, timeMs, SECONDARY_PERIOD_MS, SECONDARY_ROTATION_DEG, -1.0, baseU, baseV, uvScale);
 
             BufferedImage frame = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
             frame.setRGB(0, 0, width, height, framePixels, 0, width);
@@ -95,7 +103,7 @@ public class GlintImageEffect implements ImageEffect {
         float[] sampled = new float[4];
 
         for (int y = 0; y < height; y++) {
-            double baseV = (double) y / height * spriteSpanV;
+            double yBaseV = baseV[y];
             int preIndex = y * width;
             int preMax = preIndex + width;
             for (int index = preIndex; index < preMax; index++) {
@@ -105,10 +113,10 @@ public class GlintImageEffect implements ImageEffect {
                     continue;
                 }
 
-                double baseU = (double) (index - preIndex) / width * spriteSpanU;
+                double xBaseU = baseU[index - preIndex];
 
-                double rotatedU = baseU * cos - baseV * sin;
-                double rotatedV = baseU * sin + baseV * cos;
+                double rotatedU = xBaseU * cos - yBaseV * sin;
+                double rotatedV = xBaseU * sin + yBaseV * cos;
 
                 double translatedU = rotatedU + direction * adjustedOffset * inverseScale;
                 double scaledU = translatedU * uvScale;
