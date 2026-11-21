@@ -357,7 +357,7 @@ public class MinecraftInventoryGenerator implements Generator {
                 int frameDelay = determineFrameDelay(items);
 
                 try {
-                    byte[] gifData = ImageUtil.toGifBytes(frames, frameDelay, true);
+                    byte[] gifData = AnimatedGifEncoder.encode(frames, frameDelay);
                     this.inventoryImage = frames.getFirst();
 
                     if (this.g2d != null) {

@@ -4,7 +4,6 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import net.hypixel.nerdbot.marmalade.image.ImageUtil;
 import net.aerh.imagegenerator.context.GenerationContext;
 import net.aerh.imagegenerator.Generator;
 import net.aerh.imagegenerator.builder.ClassBuilder;
@@ -115,10 +114,9 @@ public class MinecraftItemGenerator implements Generator {
 
         if (context.isAnimated()) {
             try {
-                byte[] gifData = ImageUtil.toGifBytes(
+                byte[] gifData = AnimatedGifEncoder.encode(
                     context.getAnimationFrames(),
-                    context.getFrameDelayMs(),
-                    true
+                    context.getFrameDelayMs()
                 );
                 log.debug("Rendered animated item '{}' ({} frames, delay {}ms)",
                     displayId(), context.getAnimationFrames().size(), context.getFrameDelayMs());

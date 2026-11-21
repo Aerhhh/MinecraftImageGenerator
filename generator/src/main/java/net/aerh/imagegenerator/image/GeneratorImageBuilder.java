@@ -8,7 +8,9 @@ import net.aerh.imagegenerator.exception.GeneratorException;
 import net.aerh.imagegenerator.exception.GeneratorTimeoutException;
 import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.pack.AnimationTimeline;
+import net.aerh.imagegenerator.spritesheet.Spritesheet;
 import net.aerh.imagegenerator.util.AnimatedGifEncoder;
+import net.aerh.imagegenerator.util.MinecraftFonts;
 import org.jetbrains.annotations.Nullable;
 
 import java.awt.*;
@@ -38,7 +40,11 @@ public class GeneratorImageBuilder {
 
     private static final long DEFAULT_TIMEOUT_MS = 20_000L;
 
-    private static final ExecutorService executorService = Executors.newVirtualThreadPerTaskExecutor();
+    // Platform threads, not virtual ones. Rendering is CPU-bound and virtual threads are not
+    // time-sliced: with every carrier busy in a render, the parked task that has to pass a
+    // cancellation on to its nested build never gets to run, so timed-out renders kept going.
+    private static final ExecutorService executorService = Executors.newThreadPerTaskExecutor(
+        Thread.ofPlatform().daemon(true).name("image-render-", 0).factory());
     private static final Semaphore RENDER_SLOTS = new Semaphore(maxConcurrentRenders(), true);
     private static final ThreadLocal<Boolean> INSIDE_RENDER = ThreadLocal.withInitial(() -> false);
     private final List<Generator> generators;
@@ -150,6 +156,18 @@ public class GeneratorImageBuilder {
     }
 
     /**
+     * Loads what the first render would otherwise load inside its own timeout: the fonts, the
+     * tooltip character widths and the vanilla texture atlas. That loading takes seconds and
+     * cannot be cancelled, so a first request that times out during it keeps its render slot until
+     * the loading ends. A service should call this once at startup.
+     */
+    public static void warmUp() {
+        MinecraftFonts.getAllFonts();
+        MinecraftTooltip.warmUp();
+        Spritesheet.getImageMap();
+    }
+
+    /**
      * Runs the work on a render task, waiting at most the render timeout for a slot and the result.
      *
      * @throws ExecutionException if the work itself throws
@@ -165,13 +183,19 @@ public class GeneratorImageBuilder {
             acquireRenderSlot(timeoutMs);
         }
 
+        // A nested build joins its parent's reservations, so they are all released together when
+        // the outermost render ends.
+        RenderBudget.Scope parentScope = RenderBudget.current();
+
         Future<T> future;
         try {
             future = executorService.submit(() -> {
                 INSIDE_RENDER.set(true);
+                RenderBudget.Scope scope = RenderBudget.enter(parentScope);
                 try {
                     return work.call();
                 } finally {
+                    RenderBudget.exit(scope);
                     // Released by the task, not the waiting caller, so a render that is still
                     // winding down after a timeout keeps counting against the limit.
                     if (!nested) {
@@ -396,7 +420,7 @@ public class GeneratorImageBuilder {
             compositeFrames.add(compositeFrame);
         }
 
-        byte[] gifData = ImageUtil.toGifBytes(compositeFrames, frameDelayMs, true);
+        byte[] gifData = AnimatedGifEncoder.encode(compositeFrames, frameDelayMs);
 
         return new GeneratedObject(gifData, compositeFrames, frameDelayMs);
     }

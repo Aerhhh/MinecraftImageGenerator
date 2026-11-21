@@ -8,6 +8,9 @@ import net.aerh.imagegenerator.exception.GeneratorValidationException;
  * so an unchecked size turns a short input into gigabytes of heap. Checking the size up front fails
  * the one request with a {@link GeneratorValidationException} instead of exhausting the JVM.
  *
+ * <p>A size that passes is also reserved against {@link RenderBudget}, the budget shared by all
+ * renders running at once.</p>
+ *
  * <p>Both limits are read from system properties on each check, so a host can raise or lower them:</p>
  * <ul>
  *     <li>{@value #MAX_CANVAS_PIXELS_PROPERTY} - pixels in one canvas (default
@@ -76,6 +79,9 @@ public final class RenderLimits {
                 "Animation is too large to render: %s frames of %sx%s is over the limit of %s pixels in total",
                 String.valueOf(frames), String.valueOf(width), String.valueOf(height), String.valueOf(maxAnimation));
         }
+        // Every caller allocates right after this check, so this is also where the render takes its
+        // share of the budget all running renders have between them.
+        RenderBudget.reserve(area * frames);
     }
 
     private static long positiveProperty(String property, long fallback) {
