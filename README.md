@@ -573,6 +573,19 @@ GeneratedObject image = new MinecraftTooltipGenerator.Builder()
 - **Caching** of rendered objects via Caffeine
 - **Alternate fonts** including Galactic (Standard Galactic Alphabet) and Illageralt
 
+## Render limits
+
+Text and options usually reach the generators from untrusted users, so every renderer checks a shared pixel budget (`RenderLimits`) before it allocates a canvas. A render over budget fails with a `GeneratorValidationException` instead of exhausting the heap. Both limits are system properties:
+
+| Property | Default | Limits |
+|---|---|---|
+| `generator.render.maxCanvasPixels` | 25,000,000 | Pixels in one canvas (about 100 MB of ARGB) |
+| `generator.render.maxAnimationPixels` | 400,000,000 | Pixels summed over every frame of one animation |
+
+The animation default leaves room for the largest stock render, a full chest with the 182-frame enchant glint (about 256 million pixels, roughly 1 GB while it renders). Lower it on a host with a small heap.
+
+Individual inputs are bounded as well: icon placeholder repeat counts (`%%dot:N%%`) clamp to 100, tooltip padding clamps to 255, inventories take at most 64 rows and 64 slots per row, scene `scale` is at most 16, scene margins, spacing and offsets at most 4096, and one content template fill produces at most 1,000,000 characters of output.
+
 ## Requirements
 
 - Java 25

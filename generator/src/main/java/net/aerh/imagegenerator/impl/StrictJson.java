@@ -31,6 +31,11 @@ import java.util.Set;
 @Slf4j
 public final class StrictJson {
 
+    /** The longest number literal accepted, in characters. */
+    private static final int MAX_NUMBER_LENGTH = 64;
+    /** The largest decimal exponent, in either direction, a number literal may carry. */
+    private static final int MAX_NUMBER_SCALE = 400;
+
     private StrictJson() {
     }
 
@@ -107,7 +112,7 @@ public final class StrictJson {
                 return new JsonPrimitive(reader.nextString());
             }
             case NUMBER -> {
-                return new JsonPrimitive(new BigDecimal(reader.nextString()));
+                return new JsonPrimitive(readNumber(reader.nextString(), what));
             }
             case BOOLEAN -> {
                 return new JsonPrimitive(reader.nextBoolean());
@@ -157,6 +162,28 @@ public final class StrictJson {
      *
      * @throws IllegalArgumentException naming the key when the value is absent or not an integer
      */
+    /**
+     * Parses one number literal, rejecting the ones whose plain form would be enormous. A literal like
+     * {@code 1e900000000} is a dozen bytes of input, but printing or rescaling it materialises hundreds
+     * of megabytes of digits, so both its length and its exponent are bounded here.
+     */
+    private static BigDecimal readNumber(String literal, String what) {
+        if (literal.length() > MAX_NUMBER_LENGTH) {
+            throw new IllegalArgumentException("Number in " + what + " JSON is too long (over "
+                + MAX_NUMBER_LENGTH + " characters)");
+        }
+        BigDecimal value;
+        try {
+            value = new BigDecimal(literal);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Malformed number in " + what + " JSON: " + literal);
+        }
+        if (Math.abs((long) value.scale()) > MAX_NUMBER_SCALE) {
+            throw new IllegalArgumentException("Number in " + what + " JSON is out of range: " + literal);
+        }
+        return value;
+    }
+
     public static int requireInt(JsonObject object, String key) {
         JsonElement element = object.get(key);
         if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isNumber()) {
