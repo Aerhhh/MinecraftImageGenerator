@@ -21,6 +21,29 @@
             <!-- Pinned to a commit rather than the moving master snapshot, so a build always gets the
                  same code. Renovate proposes each bump (renovate.json). -->
             <version>eef81aa0ff</version>
+            <!-- Marmalade's database, classpath-scanning and commons-lang code is never reached from
+                 here, so its libraries are left out of every consumer's classpath. -->
+            <exclusions>
+                <exclusion>
+                    <groupId>org.mongodb</groupId>
+                    <artifactId>mongodb-driver-sync</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.reflections</groupId>
+                    <artifactId>reflections</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.commons</groupId>
+                    <artifactId>commons-lang3</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- Reached only through the text library, which asks for an older release with known
+             vulnerabilities. Declared here so consumers resolve the managed version too. -->
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-api</artifactId>
+            <scope>runtime</scope>
         </dependency>
         <dependency>
             <groupId>com.github.minecraft-library</groupId>
