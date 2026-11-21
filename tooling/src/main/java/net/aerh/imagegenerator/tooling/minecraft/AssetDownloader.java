@@ -15,7 +15,11 @@ import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Enumeration;
+import java.util.HexFormat;
+import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -35,6 +39,9 @@ public class AssetDownloader {
     private final boolean keepJar;
     private final boolean clean;
     private String resolvedVersion;
+    private String clientJarSha1;
+
+    private static final Pattern SAFE_VERSION = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]{0,63}");
 
     /**
      * Creates a new AssetDownloader for downloading and extracting Minecraft assets.
@@ -76,11 +83,17 @@ public class AssetDownloader {
         this.resolvedVersion = resolveVersion();
         System.out.println("Downloading Minecraft " + resolvedVersion + " assets...");
 
+        // The version becomes part of the cached JAR's file name, so it must not carry path syntax
+        if (!SAFE_VERSION.matcher(resolvedVersion).matches()) {
+            throw new IllegalArgumentException("Not a valid Minecraft version: " + resolvedVersion);
+        }
+
         String clientJarUrl = getClientJarUrl(resolvedVersion);
         ToolingSupport.printDebug("Client JAR URL: " + clientJarUrl);
 
         Path jarPath = downloadClientJar(clientJarUrl, resolvedVersion);
         System.out.println("Downloaded client JAR: " + jarPath);
+        verifySha1(jarPath, clientJarSha1);
 
         String mappingsUrl = getMappingsUrl(resolvedVersion);
         if (mappingsUrl != null) {
@@ -105,6 +118,35 @@ public class AssetDownloader {
         }
 
         return count;
+    }
+
+    /**
+     * Checks a client JAR, freshly downloaded or cached, against the SHA-1 Mojang publishes for it. Later
+     * steps read class files and assets out of this JAR, so a corrupt or substituted one must not get that
+     * far. A JAR that fails is deleted so the next run downloads it again.
+     */
+    static void verifySha1(Path file, String expectedSha1) throws IOException {
+        MessageDigest digest;
+        try {
+            digest = MessageDigest.getInstance("SHA-1");
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-1 is not available", e);
+        }
+
+        try (InputStream in = Files.newInputStream(file)) {
+            byte[] buffer = new byte[8_192];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                digest.update(buffer, 0, read);
+            }
+        }
+
+        String actualSha1 = HexFormat.of().formatHex(digest.digest());
+        if (!actualSha1.equalsIgnoreCase(expectedSha1)) {
+            Files.deleteIfExists(file);
+            throw new IOException("Client JAR " + file.getFileName() + " failed its checksum (expected SHA-1 "
+                + expectedSha1 + ", got " + actualSha1 + "); it was deleted, run again to download a fresh copy");
+        }
     }
 
     /**
@@ -142,6 +184,11 @@ public class AssetDownloader {
 
                 JsonObject versionMeta = HttpClient.getJson(versionUrl).orElseThrow();
                 JsonObject client = versionMeta.getAsJsonObject("downloads").getAsJsonObject("client");
+
+                if (!client.has("sha1")) {
+                    throw new IOException("Version metadata for " + targetVersion + " lists no SHA-1 for the client JAR");
+                }
+                this.clientJarSha1 = client.get("sha1").getAsString();
 
                 return client.get("url").getAsString();
             }
@@ -282,6 +329,7 @@ public class AssetDownloader {
      */
     private int extractAssets(Path jarPath) throws IOException {
         int count = 0;
+        Path outputRoot = outputPath.normalize();
 
         try (ZipFile zip = new ZipFile(jarPath.toFile())) {
             Enumeration<? extends ZipEntry> entries = zip.entries();
@@ -299,7 +347,12 @@ public class AssetDownloader {
                 }
 
                 String relativeName = entryName.substring(ASSETS_PREFIX.length());
-                Path outputFile = outputPath.resolve(relativeName);
+                Path outputFile = outputPath.resolve(relativeName).normalize();
+
+                // An entry name with ".." in it must not write outside the output directory
+                if (!outputFile.startsWith(outputRoot)) {
+                    throw new IOException("Client JAR entry escapes the output directory: " + entryName);
+                }
 
                 Files.createDirectories(outputFile.getParent());
 
