@@ -97,7 +97,7 @@ public class GlintImageEffect implements ImageEffect {
             for (int x = 0; x < width; x++) {
                 int index = y * width + x;
                 int argb = pixels[index];
-                int alpha = (argb >>> 24) & 0xFF;
+                int alpha = (argb >>> 24);
                 if (alpha == 0) {
                     continue;
                 }
