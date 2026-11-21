@@ -20,7 +20,9 @@ import java.util.List;
  */
 public class GlintImageEffect implements ImageEffect {
 
-    private final BufferedImage glintTexture;
+    private final int[] glintPixels;
+    private final int glintTextureWidth;
+    private final int glintTextureHeight;
 
     private static final int FRAME_DELAY_MS = 33; // ~30 FPS
     private static final int TOTAL_DURATION_MS = 6000;
@@ -44,7 +46,9 @@ public class GlintImageEffect implements ImageEffect {
             throw new IllegalArgumentException("Glint texture cannot be null");
         }
 
-        this.glintTexture = glintTexture;
+        this.glintTextureWidth = glintTexture.getWidth();
+        this.glintTextureHeight = glintTexture.getHeight();
+        this.glintPixels = glintTexture.getRGB(0, 0, glintTextureWidth, glintTextureHeight, null, 0, glintTextureWidth);
     }
 
     @Override
@@ -57,8 +61,8 @@ public class GlintImageEffect implements ImageEffect {
         RenderLimits.checkFrames(width, height, frameCount);
         int[] basePixels = baseImage.getRGB(0, 0, width, height, null, 0, width);
 
-        double spriteSpanU = BASE_SPRITE_PIXELS / glintTexture.getWidth();
-        double spriteSpanV = BASE_SPRITE_PIXELS / glintTexture.getHeight();
+        double spriteSpanU = BASE_SPRITE_PIXELS / glintTextureWidth;
+        double spriteSpanV = BASE_SPRITE_PIXELS / glintTextureHeight;
         double resolutionScale = Math.max(Math.max(width, height) / BASE_SPRITE_PIXELS, 1.0);
         double uvScale = UV_SCALE / resolutionScale;
 
@@ -81,15 +85,13 @@ public class GlintImageEffect implements ImageEffect {
     }
 
     private void applyGlintPass(int[] pixels, int width, int height, double timeMs, double periodMs, double rotationDeg,
-                                double direction, double spriteSpanU, double spriteSpanV, double uvScale) {
+                                double direction, double[] baseU, double[] baseV, double uvScale) {
         double offset = (timeMs % periodMs) / periodMs;
         double inverseScale = 1.0 / uvScale;
         double adjustedOffset = offset * SCROLL_SPEED;
         double radians = Math.toRadians(rotationDeg);
         double cos = Math.cos(radians);
         double sin = Math.sin(radians);
-        int textureWidth = glintTexture.getWidth();
-        int textureHeight = glintTexture.getHeight();
         float[] sampled = new float[4];
 
         for (int y = 0; y < height; y++) {
@@ -112,7 +114,7 @@ public class GlintImageEffect implements ImageEffect {
                 double scaledU = translatedU * uvScale;
                 double scaledV = rotatedV * uvScale;
 
-                sampleGlint(scaledU, scaledV, textureWidth, textureHeight, sampled);
+                sampleGlint(scaledU, scaledV, sampled);
                 float sampledAlpha = sampled[3];
                 if (sampledAlpha <= 0.0f) {
                     continue;
@@ -136,28 +138,28 @@ public class GlintImageEffect implements ImageEffect {
         }
     }
 
-    private void sampleGlint(double u, double v, int textureWidth, int textureHeight, float[] out) {
+    private void sampleGlint(double u, double v, float[] out) {
         double wrappedU = u - Math.floor(u);
         double wrappedV = v - Math.floor(v);
 
-        double texX = wrappedU * textureWidth - 0.5;
-        double texY = wrappedV * textureHeight - 0.5;
+        double texX = wrappedU * glintTextureWidth - 0.5;
+        double texY = wrappedV * glintTextureHeight - 0.5;
 
         double baseX = Math.floor(texX);
         double baseY = Math.floor(texY);
 
-        int leftX = floorMod((int) baseX, textureWidth);
-        int topY = floorMod((int) baseY, textureHeight);
-        int rightX = (leftX + 1) % textureWidth;
-        int bottomY = (topY + 1) % textureHeight;
+        int leftX = floorMod((int) baseX, glintTextureWidth);
+        int topY = floorMod((int) baseY, glintTextureHeight);
+        int rightX = (leftX + 1) % glintTextureWidth;
+        int bottomY = (topY + 1) % glintTextureHeight;
 
         double fracX = texX - baseX;
         double fracY = texY - baseY;
 
-        int topLeftColor = glintTexture.getRGB(leftX, topY);
-        int topRightColor = glintTexture.getRGB(rightX, topY);
-        int bottomLeftColor = glintTexture.getRGB(leftX, bottomY);
-        int bottomRightColor = glintTexture.getRGB(rightX, bottomY);
+        int topLeftColor = glintPixels[topY * glintTextureWidth + leftX];
+        int topRightColor = glintPixels[topY * glintTextureWidth + rightX];
+        int bottomLeftColor = glintPixels[bottomY * glintTextureWidth + leftX];
+        int bottomRightColor = glintPixels[bottomY * glintTextureWidth + rightX];
 
         double weightTopLeft = (1.0 - fracX) * (1.0 - fracY);
         double weightTopRight = fracX * (1.0 - fracY);
