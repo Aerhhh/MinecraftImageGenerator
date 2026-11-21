@@ -35,6 +35,9 @@ import java.util.List;
 @UtilityClass
 class GuiModelResolver {
 
+    /** Most models one item may resolve to through composite nodes. Real items layer a handful. */
+    static final int MAX_MODELS_PER_ITEM = 64;
+
     private static final String CUSTOM_MODEL_DATA = "custom_model_data";
     /** The {@code range_dispatch} property fed by {@link ItemDamage} (type prefix stripped). */
     private static final String DAMAGE = "damage";
@@ -79,7 +82,13 @@ class GuiModelResolver {
     private static void collect(ItemModelNode node, CustomModelData data, @Nullable ItemDamage damage,
                                 List<GuiModel> out) {
         switch (node) {
-            case ItemModelNode.ModelLeaf leaf -> out.add(new GuiModel(leaf.modelRef(), leaf.tints()));
+            case ItemModelNode.ModelLeaf leaf -> {
+                if (out.size() >= MAX_MODELS_PER_ITEM) {
+                    throw new PackResolveException("Item definition resolves to more than %s models",
+                        String.valueOf(MAX_MODELS_PER_ITEM));
+                }
+                out.add(new GuiModel(leaf.modelRef(), leaf.tints()));
+            }
             case ItemModelNode.ConditionNode condition ->
                 collect(resolveCondition(condition, data), data, damage, out);
             case ItemModelNode.SelectNode select -> collect(resolveSelect(select, data), data, damage, out);

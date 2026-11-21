@@ -45,6 +45,8 @@ final class OtfFontProvider {
      * font from pinning unbounded rasters while eviction stays harmless (deterministic re-raster).
      */
     private static final int MAX_CACHED_GLYPHS = 512;
+    /** Most pixels one rasterized glyph cell may hold. */
+    private static final long MAX_CELL_PIXELS = 4L * 1024 * 1024;
 
     /**
      * Antialiasing OFF, fractional metrics OFF - the aliased integer-metric context the rest of
@@ -87,22 +89,15 @@ final class OtfFontProvider {
      */
     static Optional<OtfFontProvider> tryCreate(FontProviderDefinition.Ttf definition,
                                                PackFont.TextureLoader loader, String fontId) {
-        Optional<byte[]> bytes = loader.ttfFontData(definition.file());
-        if (bytes.isEmpty()) {
+        Optional<Font> base = loader.ttfBaseFont(definition.file(), fontId);
+        if (base.isEmpty()) {
             return Optional.empty();
         }
         int oversample = Math.max(1, Math.round(definition.oversample()));
         int ppem = Math.max(1, Math.round(definition.size() * oversample));
-        try {
-            Font base = Font.createFont(Font.TRUETYPE_FONT, new ByteArrayInputStream(bytes.get()));
-            Font ppemFont = base.deriveFont((float) ppem);
-            return Optional.of(new OtfFontProvider(ppemFont, oversample, ppem,
-                definition.shiftX(), definition.shiftY(), definition.skip()));
-        } catch (FontFormatException | IOException e) {
-            log.warn("Font `{}`: TTF `{}` failed to load ({}); a later provider will serve its codepoints",
-                fontId, definition.file(), e.getMessage());
-            return Optional.empty();
-        }
+        Font ppemFont = base.get().deriveFont((float) ppem);
+        return Optional.of(new OtfFontProvider(ppemFont, oversample, ppem,
+            definition.shiftX(), definition.shiftY(), definition.skip()));
     }
 
     /**
@@ -156,6 +151,13 @@ final class OtfFontProvider {
         // ink.y is negative for the (usual) part of the glyph above the baseline.
         int cellTop = floorToMultiple(ink.y, oversample);
         int cellBottom = ceilToMultiple(ink.y + ink.height, oversample);
+        if ((long) (cellRight - cellLeft) * (cellBottom - cellTop) > MAX_CELL_PIXELS) {
+            // A font whose outline is far larger than its em box; drawing it would dwarf the budget
+            // the font cache reserved for this provider.
+            log.warn("TTF glyph U+{} rasterizes to {}x{} px, over the {} pixel limit; rendering it blank",
+                Integer.toHexString(codePoint), cellRight - cellLeft, cellBottom - cellTop, MAX_CELL_PIXELS);
+            return new OtfGlyph(new GlyphCell(null, 0, 1.0f / oversample), advanceGuiPx, 0.0, 0.0, 0, 0);
+        }
         BufferedImage cellImage = new BufferedImage(cellRight - cellLeft, cellBottom - cellTop,
             BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = cellImage.createGraphics();
