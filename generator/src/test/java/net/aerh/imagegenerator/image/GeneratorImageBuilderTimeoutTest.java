@@ -3,6 +3,7 @@ package net.aerh.imagegenerator.image;
 import net.aerh.imagegenerator.Generator;
 import net.aerh.imagegenerator.context.GenerationContext;
 import net.aerh.imagegenerator.exception.GeneratorTimeoutException;
+import net.aerh.imagegenerator.exception.NbtParseException;
 import net.aerh.imagegenerator.item.GeneratedObject;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -11,11 +12,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.awt.image.BufferedImage;
+import java.io.IOException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -111,5 +114,66 @@ class GeneratorImageBuilderTimeoutTest {
         System.setProperty(GeneratorImageBuilder.TIMEOUT_PROPERTY, "10000");
         GeneratedObject result = new GeneratorImageBuilder().addGenerator(outer).build();
         assertTrue(result.getImage().getWidth() > 4);
+    }
+
+    @Test
+    void wholeRequestTimeoutCoversWorkDoneBeforeTheBuild() throws InterruptedException {
+        // Stands in for slow parsing: no generator, no build, just work ahead of them.
+        CountDownLatch stopped = new CountDownLatch(1);
+
+        GeneratorTimeoutException thrown = assertThrows(GeneratorTimeoutException.class,
+            () -> GeneratorImageBuilder.withinTimeout(() -> {
+                try {
+                    long end = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+                    while (System.nanoTime() < end) {
+                        RenderCancellation.check();
+                    }
+                    return "finished";
+                } finally {
+                    stopped.countDown();
+                }
+            }));
+
+        assertEquals("Image generation timed out", thrown.getMessage());
+        assertTrue(stopped.await(5, TimeUnit.SECONDS), "the cancelled work must stop promptly");
+    }
+
+    @Test
+    void wholeRequestTimeoutCancelsABuildRunningInsideIt() throws InterruptedException {
+        SpinningGenerator generator = new SpinningGenerator();
+
+        assertThrows(GeneratorTimeoutException.class,
+            () -> GeneratorImageBuilder.withinTimeout(() -> new GeneratorImageBuilder().addGenerator(generator).build()));
+
+        assertTrue(generator.stopped.await(5, TimeUnit.SECONDS), "the build inside the request must be cancelled with it");
+        assertTrue(!generator.finishedNormally.get(), "the render must be cut short, not run to completion");
+    }
+
+    @Test
+    void wholeRequestTimeoutPassesExceptionsThroughUnchanged() {
+        NbtParseException parseFailure = new NbtParseException("bad nbt");
+        IOException ioFailure = new IOException("disk");
+
+        assertSame(parseFailure, assertThrows(NbtParseException.class,
+            () -> GeneratorImageBuilder.withinTimeout(() -> {
+                throw parseFailure;
+            })));
+        assertSame(ioFailure, assertThrows(IOException.class,
+            () -> GeneratorImageBuilder.withinTimeout(() -> {
+                throw ioFailure;
+            })));
+    }
+
+    @Test
+    void wholeRequestTimeoutRunsInPlaceInsideARender() throws IOException {
+        System.setProperty(GeneratorImageBuilder.TIMEOUT_PROPERTY, "10000");
+        Thread[] innerThread = new Thread[1];
+
+        Thread outerThread = GeneratorImageBuilder.withinTimeout(() -> {
+            GeneratorImageBuilder.withinTimeout(() -> innerThread[0] = Thread.currentThread());
+            return Thread.currentThread();
+        });
+
+        assertSame(outerThread, innerThread[0]);
     }
 }
