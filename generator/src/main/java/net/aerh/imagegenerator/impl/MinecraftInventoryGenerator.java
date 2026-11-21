@@ -1,6 +1,7 @@
 package net.aerh.imagegenerator.impl;
 
 import net.aerh.imagegenerator.image.RenderCancellation;
+import net.aerh.imagegenerator.image.RenderLimits;
 import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
@@ -40,6 +41,9 @@ import java.util.Map;
 @Slf4j
 @ToString
 public class MinecraftInventoryGenerator implements Generator {
+
+    /** The most rows, and the most slots in a row, an inventory may have. */
+    public static final int MAX_SLOTS_PER_AXIS = 64;
 
     private static final Color NORMAL_TEXT_COLOR = new Color(255, 255, 255);
     private static final Color DROP_SHADOW_COLOR = new Color(63, 63, 63);
@@ -174,6 +178,7 @@ public class MinecraftInventoryGenerator implements Generator {
 
         int imageWidth = (slotsPerRow * slotSize) + (borderSize * 2);
         int imageHeight = (rows * slotSize) + titleHeight + borderSize;
+        RenderLimits.checkCanvas((long) slotsPerRow * slotSize + borderSize * 2L, (long) rows * slotSize + titleHeight + borderSize);
 
         this.inventoryImage = new BufferedImage(imageWidth, imageHeight, BufferedImage.TYPE_INT_ARGB);
         this.g2d = inventoryImage.createGraphics();
@@ -734,6 +739,7 @@ public class MinecraftInventoryGenerator implements Generator {
             return frames;
         }
 
+        RenderLimits.checkFrames(inventoryImage.getWidth(), inventoryImage.getHeight(), maxFrames);
         for (int frameIndex = 0; frameIndex < maxFrames; frameIndex++) {
             RenderCancellation.check();
             BufferedImage frame = new BufferedImage(inventoryImage.getWidth(), inventoryImage.getHeight(), BufferedImage.TYPE_INT_ARGB);
@@ -804,6 +810,7 @@ public class MinecraftInventoryGenerator implements Generator {
 
         AnimationTimeline timeline = AnimationTimeline.of(sources);
         List<BufferedImage> originalImages = animatedItems.stream().map(InventoryItem::getItemImage).toList();
+        RenderLimits.checkFrames(inventoryImage.getWidth(), inventoryImage.getHeight(), timeline.steps().size());
         List<BufferedImage> frames = new ArrayList<>(timeline.steps().size());
         for (AnimationTimeline.Step step : timeline.steps()) {
             RenderCancellation.check();
@@ -936,6 +943,9 @@ public class MinecraftInventoryGenerator implements Generator {
         protected void validate() {
             if (rows <= 0 || slotsPerRow <= 0) {
                 throw new IllegalArgumentException("rows and slotsPerRow must be positive");
+            }
+            if (rows > MAX_SLOTS_PER_AXIS || slotsPerRow > MAX_SLOTS_PER_AXIS) {
+                throw new IllegalArgumentException("rows and slotsPerRow must be at most " + MAX_SLOTS_PER_AXIS);
             }
         }
 

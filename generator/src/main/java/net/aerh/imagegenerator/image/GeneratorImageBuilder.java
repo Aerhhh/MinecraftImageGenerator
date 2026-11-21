@@ -231,6 +231,8 @@ public class GeneratorImageBuilder {
             throw new GeneratorException("Calculated image dimensions are invalid (width=" + totalWidth + ", height=" + maxHeight + ")");
         }
 
+        RenderLimits.checkCanvas((long) totalWidth + 2 * IMAGE_BORDER_PADDING_PX, (long) maxHeight + 2 * IMAGE_BORDER_PADDING_PX);
+
         BufferedImage finalImage = new BufferedImage(totalWidth + 2 * IMAGE_BORDER_PADDING_PX, maxHeight + 2 * IMAGE_BORDER_PADDING_PX, BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = finalImage.createGraphics();
         try {
@@ -305,6 +307,8 @@ public class GeneratorImageBuilder {
         if (totalWidth <= 0 || maxHeight <= 0) {
             throw new GeneratorException("Calculated animated image dimensions are invalid (width=" + totalWidth + ", height=" + maxHeight + ")");
         }
+
+        RenderLimits.checkFrames((long) totalWidth + 2 * IMAGE_BORDER_PADDING_PX, (long) maxHeight + 2 * IMAGE_BORDER_PADDING_PX, maxFrames);
 
         List<BufferedImage> compositeFrames = new ArrayList<>();
 
@@ -384,6 +388,8 @@ public class GeneratorImageBuilder {
             throw new GeneratorException("Calculated animated image dimensions are invalid (width="
                 + totalWidth + ", height=" + maxHeight + ")");
         }
+
+        RenderLimits.checkFrames((long) totalWidth + 2 * IMAGE_BORDER_PADDING_PX, (long) maxHeight + 2 * IMAGE_BORDER_PADDING_PX, timeline.steps().size());
 
         List<BufferedImage> compositeFrames = new ArrayList<>(timeline.steps().size());
         for (AnimationTimeline.Step step : timeline.steps()) {

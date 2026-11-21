@@ -72,6 +72,9 @@ import java.util.Set;
 @Slf4j
 public final class ContentTemplate {
 
+    /** The most output one fill may produce, counted as text characters plus one per JSON node. */
+    public static final int MAX_FILL_OUTPUT_CHARS = 1_000_000;
+
     /** Marker key naming the repeatable section an array-element object belongs to. */
     static final String REPEAT_KEY = "template_repeat";
     /** Highest {@code schema_version} this build understands. */
@@ -180,7 +183,7 @@ public final class ContentTemplate {
         rejectUnknownRowSections(rows);
 
         Map<String, String> globalValues = resolveGlobalValues(values);
-        return (JsonObject) transformElement(content, globalValues, rows);
+        return (JsonObject) transformElement(content, globalValues, rows, new FillBudget());
     }
 
     /**
@@ -243,12 +246,13 @@ public final class ContentTemplate {
      * capture's own values reproduces the capture exactly.
      */
     private JsonElement transformElement(JsonElement element, Map<String, String> scope,
-                                         Map<String, List<Map<String, String>>> rows) {
+                                         Map<String, List<Map<String, String>>> rows, FillBudget budget) {
+        budget.charge(1);
         if (element.isJsonObject()) {
             JsonObject source = element.getAsJsonObject();
             JsonObject out = new JsonObject();
             for (Map.Entry<String, JsonElement> entry : source.entrySet()) {
-                out.add(entry.getKey(), transformElement(entry.getValue(), scope, rows));
+                out.add(entry.getKey(), transformElement(entry.getValue(), scope, rows, budget));
             }
             return out;
         }
@@ -256,15 +260,21 @@ public final class ContentTemplate {
             JsonArray out = new JsonArray();
             for (JsonElement child : element.getAsJsonArray()) {
                 if (isRepeatMarker(child)) {
-                    expandRepeat(child.getAsJsonObject(), scope, rows, out);
+                    expandRepeat(child.getAsJsonObject(), scope, rows, out, budget);
                 } else {
-                    out.add(transformElement(child, scope, rows));
+                    out.add(transformElement(child, scope, rows, budget));
                 }
             }
             return out;
         }
         if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isString()) {
-            return new JsonPrimitive(render(element.getAsString(), name -> resolveValue(name, scope)));
+            String text = element.getAsString();
+            budget.charge(text.length());
+            return new JsonPrimitive(render(text, name -> {
+                String value = resolveValue(name, scope);
+                budget.charge(value.length());
+                return value;
+            }));
         }
         // Numbers, booleans and null carry no tokens; copy them so the returned tree owns no
         // references into the template.
@@ -277,7 +287,7 @@ public final class ContentTemplate {
      * nothing is appended - the marker object is removed.
      */
     private void expandRepeat(JsonObject marker, Map<String, String> scope,
-                              Map<String, List<Map<String, String>>> rows, JsonArray out) {
+                              Map<String, List<Map<String, String>>> rows, JsonArray out, FillBudget budget) {
         String section = marker.get(REPEAT_KEY).getAsString();
         List<Map<String, String>> sectionRows = rows.get(section);
         if (sectionRows == null || sectionRows.isEmpty()) {
@@ -297,7 +307,7 @@ public final class ContentTemplate {
             }
             Map<String, String> merged = new HashMap<>(scope);
             merged.putAll(row);
-            out.add(transformElement(stripped, merged, rows));
+            out.add(transformElement(stripped, merged, rows, budget));
         }
     }
 
@@ -312,6 +322,23 @@ public final class ContentTemplate {
             return value;
         }
         throw new IllegalArgumentException("Required placeholder `" + name + "` was not supplied a value");
+    }
+
+    /**
+     * Running size of one {@link #fill} output. Substitution multiplies tokens by value length by
+     * row count, so a small template and small values can still expand without bound; the fill
+     * fails once its output passes {@link #MAX_FILL_OUTPUT_CHARS}.
+     */
+    private static final class FillBudget {
+        private long used;
+
+        void charge(long amount) {
+            used += amount;
+            if (used > MAX_FILL_OUTPUT_CHARS) {
+                throw new IllegalArgumentException("Filled template is too large: over "
+                    + MAX_FILL_OUTPUT_CHARS + " characters and nodes of output");
+            }
+        }
     }
 
     // ------------------------------------------------------------- token scanning
