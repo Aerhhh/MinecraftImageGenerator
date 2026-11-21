@@ -26,7 +26,19 @@ package net.aerh.imagegenerator.pack;
  * and applies the sheet default.
  */
 public record PackLimits(int maxEntries, long maxEntryBytes, int maxTextureDim, long textureCacheMaxBytes,
-                         int sheetTextureMaxDim) {
+                         int sheetTextureMaxDim, long maxIndexBytes) {
+
+    private static final long DEFAULT_MAX_INDEX_BYTES = 256L * 1024 * 1024;
+
+    /**
+     * Limits with the default index size: at most {@value #DEFAULT_MAX_INDEX_BYTES} bytes of item
+     * and model definitions are read while a pack registers.
+     */
+    public PackLimits(int maxEntries, long maxEntryBytes, int maxTextureDim, long textureCacheMaxBytes,
+                      int sheetTextureMaxDim) {
+        this(maxEntries, maxEntryBytes, maxTextureDim, textureCacheMaxBytes, sheetTextureMaxDim,
+            DEFAULT_MAX_INDEX_BYTES);
+    }
 
     private static final int DEFAULT_SHEET_TEXTURE_MAX_DIM = 8_192;
 
@@ -55,6 +67,10 @@ public record PackLimits(int maxEntries, long maxEntryBytes, int maxTextureDim, 
             throw new IllegalArgumentException(
                 "generator.pack.textureCache.maxBytes must be positive, got: " + textureCacheMaxBytes);
         }
+        if (maxIndexBytes <= 0) {
+            throw new IllegalArgumentException(
+                "generator.pack.maxIndexBytes must be positive, got: " + maxIndexBytes);
+        }
         if (sheetTextureMaxDim <= 0) {
             throw new IllegalArgumentException(
                 "generator.pack.sheetTextureMaxDim must be positive, got: " + sheetTextureMaxDim);
@@ -72,7 +88,8 @@ public record PackLimits(int maxEntries, long maxEntryBytes, int maxTextureDim, 
             Long.getLong("generator.pack.maxEntryBytes", 8L * 1024 * 1024),
             Integer.getInteger("generator.pack.maxTextureDim", 1_024),
             Long.getLong("generator.pack.textureCache.maxBytes", 64L * 1024 * 1024),
-            Integer.getInteger("generator.pack.sheetTextureMaxDim", DEFAULT_SHEET_TEXTURE_MAX_DIM)
+            Integer.getInteger("generator.pack.sheetTextureMaxDim", DEFAULT_SHEET_TEXTURE_MAX_DIM),
+            Long.getLong("generator.pack.maxIndexBytes", DEFAULT_MAX_INDEX_BYTES)
         );
     }
 

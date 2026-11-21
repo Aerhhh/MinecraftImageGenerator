@@ -1,5 +1,6 @@
 package net.aerh.imagegenerator.pack;
 
+import lombok.extern.slf4j.Slf4j;
 import net.aerh.imagegenerator.exception.PackLoadException;
 
 import java.io.IOException;
@@ -14,6 +15,7 @@ import java.util.stream.Stream;
  * {@link PackSource} over an extracted pack directory. Rejects reads that resolve outside the
  * root (including via symlinks) and files exceeding the per-entry byte cap.
  */
+@Slf4j
 final class DirectoryPackSource implements PackSource {
 
     private final Path root;
@@ -22,13 +24,15 @@ final class DirectoryPackSource implements PackSource {
 
     DirectoryPackSource(Path root, PackLimits limits) {
         if (!Files.isDirectory(root)) {
-            throw new PackLoadException("Pack directory does not exist: %s", root.toString());
+            log.warn("Pack directory does not exist: {}", root);
+            throw new PackLoadException("Pack directory does not exist: %s", String.valueOf(root.getFileName()));
         }
         this.root = root.toAbsolutePath().normalize();
         try {
             this.realRoot = root.toRealPath();
         } catch (IOException e) {
-            throw new PackLoadException("Failed to resolve pack directory: " + root, e);
+            log.warn("Failed to resolve pack directory: {}", root);
+            throw new PackLoadException("Failed to resolve pack directory: " + root.getFileName(), e);
         }
         this.limits = limits;
     }
@@ -59,8 +63,11 @@ final class DirectoryPackSource implements PackSource {
     @Override
     public boolean exists(String assetPath) {
         try {
-            return Files.isRegularFile(resolveInsideRoot(assetPath));
-        } catch (PackLoadException e) {
+            Path resolved = resolveInsideRoot(assetPath);
+            // Same containment rule as read(): a link inside the pack that points outside it is
+            // treated as absent, not as a file whose existence can be probed.
+            return Files.isRegularFile(resolved) && resolved.toRealPath().startsWith(realRoot);
+        } catch (PackLoadException | IOException e) {
             return false;
         }
     }

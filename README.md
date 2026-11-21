@@ -257,6 +257,9 @@ PackId emberveil = PackRepository.global().register(
 
 - What `maxEntries` counts depends on the source type: a zip counts every central-directory record (regular files *and* directory entries), a directory source counts only regular files under `assets/`. Size the limit comfortably above the pack's record count.
 - Sheet-shaped textures (font glyph sheets, animated tooltip sprite strips) decode under the separate `sheetTextureMaxDim` cap (default 8192); item and general GUI textures keep the strict `maxTextureDim` image-bomb guard.
+- Whatever the per-side cap, one texture decodes to at most 16,777,216 pixels, and textures must be PNG.
+- Registration reads at most `maxIndexBytes` of item and model definitions in total (default 256 MiB, `generator.pack.maxIndexBytes`, or a sixth constructor argument). A pack over it fails to register.
+- Values inside the pack that act as sizes are bounded too: GUI sprite scaling sizes, bitmap font `height` (at most 2048), TTF `size` (256), `oversample` (16) and their product (512), 64 models per composite item, and 64 distinct TTF files per pack.
 
 ### Pack variants
 

@@ -142,12 +142,23 @@ public final class PackAnimation {
         // == 1 case. See TextureDecoder.frame for the matching crop.
         int flipbookFrames = (sheet.getWidth() / frameWidth) * (sheet.getHeight() / frameHeight);
         List<Frame> frames = new ArrayList<>();
+        // Every frame lasts at least one tick and playback stops at MAX_CYCLE_TICKS, so frames past
+        // that count can never be shown. Stopping there keeps a sheet cut into millions of tiny
+        // cells, or a very long frames list, from building millions of frame objects.
+        int maxFrames = AnimationTimeline.MAX_CYCLE_TICKS;
         if (meta.frames() == null || meta.frames().isEmpty()) {
-            for (int index = 0; index < flipbookFrames; index++) {
+            if (flipbookFrames > maxFrames) {
+                log.warn("Animation has {} flipbook frames; playing only the first {}", flipbookFrames, maxFrames);
+            }
+            for (int index = 0; index < Math.min(flipbookFrames, maxFrames); index++) {
                 frames.add(new Frame(index, meta.defaultFrameTimeTicks()));
             }
         } else {
             for (AnimationMeta.FrameEntry entry : meta.frames()) {
+                if (frames.size() >= maxFrames) {
+                    log.warn("Animation lists {} frames; playing only the first {}", meta.frames().size(), maxFrames);
+                    break;
+                }
                 if (entry.index() < 0 || entry.index() >= flipbookFrames) {
                     throw new PackLoadException("Animation frame %s is outside texture bounds (%sx%s, frame %sx%s)",
                         String.valueOf(entry.index()), String.valueOf(sheet.getWidth()),

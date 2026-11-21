@@ -108,6 +108,31 @@ public final class PackFont {
         default Optional<byte[]> ttfFontData(String fontFileRef) {
             return Optional.empty();
         }
+
+        /**
+         * The parsed font for a {@code ttf} provider's file, before it is sized. The default parses
+         * {@link #ttfFontData} on every call; a pack overrides it to parse each file once, because
+         * the JDK copies every parsed font to a temp file that lives as long as the font does.
+         *
+         * @param fontFileRef the ttf provider {@code file} value
+         * @param fontId      resolved font id, for log context only
+         * @return the font, or empty when the file is absent, unreadable or not a font
+         */
+        default Optional<java.awt.Font> ttfBaseFont(String fontFileRef, String fontId) {
+            Optional<byte[]> bytes = ttfFontData(fontFileRef);
+            if (bytes.isEmpty()) {
+                return Optional.empty();
+            }
+            try {
+                return Optional.of(java.awt.Font.createFont(java.awt.Font.TRUETYPE_FONT,
+                    new java.io.ByteArrayInputStream(bytes.get())));
+            } catch (java.awt.FontFormatException | java.io.IOException e) {
+                org.slf4j.LoggerFactory.getLogger(PackFont.class).warn(
+                    "Font `{}`: TTF `{}` failed to load ({}); a later provider will serve its codepoints",
+                    fontId, fontFileRef, e.getMessage());
+                return Optional.empty();
+            }
+        }
     }
 
     private sealed interface Provider permits BitmapEntry, SpaceEntry, OtfEntry, UnsupportedEntry {

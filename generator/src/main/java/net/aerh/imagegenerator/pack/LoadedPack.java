@@ -103,6 +103,10 @@ final class LoadedPack {
     private final PackId id;
     private final PackSource source;
     private final PackLimits limits;
+    /** Most distinct TTF files one pack may load. */
+    private static final int MAX_TTF_FILES = 64;
+    private final Map<String, Optional<java.awt.Font>> ttfFonts = new java.util.concurrent.ConcurrentHashMap<>();
+    private long indexedBytes;
     private final boolean normalizeEmissiveAlpha;
     /**
      * The pack's movement text shader no-tint rule, or null when the pack ships no such shader.
@@ -160,6 +164,23 @@ final class LoadedPack {
                 log.warn("Pack {}: TTF font `{}` failed to read: {}", id, path, e.getMessage());
                 return Optional.empty();
             }
+        }
+
+        @Override
+        public Optional<java.awt.Font> ttfBaseFont(String fontFileRef, String fontId) {
+            // One parsed font per file per pack: every font id naming the same file shares it, so a
+            // pack cannot multiply temp files and native fonts by defining many font ids.
+            Optional<java.awt.Font> cached = ttfFonts.get(fontFileRef);
+            if (cached != null) {
+                return cached;
+            }
+            if (ttfFonts.size() >= MAX_TTF_FILES) {
+                log.warn("Pack {}: more than {} distinct TTF files; `{}` will not render", id, MAX_TTF_FILES, fontFileRef);
+                return Optional.empty();
+            }
+            Optional<java.awt.Font> loaded = PackFont.TextureLoader.super.ttfBaseFont(fontFileRef, fontId);
+            Optional<java.awt.Font> raced = ttfFonts.putIfAbsent(fontFileRef, loaded);
+            return raced != null ? raced : loaded;
         }
     };
 
@@ -229,6 +250,24 @@ final class LoadedPack {
         return Set.copyOf(namespaces);
     }
 
+    /** Reads one file while indexing, counting it against {@link PackLimits#maxIndexBytes()}. */
+    private byte[] readForIndex(String path) {
+        byte[] bytes = source.read(path);
+        indexedBytes += bytes.length;
+        if (indexedBytes > limits.maxIndexBytes()) {
+            throw new PackLoadException("Pack item and model definitions exceed the index size limit (%s bytes)",
+                String.valueOf(limits.maxIndexBytes()));
+        }
+        return bytes;
+    }
+
+    /** A blown index budget fails the whole registration; any other per-file error only skips that file. */
+    private void rethrowIfIndexBudgetExceeded(RuntimeException failure) {
+        if (indexedBytes > limits.maxIndexBytes()) {
+            throw failure;
+        }
+    }
+
     private void buildIndex() {
         int errors = 0;
         for (String path : source.list("assets/")) {
@@ -237,9 +276,10 @@ final class LoadedPack {
                 namespaces.add(itemMatcher.group(1));
                 String key = itemMatcher.group(1) + ":" + itemMatcher.group(2);
                 try {
-                    ItemDefinition definition = PackJsonParser.parseItemDefinitionInfo(source.read(path));
+                    ItemDefinition definition = PackJsonParser.parseItemDefinitionInfo(readForIndex(path));
                     items.put(key, new ItemEntry(definition.model(), definition.oversizedInGui(), null));
                 } catch (RuntimeException e) {
+                    rethrowIfIndexBudgetExceeded(e);
                     errors++;
                     String message = e.getMessage() != null ? e.getMessage() : e.getClass().getName();
                     items.put(key, new ItemEntry(null, false, message));
@@ -251,8 +291,9 @@ final class LoadedPack {
                 namespaces.add(modelMatcher.group(1));
                 try {
                     String key = modelMatcher.group(1) + ":" + modelMatcher.group(2);
-                    models.put(key, PackJsonParser.parseModel(source.read(path)));
+                    models.put(key, PackJsonParser.parseModel(readForIndex(path)));
                 } catch (RuntimeException e) {
+                    rethrowIfIndexBudgetExceeded(e);
                     errors++;
                     log.warn("Pack {}: skipping malformed model {}: {}", id, path, e.getMessage());
                 }
