@@ -1,5 +1,6 @@
 package net.aerh.imagegenerator.effect.impl;
 
+import net.aerh.imagegenerator.image.RenderCancellation;
 import net.aerh.imagegenerator.image.RenderLimits;
 import net.aerh.imagegenerator.effect.EffectContext;
 import net.aerh.imagegenerator.effect.EffectResult;
@@ -10,7 +11,6 @@ import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.stream.IntStream;
 
 /**
  * Enchantment glint effect - creates an animated glint overlay.
@@ -21,10 +21,6 @@ import java.util.stream.IntStream;
 public class GlintImageEffect implements ImageEffect {
 
     private final BufferedImage glintTexture;
-    private final int[] glintRed;
-    private final int[] glintGreen;
-    private final int[] glintBlue;
-    private final int[] glintAlpha;
 
     private static final int FRAME_DELAY_MS = 33; // ~30 FPS
     private static final int TOTAL_DURATION_MS = 6000;
@@ -49,20 +45,6 @@ public class GlintImageEffect implements ImageEffect {
         }
 
         this.glintTexture = glintTexture;
-        int textureWidth = glintTexture.getWidth();
-        int textureHeight = glintTexture.getHeight();
-        int[] glintPixels = glintTexture.getRGB(0, 0, textureWidth, textureHeight, null, 0, textureWidth);
-        this.glintRed = new int[glintPixels.length];
-        this.glintGreen = new int[glintPixels.length];
-        this.glintBlue = new int[glintPixels.length];
-        this.glintAlpha = new int[glintPixels.length];
-        for (int i = 0; i < glintPixels.length; i++) {
-            int argb = glintPixels[i];
-            glintRed[i] = ((argb >> 16) & 0xFF);
-            glintGreen[i] = ((argb >> 8) & 0xFF);
-            glintBlue[i] = (argb & 0xFF);
-            glintAlpha[i] = (argb >>> 24);
-        }
     }
 
     @Override
@@ -80,101 +62,79 @@ public class GlintImageEffect implements ImageEffect {
         double resolutionScale = Math.max(Math.max(width, height) / BASE_SPRITE_PIXELS, 1.0);
         double uvScale = UV_SCALE / resolutionScale;
 
-        int pixelCount = width * height;
-        double[] scaledRotatedUPrimary = new double[pixelCount];
-        double[] scaledRotatedVPrimary = new double[pixelCount];
-        double[] scaledRotatedUSecondary = new double[pixelCount];
-        double[] scaledRotatedVSecondary = new double[pixelCount];
-        prepareRotatedCoordinates(width, height, spriteSpanU, spriteSpanV, uvScale,
-            PRIMARY_ROTATION_DEG, scaledRotatedUPrimary, scaledRotatedVPrimary);
-        prepareRotatedCoordinates(width, height, spriteSpanU, spriteSpanV, uvScale,
-            SECONDARY_ROTATION_DEG, scaledRotatedUSecondary, scaledRotatedVSecondary);
+        List<BufferedImage> frames = new ArrayList<>(frameCount);
 
-        BufferedImage[] frameArray = new BufferedImage[frameCount];
-        IntStream.range(0, frameCount).parallel().forEach(frameIndex -> {
+        for (int frameIndex = 0; frameIndex < frameCount; frameIndex++) {
+            RenderCancellation.check();
             double timeMs = frameIndex * FRAME_DELAY_MS;
             int[] framePixels = Arrays.copyOf(basePixels, basePixels.length);
 
-            applyGlintPass(framePixels, width, height, timeMs, PRIMARY_PERIOD_MS, 1.0,
-                scaledRotatedUPrimary, scaledRotatedVPrimary);
-            applyGlintPass(framePixels, width, height, timeMs, SECONDARY_PERIOD_MS, -1.0,
-                scaledRotatedUSecondary, scaledRotatedVSecondary);
+            applyGlintPass(framePixels, width, height, timeMs, PRIMARY_PERIOD_MS, PRIMARY_ROTATION_DEG, 1.0, spriteSpanU, spriteSpanV, uvScale);
+            applyGlintPass(framePixels, width, height, timeMs, SECONDARY_PERIOD_MS, SECONDARY_ROTATION_DEG, -1.0, spriteSpanU, spriteSpanV, uvScale);
 
             BufferedImage frame = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
             frame.setRGB(0, 0, width, height, framePixels, 0, width);
-            frameArray[frameIndex] = frame;
-        });
+            frames.add(frame);
+        }
 
-        List<BufferedImage> frames = new ArrayList<>(frameCount);
-        frames.addAll(Arrays.asList(frameArray));
         return EffectResult.animated(frames, FRAME_DELAY_MS);
     }
 
-    private void prepareRotatedCoordinates(int width, int height, double spriteSpanU, double spriteSpanV,
-                                           double uvScale, double rotationDeg,
-                                           double[] scaledRotatedU, double[] scaledRotatedV) {
+    private void applyGlintPass(int[] pixels, int width, int height, double timeMs, double periodMs, double rotationDeg,
+                                double direction, double spriteSpanU, double spriteSpanV, double uvScale) {
+        double offset = (timeMs % periodMs) / periodMs;
+        double inverseScale = 1.0 / uvScale;
+        double adjustedOffset = offset * SCROLL_SPEED;
         double radians = Math.toRadians(rotationDeg);
         double cos = Math.cos(radians);
         double sin = Math.sin(radians);
+        int textureWidth = glintTexture.getWidth();
+        int textureHeight = glintTexture.getHeight();
+        float[] sampled = new float[4];
 
         for (int y = 0; y < height; y++) {
             double baseV = (double) y / height * spriteSpanV;
             for (int x = 0; x < width; x++) {
                 int index = y * width + x;
-                double baseU = (double) x / width * spriteSpanU;
-                scaledRotatedU[index] = (baseU * cos - baseV * sin) * uvScale;
-                scaledRotatedV[index] = (baseU * sin + baseV * cos) * uvScale;
-            }
-        }
-    }
-
-    private void applyGlintPass(int[] pixels, int width, int height, double timeMs, double periodMs,
-                                double direction, double[] scaledRotatedU, double[] scaledRotatedV) {
-        double offset = (timeMs % periodMs) / periodMs;
-        double adjustedOffset = offset * SCROLL_SPEED;
-        double scaledUOffset = direction * adjustedOffset;
-        int textureWidth = glintTexture.getWidth();
-        int textureHeight = glintTexture.getHeight();
-        int[] sampled = new int[4];
-
-        for (int y = 0; y < height; y++) {
-            int preIndex = y * width;
-            int preMax = preIndex + width;
-            for (int index = preIndex; index < preMax; index++) {
                 int argb = pixels[index];
-                int alpha = argb >>> 24;
+                int alpha = (argb >>> 24) & 0xFF;
                 if (alpha == 0) {
                     continue;
                 }
 
-                double scaledU = scaledRotatedU[index] + scaledUOffset;
-                double scaledV = scaledRotatedV[index];
+                double baseU = (double) x / width * spriteSpanU;
+
+                double rotatedU = baseU * cos - baseV * sin;
+                double rotatedV = baseU * sin + baseV * cos;
+
+                double translatedU = rotatedU + direction * adjustedOffset * inverseScale;
+                double scaledU = translatedU * uvScale;
+                double scaledV = rotatedV * uvScale;
 
                 sampleGlint(scaledU, scaledV, textureWidth, textureHeight, sampled);
-                int sampledAlpha = sampled[3];
-                if (sampledAlpha <= 0) {
+                float glintAlpha = sampled[3] * GLINT_INTENSITY;
+                if (glintAlpha <= 0.0f) {
                     continue;
                 }
-                int glintAlpha = (int) (sampledAlpha * GLINT_INTENSITY);
 
-                int baseR = ((argb >> 16) & 0xFF);
-                int baseG = ((argb >> 8) & 0xFF);
-                int baseB = (argb & 0xFF);
+                float baseR = ((argb >> 16) & 0xFF) / 255f;
+                float baseG = ((argb >> 8) & 0xFF) / 255f;
+                float baseB = (argb & 0xFF) / 255f;
 
-                int addR = (int) (sampled[0] * (GLINT_TINT[0] * glintAlpha));
-                int addG = (int) (sampled[1] * (GLINT_TINT[1] * glintAlpha));
-                int addB = (int) (sampled[2] * (GLINT_TINT[2] * glintAlpha));
+                float addR = sampled[0] * GLINT_TINT[0] * glintAlpha;
+                float addG = sampled[1] * GLINT_TINT[1] * glintAlpha;
+                float addB = sampled[2] * GLINT_TINT[2] * glintAlpha;
 
-                int outR = Math.min(255, baseR + addR);
-                int outG = Math.min(255, baseG + addG);
-                int outB = Math.min(255, baseB + addB);
+                int outR = (int) (Math.min(1.0f, baseR + addR) * 255.0f + 0.5f);
+                int outG = (int) (Math.min(1.0f, baseG + addG) * 255.0f + 0.5f);
+                int outB = (int) (Math.min(1.0f, baseB + addB) * 255.0f + 0.5f);
 
                 pixels[index] = (alpha << 24) | (outR << 16) | (outG << 8) | outB;
             }
         }
     }
 
-    private void sampleGlint(double u, double v, int textureWidth, int textureHeight, int[] out) {
+    private void sampleGlint(double u, double v, int textureWidth, int textureHeight, float[] out) {
         double wrappedU = u - Math.floor(u);
         double wrappedV = v - Math.floor(v);
 
@@ -192,32 +152,37 @@ public class GlintImageEffect implements ImageEffect {
         double fracX = texX - baseX;
         double fracY = texY - baseY;
 
+        int topLeftColor = glintTexture.getRGB(leftX, topY);
+        int topRightColor = glintTexture.getRGB(rightX, topY);
+        int bottomLeftColor = glintTexture.getRGB(leftX, bottomY);
+        int bottomRightColor = glintTexture.getRGB(rightX, bottomY);
+
         double weightTopLeft = (1.0 - fracX) * (1.0 - fracY);
         double weightTopRight = fracX * (1.0 - fracY);
         double weightBottomLeft = (1.0 - fracX) * fracY;
         double weightBottomRight = fracX * fracY;
 
-        int topLeftIndex = topY * textureWidth + leftX;
-        int topRightIndex = topY * textureWidth + rightX;
-        int bottomLeftIndex = bottomY * textureWidth + leftX;
-        int bottomRightIndex = bottomY * textureWidth + rightX;
+        double red = ((topLeftColor >> 16) & 0xFF) * weightTopLeft
+            + ((topRightColor >> 16) & 0xFF) * weightTopRight
+            + ((bottomLeftColor >> 16) & 0xFF) * weightBottomLeft
+            + ((bottomRightColor >> 16) & 0xFF) * weightBottomRight;
+        double green = ((topLeftColor >> 8) & 0xFF) * weightTopLeft
+            + ((topRightColor >> 8) & 0xFF) * weightTopRight
+            + ((bottomLeftColor >> 8) & 0xFF) * weightBottomLeft
+            + ((bottomRightColor >> 8) & 0xFF) * weightBottomRight;
+        double blue = (topLeftColor & 0xFF) * weightTopLeft
+            + (topRightColor & 0xFF) * weightTopRight
+            + (bottomLeftColor & 0xFF) * weightBottomLeft
+            + (bottomRightColor & 0xFF) * weightBottomRight;
+        double alpha = ((topLeftColor >>> 24) & 0xFF) * weightTopLeft
+            + ((topRightColor >>> 24) & 0xFF) * weightTopRight
+            + ((bottomLeftColor >>> 24) & 0xFF) * weightBottomLeft
+            + ((bottomRightColor >>> 24) & 0xFF) * weightBottomRight;
 
-        out[0] = (int) (glintRed[topLeftIndex] * weightTopLeft
-            + glintRed[topRightIndex] * weightTopRight
-            + glintRed[bottomLeftIndex] * weightBottomLeft
-            + glintRed[bottomRightIndex] * weightBottomRight);
-        out[1] = (int) (glintGreen[topLeftIndex] * weightTopLeft
-            + glintGreen[topRightIndex] * weightTopRight
-            + glintGreen[bottomLeftIndex] * weightBottomLeft
-            + glintGreen[bottomRightIndex] * weightBottomRight);
-        out[2] = (int) (glintBlue[topLeftIndex] * weightTopLeft
-            + glintBlue[topRightIndex] * weightTopRight
-            + glintBlue[bottomLeftIndex] * weightBottomLeft
-            + glintBlue[bottomRightIndex] * weightBottomRight);
-        out[3] = (int) (glintAlpha[topLeftIndex] * weightTopLeft
-            + glintAlpha[topRightIndex] * weightTopRight
-            + glintAlpha[bottomLeftIndex] * weightBottomLeft
-            + glintAlpha[bottomRightIndex] * weightBottomRight);
+        out[0] = (float) (red / 255.0);
+        out[1] = (float) (green / 255.0);
+        out[2] = (float) (blue / 255.0);
+        out[3] = (float) (alpha / 255.0);
     }
 
     private int floorMod(int value, int modulus) {
