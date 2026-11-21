@@ -94,15 +94,16 @@ public class GlintImageEffect implements ImageEffect {
 
         for (int y = 0; y < height; y++) {
             double baseV = (double) y / height * spriteSpanV;
-            for (int x = 0; x < width; x++) {
-                int index = y * width + x;
+            int preIndex = y * width;
+            int preMax = preIndex + width;
+            for (int index = preIndex; index < preMax; index++) {
                 int argb = pixels[index];
-                int alpha = (argb >>> 24) & 0xFF;
+                int alpha = (argb >>> 24);
                 if (alpha == 0) {
                     continue;
                 }
 
-                double baseU = (double) x / width * spriteSpanU;
+                double baseU = (double) (index - preIndex) / width * spriteSpanU;
 
                 double rotatedU = baseU * cos - baseV * sin;
                 double rotatedV = baseU * sin + baseV * cos;
@@ -112,10 +113,11 @@ public class GlintImageEffect implements ImageEffect {
                 double scaledV = rotatedV * uvScale;
 
                 sampleGlint(scaledU, scaledV, textureWidth, textureHeight, sampled);
-                float glintAlpha = sampled[3] * GLINT_INTENSITY;
-                if (glintAlpha <= 0.0f) {
+                float sampledAlpha = sampled[3];
+                if (sampledAlpha <= 0.0f) {
                     continue;
                 }
+                float glintAlpha = sampledAlpha * GLINT_INTENSITY;
 
                 float baseR = ((argb >> 16) & 0xFF) / 255f;
                 float baseG = ((argb >> 8) & 0xFF) / 255f;
