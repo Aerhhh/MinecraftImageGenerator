@@ -102,18 +102,18 @@ public class GlintImageEffect implements ImageEffect {
         double sin = Math.sin(radians);
         float[] sampled = new float[4];
 
+        int rowStart = 0;
         for (int y = 0; y < height; y++) {
             double yBaseV = baseV[y];
-            int preIndex = y * width;
-            int preMax = preIndex + width;
-            for (int index = preIndex; index < preMax; index++) {
-                int argb = pixels[index];
+            int rowEnd = rowStart + width;
+            for (int x = rowStart; x < rowEnd; x++) {
+                int argb = pixels[x];
                 int alpha = (argb >>> 24);
                 if (alpha == 0) {
                     continue;
                 }
 
-                double xBaseU = baseU[index - preIndex];
+                double xBaseU = baseU[x - rowStart];
 
                 double rotatedU = xBaseU * cos - yBaseV * sin;
                 double rotatedV = xBaseU * sin + yBaseV * cos;
@@ -141,8 +141,9 @@ public class GlintImageEffect implements ImageEffect {
                 int outG = (int) (Math.min(1.0f, baseG + addG) * 255.0f + 0.5f);
                 int outB = (int) (Math.min(1.0f, baseB + addB) * 255.0f + 0.5f);
 
-                pixels[index] = (alpha << 24) | (outR << 16) | (outG << 8) | outB;
+                pixels[x] = (alpha << 24) | (outR << 16) | (outG << 8) | outB;
             }
+            rowStart = rowEnd;
         }
     }
 
