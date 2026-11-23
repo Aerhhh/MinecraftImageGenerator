@@ -11,7 +11,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
 import java.io.IOException;
-import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -137,39 +136,12 @@ class ItemToolTest {
     @EnabledIfSystemProperty(named = "benchmarks", matches = "true")
     @Test
     void benchmarkThreeByThreeRecipeTooltipAndEnchantedItem() throws IOException {
-        final int warmupIterations = 3;
-        final int measuredIterations = 10;
-
-        for (int i = 0; i < warmupIterations; i++) {
-            generateThreeByThreeTooltipComposite();
-        }
-
-        long[] elapsedNanos = new long[measuredIterations];
-        for (int i = 0; i < measuredIterations; i++) {
-            long startNanos = System.nanoTime();
-            generateThreeByThreeTooltipComposite();
-            elapsedNanos[i] = System.nanoTime() - startNanos;
-        }
-
-        long totalNanos = 0;
-        long minNanos = Long.MAX_VALUE;
-        long maxNanos = 0;
-        for (long elapsed : elapsedNanos) {
-            totalNanos += elapsed;
-            minNanos = Math.min(minNanos, elapsed);
-            maxNanos = Math.max(maxNanos, elapsed);
-        }
-
-        double averageMillis = totalNanos / 1_000_000.0 / measuredIterations;
-        double minMillis = minNanos / 1_000_000.0;
-        double maxMillis = maxNanos / 1_000_000.0;
-        System.out.printf(
-            "3x3 recipe + tooltip + enchanted item benchmark: warmup=%d, iterations=%d, average=%.1f ms, min=%.1f ms, max=%.1f ms%n",
-            warmupIterations, measuredIterations, averageMillis, minMillis, maxMillis);
-
-        GeneratedObject generated = generateThreeByThreeTooltipComposite();
-        Path output = BenchmarkArtifacts.storeBenchmarkGif("three-by-three-tooltip-enchanted-item.gif", generated);
-        System.out.println("3x3 benchmark image: " + output.toAbsolutePath());
+        BenchmarkArtifacts.runBenchmark(
+            "3x3 recipe + tooltip + enchanted item",
+            3,
+            10,
+            "three-by-three-tooltip-enchanted-item.gif",
+            ItemToolTest::generateThreeByThreeTooltipComposite);
     }
 
     private static GeneratedObject generateThreeByThreeTooltipComposite() throws IOException {
