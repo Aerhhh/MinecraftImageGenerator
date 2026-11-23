@@ -8,8 +8,8 @@ import net.aerh.imagegenerator.effect.ImageEffect;
 
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
+import java.awt.image.DataBufferInt;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -79,13 +79,13 @@ public class GlintImageEffect implements ImageEffect {
         for (int frameIndex = 0; frameIndex < frameCount; frameIndex++) {
             RenderCancellation.check();
             double timeMs = frameIndex * FRAME_DELAY_MS;
-            int[] framePixels = Arrays.copyOf(basePixels, basePixels.length);
+            BufferedImage frame = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+            int[] framePixels = ((DataBufferInt) frame.getRaster().getDataBuffer()).getData();
+            System.arraycopy(basePixels, 0, framePixels, 0, basePixels.length);
 
             applyGlintPass(framePixels, width, height, timeMs, PRIMARY_PERIOD_MS, PRIMARY_ROTATION_DEG, 1.0, baseU, baseV, uvScale);
             applyGlintPass(framePixels, width, height, timeMs, SECONDARY_PERIOD_MS, SECONDARY_ROTATION_DEG, -1.0, baseU, baseV, uvScale);
 
-            BufferedImage frame = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-            frame.setRGB(0, 0, width, height, framePixels, 0, width);
             frames.add(frame);
         }
 
