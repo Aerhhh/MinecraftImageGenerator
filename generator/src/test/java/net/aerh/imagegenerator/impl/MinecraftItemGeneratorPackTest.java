@@ -4,7 +4,6 @@ import net.aerh.imagegenerator.cache.GeneratorCacheKey;
 import net.aerh.imagegenerator.effect.EffectPipeline;
 import net.aerh.imagegenerator.exception.GeneratorException;
 import net.aerh.imagegenerator.exception.PackResolveException;
-import net.aerh.imagegenerator.image.GeneratorImageBuilder;
 import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.pack.PackId;
 import net.aerh.imagegenerator.pack.PackLimits;
@@ -14,8 +13,8 @@ import net.aerh.imagegenerator.testsupport.BenchmarkArtifacts;
 import net.aerh.imagegenerator.testsupport.FixturePacks;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.awt.image.BufferedImage;
 import java.io.IOException;
@@ -107,8 +106,8 @@ class MinecraftItemGeneratorPackTest {
     void benchmarkDirtBlockWithEnchantGlint() throws IOException {
         BenchmarkArtifacts.runBenchmark(
             "Dirt + enchant glint",
-            3,
-            10,
+            5,
+            50,
             "dirt-enchant-glint.gif",
             MinecraftItemGeneratorPackTest::generateDirtWithGlint);
     }
