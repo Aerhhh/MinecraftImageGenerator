@@ -4,20 +4,25 @@ import net.aerh.imagegenerator.cache.GeneratorCacheKey;
 import net.aerh.imagegenerator.effect.EffectPipeline;
 import net.aerh.imagegenerator.exception.GeneratorException;
 import net.aerh.imagegenerator.exception.PackResolveException;
+import net.aerh.imagegenerator.item.GeneratedObject;
 import net.aerh.imagegenerator.pack.PackId;
 import net.aerh.imagegenerator.pack.PackLimits;
 import net.aerh.imagegenerator.pack.PackRepository;
 import net.aerh.imagegenerator.pack.PackSource;
+import net.aerh.imagegenerator.testsupport.BenchmarkArtifacts;
 import net.aerh.imagegenerator.testsupport.FixturePacks;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.awt.image.BufferedImage;
+import java.io.IOException;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -94,6 +99,28 @@ class MinecraftItemGeneratorPackTest {
     void enchantEffectAppliesToPackSprites() {
         var generated = packBuilder("testpack:item/simple").isEnchanted(true).build().generate();
         assertTrue(generated.isAnimated(), "glint pipeline runs on pack sprites too");
+    }
+
+    @EnabledIfSystemProperty(named = "benchmarks", matches = "true")
+    @Test
+    void benchmarkDirtBlockWithEnchantGlint() throws IOException {
+        BenchmarkArtifacts.runBenchmark(
+            "Dirt + enchant glint",
+            5,
+            50,
+            "dirt-enchant-glint.gif",
+            MinecraftItemGeneratorPackTest::generateDirtWithGlint);
+    }
+
+    private static GeneratedObject generateDirtWithGlint() {
+        var generated = new MinecraftItemGenerator.Builder()
+            .withItem("dirt")
+            .isEnchanted(true)
+            .build()
+            .generate();
+        assertTrue(generated.isAnimated(), "enchanted dirt must generate a GIF");
+        assertNotNull(generated.getGifData(), "enchanted dirt GIF bytes must be present");
+        return generated;
     }
 
     @Test

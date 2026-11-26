@@ -5,8 +5,10 @@ import net.aerh.imagegenerator.exception.GeneratorValidationException;
 import net.aerh.imagegenerator.image.MinecraftTooltip;
 import net.aerh.imagegenerator.impl.tooltip.MinecraftTooltipGenerator;
 import net.aerh.imagegenerator.item.GeneratedObject;
+import net.aerh.imagegenerator.testsupport.BenchmarkArtifacts;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
 import java.io.IOException;
 
@@ -129,6 +131,31 @@ class ItemToolTest {
         GeneratedObject without = tool.render(minimal().build(), null);
 
         assertTrue(withRecipe.getImage().getWidth() > without.getImage().getWidth());
+    }
+
+    @EnabledIfSystemProperty(named = "benchmarks", matches = "true")
+    @Test
+    void benchmarkThreeByThreeRecipeTooltipAndEnchantedItem() throws IOException {
+        BenchmarkArtifacts.runBenchmark(
+            "3x3 recipe + tooltip + enchanted item",
+            3,
+            10,
+            "three-by-three-tooltip-enchanted-item.gif",
+            ItemToolTest::generateThreeByThreeTooltipComposite);
+    }
+
+    private static GeneratedObject generateThreeByThreeTooltipComposite() throws IOException {
+        GeneratedObject generated = new ItemTool(ToolTestSupport.vanillaService()).render(
+            minimal()
+                .itemId("iron_chestplate")
+                .enchanted(true)
+                .recipe("stone:[1-9]")
+                .build(),
+            null);
+
+        assertTrue(generated.isAnimated(), "enchanted item display must generate an animated GIF");
+        assertNotNull(generated.getGifData(), "composite GIF bytes must be present");
+        return generated;
     }
 
     @Test
