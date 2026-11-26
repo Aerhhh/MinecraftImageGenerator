@@ -95,7 +95,6 @@ public class GlintImageEffect implements ImageEffect {
     private void applyGlintPass(int[] pixels, int width, int height, double timeMs, double periodMs, double rotationDeg,
                                 double direction, double[] baseU, double[] baseV, double uvScale) {
         double offset = (timeMs % periodMs) / periodMs;
-        double inverseScale = 1.0 / uvScale;
         double adjustedOffset = offset * SCROLL_SPEED;
         double radians = Math.toRadians(rotationDeg);
         double cos = Math.cos(radians);
@@ -118,8 +117,7 @@ public class GlintImageEffect implements ImageEffect {
                 double rotatedU = xBaseU * cos - yBaseV * sin;
                 double rotatedV = xBaseU * sin + yBaseV * cos;
 
-                double translatedU = rotatedU + direction * adjustedOffset * inverseScale;
-                double scaledU = translatedU * uvScale;
+                double scaledU = rotatedU * uvScale + direction * adjustedOffset;
                 double scaledV = rotatedV * uvScale;
 
                 sampleGlint(scaledU, scaledV, sampled);
